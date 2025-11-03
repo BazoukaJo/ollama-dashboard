@@ -1037,3 +1037,66 @@ class OllamaService:
 
         except Exception as e:
             return {"success": False, "message": f"Unexpected error restarting service: {str(e)}"}
+
+    def get_models_memory_usage(self):
+        """Get memory usage information for running models"""
+        try:
+            # Get running models
+            running_models = self.get_running_models()
+
+            # Get system memory info
+            system_memory = psutil.virtual_memory()
+            system_vram = self._get_vram_info()
+
+            memory_usage = {
+                'system_ram': {
+                    'total': system_memory.total,
+                    'used': system_memory.used,
+                    'free': system_memory.available,
+                    'percent': system_memory.percent
+                },
+                'system_vram': system_vram,
+                'models': []
+            }
+
+            # For each running model, estimate memory usage
+            # Note: Ollama doesn't provide per-model memory usage directly,
+            # so we provide system-level memory info and model size as reference
+            for model in running_models:
+                model_info = {
+                    'name': model['name'],
+                    'size': model.get('size', 'Unknown'),
+                    'size_bytes': model.get('size_bytes', 0),
+                    'estimated_ram_usage': 'N/A',  # Ollama doesn't expose per-model RAM usage
+                    'estimated_vram_usage': 'N/A'   # Ollama doesn't expose per-model VRAM usage
+                }
+
+                # Try to get model size in bytes for estimation
+                try:
+                    if model.get('size'):
+                        # Parse size string like "4.1 GB" or "2.5 MB"
+                        size_str = model['size'].upper()
+                        if 'GB' in size_str:
+                            size_gb = float(size_str.replace('GB', '').strip())
+                            model_info['size_bytes'] = int(size_gb * 1024 * 1024 * 1024)
+                        elif 'MB' in size_str:
+                            size_mb = float(size_str.replace('MB', '').strip())
+                            model_info['size_bytes'] = int(size_mb * 1024 * 1024)
+                        elif 'KB' in size_str:
+                            size_kb = float(size_str.replace('KB', '').strip())
+                            model_info['size_bytes'] = int(size_kb * 1024)
+                except Exception:
+                    pass
+
+                memory_usage['models'].append(model_info)
+
+            return memory_usage
+
+        except Exception as e:
+            print(f"Error getting models memory usage: {str(e)}")
+            return {
+                'system_ram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0},
+                'system_vram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0},
+                'models': [],
+                'error': str(e)
+            }

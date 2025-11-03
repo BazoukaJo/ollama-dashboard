@@ -263,6 +263,83 @@ function showNotification(message, type) {
     }, 5000);
 }
 
+// Historical data storage for timelines
+const timelineData = {
+    cpu: [],
+    memory: [],
+    vram: [],
+    disk: []
+};
+
+const MAX_TIMELINE_POINTS = 60; // 60 seconds of data
+
+// Timeline drawing function
+function drawTimeline(canvas, data, color) {
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    if (data.length < 2) return;
+
+    // Draw background grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, height * 0.25);
+    ctx.lineTo(width, height * 0.25);
+    ctx.moveTo(0, height * 0.5);
+    ctx.lineTo(width, height * 0.5);
+    ctx.moveTo(0, height * 0.75);
+    ctx.lineTo(width, height * 0.75);
+    ctx.stroke();
+
+    // Fill area under the line
+    ctx.fillStyle = color.replace('rgb', 'rgba').replace(')', ', 0.3)');
+    ctx.beginPath();
+    ctx.moveTo(0, height); // Start from bottom-left
+
+    const stepX = width / (data.length - 1);
+    for (let i = 0; i < data.length; i++) {
+        const x = i * stepX;
+        const y = height - (data[i] / 100) * height;
+        ctx.lineTo(x, y);
+    }
+
+    ctx.lineTo(width, height); // Close path to bottom-right
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw timeline line
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+
+    for (let i = 0; i < data.length; i++) {
+        const x = i * stepX;
+        const y = height - (data[i] / 100) * height;
+
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+
+    // Draw current value point
+    const currentValue = data[data.length - 1];
+    const currentX = (data.length - 1) * stepX;
+    const currentY = height - (currentValue / 100) * height;
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(currentX, currentY, 3, 0, 2 * Math.PI);
+    ctx.fill();
+}
+
 // System stats update function
 async function updateSystemStats() {
     try {
@@ -281,16 +358,30 @@ async function updateSystemStats() {
             if (vramPercentEl) vramPercentEl.textContent = stats.vram && stats.vram.total > 0 ? `${stats.vram.percent.toFixed(1)}%` : '--%';
             if (diskPercentEl) diskPercentEl.textContent = `${stats.disk.percent.toFixed(1)}%`;
 
-            // Update progress bars
-            const cpuBarEl = document.getElementById('cpuBar');
-            const memoryBarEl = document.getElementById('memoryBar');
-            const vramBarEl = document.getElementById('vramBar');
-            const diskBarEl = document.getElementById('diskBar');
+            // Store historical data
+            timelineData.cpu.push(stats.cpu_percent);
+            timelineData.memory.push(stats.memory.percent);
+            timelineData.vram.push(stats.vram && stats.vram.total > 0 ? stats.vram.percent : 0);
+            timelineData.disk.push(stats.disk.percent);
 
-            if (cpuBarEl) cpuBarEl.style.width = `${stats.cpu_percent}%`;
-            if (memoryBarEl) memoryBarEl.style.width = `${stats.memory.percent}%`;
-            if (vramBarEl) vramBarEl.style.width = stats.vram && stats.vram.total > 0 ? `${stats.vram.percent}%` : '0%';
-            if (diskBarEl) diskBarEl.style.width = `${stats.disk.percent}%`;
+            // Limit data points
+            if (timelineData.cpu.length > MAX_TIMELINE_POINTS) {
+                timelineData.cpu.shift();
+                timelineData.memory.shift();
+                timelineData.vram.shift();
+                timelineData.disk.shift();
+            }
+
+            // Update timelines
+            const cpuCanvas = document.getElementById('cpuTimeline');
+            const memoryCanvas = document.getElementById('memoryTimeline');
+            const vramCanvas = document.getElementById('vramTimeline');
+            const diskCanvas = document.getElementById('diskTimeline');
+
+            if (cpuCanvas) drawTimeline(cpuCanvas, timelineData.cpu, '#0d6efd');
+            if (memoryCanvas) drawTimeline(memoryCanvas, timelineData.memory, '#198754');
+            if (vramCanvas) drawTimeline(vramCanvas, timelineData.vram, '#0dcaf0');
+            if (diskCanvas) drawTimeline(diskCanvas, timelineData.disk, '#ffc107');
 
             // Update last update time
             const lastUpdateTimeEl = document.getElementById('lastUpdateTime');
@@ -323,6 +414,13 @@ async function updateModelData() {
         if (versionResponse.ok) {
             const versionData = await versionResponse.json();
             updateVersionDisplay(versionData.version || 'Unknown');
+        }
+
+        // Update model memory usage
+        const memoryResponse = await fetch('/api/models/memory/usage');
+        if (memoryResponse.ok) {
+            const memoryData = await memoryResponse.json();
+            updateModelMemoryDisplay(memoryData);
         }
     } catch (error) {
         console.log('Failed to update model data:', error);
@@ -376,6 +474,40 @@ function updateVersionDisplay(version) {
     if (versionEl) {
         versionEl.textContent = version;
     }
+}
+
+function updateModelMemoryDisplay(memoryData) {
+    if (!memoryData || !memoryData.models) return;
+
+    // Update each model's memory usage display
+    memoryData.models.forEach((model, index) => {
+        const ramEl = document.getElementById(`model-ram-${index + 1}`);
+        const vramEl = document.getElementById(`model-vram-${index + 1}`);
+
+        if (ramEl) {
+            // Since Ollama doesn't provide per-model RAM usage, show system RAM usage
+            const systemRam = memoryData.system_ram;
+            if (systemRam && systemRam.total > 0) {
+                const usedGB = (systemRam.used / (1024**3)).toFixed(1);
+                const totalGB = (systemRam.total / (1024**3)).toFixed(1);
+                ramEl.textContent = `${usedGB}GB / ${totalGB}GB`;
+            } else {
+                ramEl.textContent = 'N/A';
+            }
+        }
+
+        if (vramEl) {
+            // Since Ollama doesn't provide per-model VRAM usage, show system VRAM usage
+            const systemVram = memoryData.system_vram;
+            if (systemVram && systemVram.total > 0) {
+                const usedGB = (systemVram.used / (1024**3)).toFixed(1);
+                const totalGB = (systemVram.total / (1024**3)).toFixed(1);
+                vramEl.textContent = `${usedGB}GB / ${totalGB}GB`;
+            } else {
+                vramEl.textContent = 'No GPU';
+            }
+        }
+    });
 }
 
 // Service management functions
@@ -475,8 +607,8 @@ document.addEventListener('DOMContentLoaded', function() {
     updateSystemStats();
     updateModelData();
 
-    // Update system stats every 2 seconds
-    setInterval(updateSystemStats, 2000);
+    // Update system stats every 1 second
+    setInterval(updateSystemStats, 1000);
 
     // Update model data every 10 seconds
     setInterval(updateModelData, 10000);

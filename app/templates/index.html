@@ -54,9 +54,7 @@
                                 </div>
                                     <span class="metric-value-compact" id="cpuPercent">{{ system_stats.cpu_percent|round(1) }}%</span>
                             </div>
-                            <div class="progress compact-progress mt-1" style="height: 4px;">
-                                <div class="progress-bar bg-primary" id="cpuBar" style="width: 0%"></div>
-                            </div>
+                            <canvas class="timeline-canvas" id="cpuTimeline" width="200" height="20"></canvas>
                         </div>
 
                         <!-- RAM -->
@@ -68,9 +66,7 @@
                                 </div>
                                 <span class="metric-value-compact" id="memoryPercent">{{ system_stats.memory.percent|round(1) }}%</span>
                             </div>
-                            <div class="progress compact-progress mt-1" style="height: 4px;">
-                                <div class="progress-bar bg-success" id="memoryBar" style="width: 0%"></div>
-                            </div>
+                            <canvas class="timeline-canvas" id="memoryTimeline" width="200" height="20"></canvas>
                         </div>
 
                         <!-- VRAM -->
@@ -82,9 +78,7 @@
                                 </div>
                                 <span class="metric-value-compact" id="vramPercent">{{ system_stats.vram.percent|round(1) if system_stats.vram.total > 0 else '--' }}%</span>
                             </div>
-                            <div class="progress compact-progress mt-1" style="height: 4px;">
-                                <div class="progress-bar bg-info" id="vramBar" style="width: 0%"></div>
-                            </div>
+                            <canvas class="timeline-canvas" id="vramTimeline" width="200" height="20"></canvas>
                         </div>
 
                         <!-- Disk -->
@@ -96,9 +90,7 @@
                                 </div>
                                 <span class="metric-value-compact" id="diskPercent">{{ system_stats.disk.percent|round(1) }}%</span>
                             </div>
-                            <div class="progress compact-progress mt-1" style="height: 4px;">
-                                <div class="progress-bar bg-warning" id="diskBar" style="width: 0%"></div>
-                            </div>
+                            <canvas class="timeline-canvas" id="diskTimeline" width="200" height="20"></canvas>
                         </div>
                     </div>
                 </div>
@@ -156,6 +148,26 @@
                                                 <div class="spec-content">
                                                     <div class="spec-label">Size</div>
                                                     <div class="spec-value">{{ model.size|default('Unknown') }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="spec-row">
+                                            <div class="spec-item">
+                                                <div class="spec-icon">
+                                                    <i class="fas fa-memory"></i>
+                                                </div>
+                                                <div class="spec-content">
+                                                    <div class="spec-label">RAM Usage</div>
+                                                    <div class="spec-value" id="model-ram-{{ loop.index }}">Loading...</div>
+                                                </div>
+                                            </div>
+                                            <div class="spec-item">
+                                                <div class="spec-icon">
+                                                    <i class="fas fa-palette"></i>
+                                                </div>
+                                                <div class="spec-content">
+                                                    <div class="spec-label">VRAM Usage</div>
+                                                    <div class="spec-value" id="model-vram-{{ loop.index }}">Loading...</div>
                                                 </div>
                                             </div>
                                         </div>

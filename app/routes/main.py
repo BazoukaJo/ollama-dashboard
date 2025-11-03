@@ -507,8 +507,20 @@ def restart_service():
         result = ollama_service.restart_service()
         return (result, 200) if result["success"] else (result, 500)
     except Exception as e:
-        return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
+        return {"success": False, "message": f"Unexpected error restarting service: {str(e)}"}, 500
 
+
+@bp.route('/api/models/memory/usage')
+def get_models_memory_usage():
+    """Get memory usage information for running models."""
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+
+        memory_usage = ollama_service.get_models_memory_usage()
+        return memory_usage if memory_usage else ({"error": "Memory monitoring not available"}, 503)
+    except Exception as e:
+        return {"error": str(e)}, 500
 
 
 def init_app(app):
