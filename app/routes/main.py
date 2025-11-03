@@ -274,6 +274,26 @@ def get_available_models():
         return {"error": str(e), "models": []}, 500
 
 
+@bp.route('/api/models/running')
+def get_running_models():
+    """Get list of currently running models."""
+    try:
+        models = ollama_service.get_running_models()
+        return models
+    except Exception as e:
+        return {"error": str(e), "models": []}, 500
+
+
+@bp.route('/api/version')
+def get_ollama_version():
+    """Get Ollama version."""
+    try:
+        version = ollama_service.get_ollama_version()
+        return {"version": version}
+    except Exception as e:
+        return {"error": str(e), "version": "Unknown"}, 500
+
+
 @bp.route('/api/models/bulk/start', methods=['POST'])
 def bulk_start_models():
     """Start multiple models in bulk."""

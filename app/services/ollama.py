@@ -1,15 +1,25 @@
 from flask import current_app
 import requests
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import time
 import json
 import os
 from collections import deque
 import psutil
+import threading
+import atexit
 
 class OllamaService:
     def __init__(self, app=None):
         self.app = app
+        # Performance optimizations
+        self._cache = {}
+        self._cache_timestamps = {}
+        self._session = requests.Session()  # Connection pooling
+        self._background_stats = None
+        self._stats_lock = threading.Lock()
+        self._stop_background = threading.Event()
+
         if app is not None:
             self.init_app(app)
         else:
@@ -20,6 +30,160 @@ class OllamaService:
         self.app = app
         with self.app.app_context():
             self.history = self.load_history()
+
+        # Start background data collection
+        self._start_background_updates()
+
+        # Register cleanup
+        atexit.register(self._cleanup)
+
+    def _start_background_updates(self):
+        """Start background data collection for all data types"""
+        if self._background_stats and self._background_stats.is_alive():
+            return
+
+        self._stop_background.clear()
+        self._background_stats = threading.Thread(
+            target=self._background_updates_worker,
+            daemon=True,
+            name="BackgroundDataCollector"
+        )
+        self._background_stats.start()
+
+    def _background_updates_worker(self):
+        """Background worker for collecting all data types"""
+        while not self._stop_background.is_set():
+            try:
+                # Collect system stats
+                stats = self._get_system_stats_raw()
+                with self._stats_lock:
+                    self._cache['system_stats'] = stats
+                    self._cache_timestamps['system_stats'] = datetime.now()
+
+                # Collect running models (every 10 seconds)
+                if not hasattr(self, '_model_update_counter'):
+                    self._model_update_counter = 0
+                self._model_update_counter += 1
+
+                if self._model_update_counter >= 5:  # Every 10 seconds (5 * 2)
+                    try:
+                        # Get and process running models (same logic as get_running_models method)
+                        response = self._session.get(self.get_api_url(), timeout=5)
+                        if response.status_code == 200:
+                            data = response.json()
+                            models = data.get('models', [])
+
+                            # Process models the same way as get_running_models
+                            current_models = []
+                            for model in models:
+                                # Format size
+                                model['formatted_size'] = self.format_size(model['size'])
+
+                                # Format families
+                                families = model.get('details', {}).get('families', [])
+                                if families:
+                                    model['families_str'] = ', '.join(families)
+                                else:
+                                    model['families_str'] = model.get('details', {}).get('family', 'Unknown')
+
+                                # Format expiration times
+                                if model.get('expires_at'):
+                                    if model['expires_at'] == 'Stopping':
+                                        model['expires_at'] = {
+                                            'local': 'Stopping...',
+                                            'relative': 'Process is stopping'
+                                        }
+                                    else:
+                                        try:
+                                            # Handle microseconds by truncating them
+                                            expires_at = model['expires_at'].replace('Z', '+00:00')
+                                            expires_at = expires_at.split('.')[0] + '+00:00'
+                                            expires_dt = datetime.fromisoformat(expires_at)
+                                            local_dt = expires_dt.astimezone()
+                                            relative_time = self.format_relative_time(expires_dt)
+                                            tz_abbr = time.strftime('%Z')
+                                            model['expires_at'] = {
+                                                'local': local_dt.strftime(f'%-I:%M %p, %b %-d ({tz_abbr})'),
+                                                'relative': relative_time
+                                            }
+                                        except Exception as e:
+                                            model['expires_at'] = None
+
+                                current_models.append({
+                                    'name': model['name'],
+                                    'families_str': model.get('families_str', ''),
+                                    'parameter_size': model.get('details', {}).get('parameter_size', ''),
+                                    'size': model.get('formatted_size', ''),
+                                    'expires_at': model.get('expires_at'),
+                                    'details': model.get('details', {})
+                                })
+
+                            with self._stats_lock:
+                                self._cache['running_models'] = current_models
+                                self._cache_timestamps['running_models'] = datetime.now()
+                    except Exception as e:
+                        print(f"Background model collection error: {e}")
+
+                    # Get available models (every 30 seconds)
+                    if self._model_update_counter >= 15:  # Every 30 seconds (15 * 2)
+                        try:
+                            if self.app:
+                                host = self.app.config.get('OLLAMA_HOST')
+                                port = self.app.config.get('OLLAMA_PORT')
+                            else:
+                                host = os.getenv('OLLAMA_HOST', 'localhost')
+                                port = int(os.getenv('OLLAMA_PORT', 11434))
+
+                            tags_url = f"http://{host}:{port}/api/tags"
+                            response = self._session.get(tags_url, timeout=10)
+                            if response.status_code == 200:
+                                models = response.json().get('models', [])
+                                with self._stats_lock:
+                                    self._cache['available_models'] = models
+                                    self._cache_timestamps['available_models'] = datetime.now()
+                        except Exception as e:
+                            print(f"Background available models collection error: {e}")
+
+                        # Get Ollama version (every 5 minutes)
+                        try:
+                            version_url = f"http://{host}:{port}/api/version"
+                            response = self._session.get(version_url, timeout=5)
+                            if response.status_code == 200:
+                                data = response.json()
+                                version = data.get('version', 'Unknown')
+                                with self._stats_lock:
+                                    self._cache['ollama_version'] = version
+                                    self._cache_timestamps['ollama_version'] = datetime.now()
+                        except Exception as e:
+                            print(f"Background version collection error: {e}")
+
+                        self._model_update_counter = 0  # Reset counter
+
+            except Exception as e:
+                print(f"Background updates error: {e}")
+
+            # Sleep for 2 seconds between collections
+            self._stop_background.wait(2)
+
+    def _cleanup(self):
+        """Cleanup background threads"""
+        self._stop_background.set()
+        if self._background_stats:
+            self._background_stats.join(timeout=1)
+        self._session.close()
+
+    def _get_cached(self, key, ttl_seconds=30):
+        """Get cached data if still valid"""
+        if key in self._cache_timestamps:
+            age = (datetime.now() - self._cache_timestamps[key]).total_seconds()
+            if age < ttl_seconds:
+                return self._cache.get(key)
+        return None
+
+    def _set_cached(self, key, data):
+        """Cache data with timestamp"""
+        self._cache[key] = data
+        self._cache_timestamps[key] = datetime.now()
 
     def get_api_url(self):
         try:
@@ -76,17 +240,34 @@ class OllamaService:
             return "less than a minute"
 
     def get_ollama_version(self):
+        # Check cache first (version changes rarely)
+        cached = self._get_cached('ollama_version', ttl_seconds=300)  # 5 minutes
+        if cached is not None:
+            return cached
+
         try:
             version_url = f"http://{self.app.config.get('OLLAMA_HOST')}:{self.app.config.get('OLLAMA_PORT')}/api/version"
-            response = requests.get(version_url, timeout=5)
+            response = self._session.get(version_url, timeout=5)
             response.raise_for_status()
             data = response.json()
-            return data.get('version', 'Unknown')
+            version = data.get('version', 'Unknown')
+            self._set_cached('ollama_version', version)
+            return version
         except Exception as e:
             return 'Unknown'
 
     def get_system_stats(self):
         """Get basic system statistics"""
+        # Check cache first (system stats are collected in background)
+        cached = self._get_cached('system_stats', ttl_seconds=5)  # 5 seconds
+        if cached is not None:
+            return cached
+
+        # Fallback to direct collection if cache miss
+        return self._get_system_stats_raw()
+
+    def _get_system_stats_raw(self):
+        """Get system stats without caching (used by background worker)"""
         try:
             import psutil
 
@@ -94,7 +275,7 @@ class OllamaService:
             vram_info = self._get_vram_info()
 
             return {
-                'cpu_percent': psutil.cpu_percent(interval=1),
+                'cpu_percent': psutil.cpu_percent(interval=0.1),  # Much faster, no blocking
                 'memory': {
                     'total': psutil.virtual_memory().total,
                     'available': psutil.virtual_memory().available,
@@ -254,6 +435,11 @@ class OllamaService:
 
     def get_available_models(self):
         """Get list of available models (not just running ones)."""
+        # Check cache first (models list changes infrequently)
+        cached = self._get_cached('available_models', ttl_seconds=60)  # 1 minute
+        if cached is not None:
+            return cached
+
         try:
             if self.app:
                 host = self.app.config.get('OLLAMA_HOST')
@@ -263,15 +449,22 @@ class OllamaService:
                 port = int(os.getenv('OLLAMA_PORT', 11434))
 
             tags_url = f"http://{host}:{port}/api/tags"
-            response = requests.get(tags_url, timeout=10)
+            response = self._session.get(tags_url, timeout=10)
             response.raise_for_status()
-            return response.json().get('models', [])
+            models = response.json().get('models', [])
+            self._set_cached('available_models', models)
+            return models
         except Exception:
             return []
 
     def get_running_models(self):
+        # Check cache first (running models change more frequently)
+        cached = self._get_cached('running_models', ttl_seconds=10)  # 10 seconds
+        if cached is not None:
+            return cached
+
         try:
-            response = requests.get(self.get_api_url(), timeout=5)
+            response = self._session.get(self.get_api_url(), timeout=5)
             response.raise_for_status()
             data = response.json()
             models = data.get('models', [])
@@ -313,15 +506,18 @@ class OllamaService:
 
                 current_models.append({
                     'name': model['name'],
-                    'families': model.get('families_str', ''),
+                    'families_str': model.get('families_str', ''),
                     'parameter_size': model.get('details', {}).get('parameter_size', ''),
-                    'size': model.get('formatted_size', '')
+                    'size': model.get('formatted_size', ''),
+                    'expires_at': model.get('expires_at'),
+                    'details': model.get('details', {})
                 })
 
             if current_models:
                 self.update_history(current_models)
 
-            return models
+            self._set_cached('running_models', current_models)
+            return current_models
         except requests.exceptions.ConnectionError:
             raise Exception("Could not connect to Ollama server. Please ensure it's running and accessible.")
         except requests.exceptions.Timeout:

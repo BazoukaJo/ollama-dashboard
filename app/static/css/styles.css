@@ -825,7 +825,7 @@ canvas {
 
 /* Professional Model Card Styles */
 .model-card {
-    padding: 1.5rem;
+    padding: 1rem;
     margin-bottom: 0;
     border-radius: 12px;
     background: rgba(255,255,255,0.02);
@@ -854,7 +854,7 @@ canvas {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
 }
 
 .model-icon-wrapper {
@@ -906,14 +906,14 @@ canvas {
 }
 
 .model-specs {
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
     flex: 1;
 }
 
 .spec-row {
     display: flex;
     gap: 0.75rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
 }
 
 .spec-row:last-child {
@@ -925,13 +925,13 @@ canvas {
     font-size: 0.875rem;
     background: rgba(255,255,255,0.02);
     border-radius: 8px;
-    padding: 0.75rem;
+    padding: 0.5rem;
     border: 1px solid rgba(255,255,255,0.05);
     transition: all 0.2s ease;
     display: flex;
     align-items: flex-start;
     gap: 0.625rem;
-    min-height: 3rem;
+    min-height: 2.5rem;
 }
 
 .spec-item:hover {

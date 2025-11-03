@@ -301,6 +301,83 @@ async function updateSystemStats() {
     }
 }
 
+// Model data update function
+async function updateModelData() {
+    try {
+        // Update running models
+        const runningResponse = await fetch('/api/models/running');
+        if (runningResponse.ok) {
+            const runningModels = await runningResponse.json();
+            updateRunningModelsDisplay(runningModels);
+        }
+
+        // Update available models (less frequently)
+        const availableResponse = await fetch('/api/models/available');
+        if (availableResponse.ok) {
+            const availableModels = await availableResponse.json();
+            updateAvailableModelsDisplay(availableModels.models || []);
+        }
+
+        // Update Ollama version
+        const versionResponse = await fetch('/api/version');
+        if (versionResponse.ok) {
+            const versionData = await versionResponse.json();
+            updateVersionDisplay(versionData.version || 'Unknown');
+        }
+    } catch (error) {
+        console.log('Failed to update model data:', error);
+    }
+}
+
+function updateRunningModelsDisplay(models) {
+    const runningModelsContainer = document.getElementById('runningModelsContainer');
+    if (!runningModelsContainer) return;
+
+    // Only update if there are changes to avoid unnecessary DOM manipulation
+    const currentCount = runningModelsContainer.querySelectorAll('.model-card').length;
+    if (currentCount !== models.length) {
+        // Models count changed, trigger a page reload to get fresh data
+        location.reload();
+        return;
+    }
+
+    // Update individual model cards with new data
+    models.forEach((model, index) => {
+        const modelCard = runningModelsContainer.querySelectorAll('.model-card')[index];
+        if (modelCard) {
+            // Update expiration time if it exists
+            const expiresEl = modelCard.querySelector('.model-expires');
+            if (expiresEl && model.expires_at) {
+                expiresEl.textContent = model.expires_at.relative || model.expires_at.local || '';
+            }
+
+            // Update size if it changed
+            const sizeEl = modelCard.querySelector('.model-size');
+            if (sizeEl && model.formatted_size) {
+                sizeEl.textContent = model.formatted_size;
+            }
+        }
+    });
+}
+
+function updateAvailableModelsDisplay(models) {
+    const availableModelsContainer = document.getElementById('availableModelsContainer');
+    if (!availableModelsContainer) return;
+
+    // Update the count display
+    const countEl = document.getElementById('availableModelsCount');
+    if (countEl) {
+        countEl.textContent = models.length;
+    }
+}
+
+function updateVersionDisplay(version) {
+    const versionEl = document.getElementById('ollamaVersion');
+    if (versionEl) {
+        versionEl.textContent = version;
+    }
+}
+
 // Service management functions
 async function startOllamaService() {
     const startBtn = document.getElementById('startServiceBtn');
@@ -396,5 +473,11 @@ async function restartOllamaService() {
 document.addEventListener('DOMContentLoaded', function() {
     updateTimes();
     updateSystemStats();
+    updateModelData();
+
+    // Update system stats every 2 seconds
     setInterval(updateSystemStats, 2000);
+
+    // Update model data every 10 seconds
+    setInterval(updateModelData, 10000);
 });
