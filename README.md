@@ -20,10 +20,12 @@ Ollama Dashboard provides a clean, minimal web interface to:
 - 🔄 Auto-refreshing dashboard
 - 🎨 Dark mode interface
 - 📱 Responsive layout
-- 📋 Model history tracking
 - 🕒 Real-time status indicators
 - 0️⃣ Zero configuration needed
 - 🐳 Docker support
+- 🤖 Model management (start/stop/delete)
+- 📊 System performance monitoring
+- 🔧 Service management controls
 
 ### Dashboard Features
 
@@ -37,12 +39,19 @@ Ollama Dashboard provides a clean, minimal web interface to:
 - Status indicator showing Ollama connection state
 - Clear error messages when Ollama is not running
 
-### History Tracking
+### Model Management
 
-- Sidebar with historical model usage
-- Timestamps for all model runs
-- Duration tracking for model sessions
-- Preserves model details for reference
+- Start/stop models with one click
+- Delete unused models
+- Automatic model downloading if needed
+- Model compatibility checking
+- Real-time loading status
+
+### System Monitoring
+
+- CPU, memory, and VRAM usage
+- Disk space monitoring
+- Real-time performance metrics
 
 ## Prerequisites
 
@@ -57,7 +66,7 @@ Ollama Dashboard provides a clean, minimal web interface to:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/poiley/ollama-dashboard.git
+git clone https://github.com/BazoukaJo/ollama-dashboard.git
 cd ollama-dashboard
 ```
 
@@ -78,7 +87,7 @@ python wsgi.py
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/poiley/ollama-dashboard.git
+git clone https://github.com/BazoukaJo/ollama-dashboard.git
 cd ollama-dashboard
 ```
 
@@ -86,6 +95,28 @@ cd ollama-dashboard
 
 ```bash
 ./scripts/build.sh
+```
+
+### Option 3: Auto-Start Scripts (Windows)
+
+For automatic management of the dashboard based on Ollama status:
+
+#### Service Installation (Recommended)
+```powershell
+# Install as a Windows service (requires Administrator)
+.\scripts\ollama-dashboard-monitor.ps1 -Install
+
+# Check status
+.\scripts\ollama-dashboard-monitor.ps1 -Status
+```
+
+#### Manual Monitoring
+```powershell
+# PowerShell monitor
+.\scripts\start-with-ollama.ps1 -Monitor
+
+# Simple batch monitor
+scripts\start-with-ollama.bat
 ```
 
 The dashboard will be available at http://127.0.0.1:5000
@@ -126,6 +157,48 @@ The dashboard includes test routes to preview different states:
 - `/test/no-models` - Preview empty state
 - `/test/error` - Preview error state when Ollama isn't running
 - `/test/with-models` - Preview dashboard with sample models
+
+## Testing
+
+The project includes comprehensive tests to ensure functionality:
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test file
+pytest tests/test_ollama_service.py
+
+# Run with coverage
+pytest --cov=app --cov-report=html
+```
+
+### Test Files
+
+- `tests/test_ollama_service.py` - Core Ollama service functionality
+- `test_api.py` - API endpoint testing
+- `test_chat_models.py` - Chat model integration tests
+- `test_disk.py` - Disk usage and storage tests
+- `test_models.py` - Model management tests
+
+## Project Structure
+
+```
+ollama-dashboard/
+├── app/                          # Main application
+│   ├── routes/                   # Flask routes
+│   ├── services/                 # Business logic services
+│   ├── static/                   # CSS, JS, images
+│   └── templates/                # HTML templates
+├── docker/                       # Docker configuration
+├── scripts/                      # Auto-start and utility scripts
+├── tests/                        # Test suite
+├── requirements.txt              # Python dependencies
+├── wsgi.py                       # Application entry point
+└── README.md                     # This file
+```
 
 ## Note
 
