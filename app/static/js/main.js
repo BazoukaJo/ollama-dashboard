@@ -601,8 +601,41 @@ async function restartOllamaService() {
     }
 }
 
+// Compact mode functionality
+function initializeCompactMode() {
+    const compactToggle = document.getElementById('compactToggle');
+    const body = document.body;
+
+    // Check if compact mode was previously enabled
+    const isCompact = localStorage.getItem('compactMode') === 'true';
+
+    if (isCompact) {
+        body.classList.add('compact-mode');
+        compactToggle.classList.add('active');
+        compactToggle.innerHTML = '<i class="fas fa-expand"></i>';
+    }
+
+    // Toggle compact mode on button click
+    compactToggle.addEventListener('click', function() {
+        const isCurrentlyCompact = body.classList.contains('compact-mode');
+
+        if (isCurrentlyCompact) {
+            body.classList.remove('compact-mode');
+            compactToggle.classList.remove('active');
+            compactToggle.innerHTML = '<i class="fas fa-compress"></i>';
+            localStorage.setItem('compactMode', 'false');
+        } else {
+            body.classList.add('compact-mode');
+            compactToggle.classList.add('active');
+            compactToggle.innerHTML = '<i class="fas fa-expand"></i>';
+            localStorage.setItem('compactMode', 'true');
+        }
+    });
+}
+
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
+    initializeCompactMode();
     updateTimes();
     updateSystemStats();
     updateModelData();
