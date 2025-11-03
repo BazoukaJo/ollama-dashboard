@@ -6,467 +6,272 @@
     <meta http-equiv="refresh" content="30">
     <title>Ollama Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            background-color: #1a1d21;
-            color: #e1e1e1;
-        }
-        .model-card {
-            transition: all 0.3s ease;
-            background-color: #22262c;
-            border: 1px solid #2d3339;
-            border-radius: 12px;
-            position: relative;
-        }
-        .model-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-        }
-        .card-title {
-            color: #ffffff;
-            font-size: 1.4rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-        }
-        .detail-label {
-            color: #8b949e;
-            font-size: 0.9rem;
-        }
-        .local-time-label {
-            color: #8b949e;
-            font-size: 0.75rem;
-            font-style: italic;
-            opacity: 0.8;
-        }
-        .detail-value {
-            color: #e1e1e1;
-            font-size: 0.95rem;
-            font-weight: 500;
-        }
-        .page-title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            background: linear-gradient(45deg, #c2c8d0, #ffffff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 1rem;
-            margin-bottom: 0;
-        }
-        .title-logo {
-            width: 2.8rem;
-            height: 2.8rem;
-            background: white;
-            border-radius: 50%;
-            padding: 0.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .title-logo img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-        .model-icon {
-            font-size: 1.8rem;
-            margin-right: 0.5rem;
-            vertical-align: middle;
-        }
-        .detail-item {
-            margin-bottom: 0.5rem;
-            display: flex;
-            align-items: center;
-        }
-        .detail-icon {
-            margin-right: 0.5rem;
-            font-size: 1rem;
-            opacity: 0.8;
-        }
-        .alert-danger {
-            background-color: #3d1f1f;
-            border-color: #842029;
-            color: #ea868f;
-        }
-        .detail-relative {
-            font-size: 0.85rem;
-            color: #8b949e;
-            margin-top: 2px;
-            text-align: right;
-            padding-right: 1rem;
-        }
-        .expires-section {
-            border-top: 1px solid #2d3339;
-            margin-top: 1rem;
-            padding-top: 1rem;
-        }
-        .refresh-indicator {
-            font-size: 0.85rem;
-            color: #8b949e;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-        .refresh-indicator .dot {
-            width: 8px;
-            height: 8px;
-            background-color: var(--status-color, #4caf50);
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.4; }
-            100% { opacity: 1; }
-        }
-        .model-version {
-            font-size: 0.9rem;
-            background: #2d333b;
-            color: #8b949e;
-            padding: 0.2rem 0.5rem;
-            border-radius: 6px;
-            font-weight: 500;
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            border: 1px solid #444c56;
-        }
-        .model-name {
-            display: inline-flex;
-            align-items: center;
-            padding-right: 4rem;
-        }
-        /* Sidebar styles */
-        .sidebar {
-            position: fixed;
-            top: 0;
-            right: -400px; /* Start hidden */
-            width: 400px;
-            height: 100vh;
-            background-color: rgba(34, 38, 44, 0.8);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            transition: right 0.3s ease;
-            z-index: 1000;
-            border-left: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 20px;
-            overflow-y: auto;
-        }
-        
-        .sidebar.show {
-            right: 0;
-        }
-        
-        .history-item {
-            background-color: rgba(45, 51, 59, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 15px;
-            margin-bottom: 15px;
-            transition: transform 0.2s ease;
-        }
-        
-        .history-item:hover {
-            transform: translateY(-2px);
-        }
-        
-        .history-time {
-            color: #8b949e;
-            font-size: 0.9rem;
-            margin-bottom: 8px;
-        }
-        
-        .history-content {
-            color: #e1e1e1;
-        }
-        
-        .sidebar-header {
-            font-size: 1.8rem;
-            color: #e1e1e1;
-            margin: 15px 0 25px;
-            padding: 0 20px;
-            font-weight: 500;
-            position: relative;
-        }
-
-        .sidebar-header::after {
-            content: '';
-            position: absolute;
-            bottom: -12px;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: rgba(255, 255, 255, 0.1);
-        }
-
-        .toggle-button {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            border: none;
-            background: rgba(60, 65, 70, 0.5);
-            color: #e1e1e1;
-            font-size: 14px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-            z-index: 1001;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-        }
-
-        .toggle-button:hover {
-            background: rgba(80, 85, 90, 0.5);
-        }
-
-        .sidebar.show + .toggle-button {
-            right: 420px;  /* 400px sidebar width + 20px margin */
-        }
-
-        .history-model {
-            margin-bottom: 10px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            position: relative;
-        }
-
-        .history-version {
-            font-size: 0.85rem;
-            background: #2d333b;
-            color: #8b949e;
-            padding: 0.2rem 0.5rem;
-            border-radius: 6px;
-            font-weight: 500;
-            position: absolute;
-            top: 0;
-            right: 0;
-            border: 1px solid #444c56;
-        }
-
-        .history-duration {
-            font-size: 0.85rem;
-            color: #8b949e;
-            margin-top: 4px;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .history-model:last-child {
-            margin-bottom: 0;
-            padding-bottom: 0;
-            border-bottom: none;
-        }
-
-        .history-detail {
-            font-size: 0.85rem;
-            color: #8b949e;
-            margin-top: 2px;
-        }
-
-        .no-models-message {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 4rem 2rem;
-            background: rgba(45, 51, 59, 0.8);
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .no-models-icon {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            opacity: 0.8;
-        }
-
-        .no-models-text {
-            color: #e1e1e1;
-            font-size: 1.1rem;
-            text-align: center;
-        }
-
-        .no-models-subtext {
-            color: #8b949e;
-            font-size: 0.9rem;
-            margin-top: 0.5rem;
-        }
-
-        .refresh-indicator.error .dot {
-            --status-color: #dc3545;
-        }
-
-        .text-muted {
-            color: #8b949e !important;
-        }
-    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
     <div class="container py-5">
-        <div class="title-container">
-            <h1 class="text-center page-title">
-                <div class="title-logo">
+        <div class="title-container text-center mb-3">
+            <div class="d-flex align-items-center justify-content-center gap-2">
+                <div class="title-logo-small">
                     <img src="{{ url_for('static', filename='ollama-logo.png') }}" alt="Ollama">
                 </div>
-                Ollama Dashboard
-            </h1>
+                <h2 class="page-title-minimal mb-0">Ollama Dashboard</h2>
+                {% if ollama_version != 'Unknown' %}
+                <small class="text-muted fw-light ms-2">v{{ ollama_version }}</small>
+                {% endif %}
+            </div>
         </div>
-        
-        <div class="refresh-indicator mb-4 {% if error %}error{% endif %}">
+
+
+
+        <div class="refresh-indicator mb-4 {% if error %}error{% endif %}" data-timezone="{{ timezone }}">
             <div class="dot"></div>
             <span>Last updated: <span id="lastUpdate"></span> • Next refresh in <span id="nextRefresh">30</span>s</span>
         </div>
 
-        <script>
-            function updateTimes() {
-                const now = new Date();
-                const timeStr = now.toLocaleTimeString(undefined, {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true
-                });
-                const tzAbbr = '{{ timezone }}';
-                document.getElementById('lastUpdate').textContent = `${timeStr} ${tzAbbr}`;
-                
-                let seconds = 30;
-                const countdown = setInterval(() => {
-                    seconds--;
-                    document.getElementById('nextRefresh').textContent = seconds;
-                    if (seconds <= 0) clearInterval(countdown);
-                }, 1000);
-            }
-            updateTimes();
-        </script>
+        <!-- Models Management Section -->
+        <div class="models-section">
+                <!-- Compact System Resources -->
+                <div class="compact-system-resources mb-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="fas fa-server text-primary" style="font-size: 0.9rem;"></i>
+                            <span class="fw-semibold text-light" style="font-size: 0.95rem;">System Resources</span>
+                        </div>
+                        <small class="text-muted" id="lastUpdateTime" style="font-size: 0.75rem;">Updated just now</small>
+                    </div>
 
-        {% if error %}
-        <div class="alert alert-danger" role="alert">
-            <span class="detail-icon">⚠️</span> {{ error }}
-        </div>
-        {% endif %}
 
-        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-            {% if not error %}
-            {% for model in models %}
-            <div class="col">
-                <div class="card h-100 shadow-sm model-card">
-                    <div class="card-body">
-                        <h5 class="card-title">
-                            <div class="model-name">
-                                <span class="model-icon">🧠</span>
-                                {{ model.name.split(':')[0] }}
+
+                    <div class="compact-metrics-grid">
+                        <!-- CPU -->
+                        <div class="compact-metric">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-1">
+                                    <i class="fas fa-microchip" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                                    <span class="metric-label-compact">CPU</span>
+                                </div>
+                                    <span class="metric-value-compact" id="cpuPercent">{{ system_stats.cpu_percent|round(1) }}%</span>
                             </div>
-                            <span class="model-version">{{ model.name.split(':')[1] if ':' in model.name else 'No Version' }}</span>
-                        </h5>
-                        <div class="detail-item">
-                            <span class="detail-icon">👥</span>
-                            <span class="detail-label">{{ 'Families:' if ',' in model.families_str else 'Family:' }} </span>
-                            <span class="detail-value ms-1">{{ model.families_str }}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-icon">⚡</span>
-                            <span class="detail-label">Parameters: </span>
-                            <span class="detail-value ms-1">{{ model.details.parameter_size }}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-icon">🔧</span>
-                            <span class="detail-label">Quantization: </span>
-                            <span class="detail-value ms-1">{{ model.details.quantization_level }}</span>
-                        </div>
-                        <div class="detail-item">
-                            <span class="detail-icon">💾</span>
-                            <span class="detail-label">Size: </span>
-                            <span class="detail-value ms-1">{{ model.formatted_size }}</span>
-                        </div>
-                        {% if model.expires_at %}
-                        <div class="expires-section">
-                            <div class="detail-item">
-                                <span class="detail-icon">⏰</span>
-                                <span class="detail-label">Expires: </span>
-                                <span class="detail-value ms-1">{{ model.expires_at.local }}</span>
+                            <div class="progress compact-progress mt-1" style="height: 4px;">
+                                <div class="progress-bar bg-primary" id="cpuBar" style="width: 0%"></div>
                             </div>
-                            <div class="detail-relative">{{ model.expires_at.relative }}</div>
                         </div>
-                        {% endif %}
+
+                        <!-- RAM -->
+                        <div class="compact-metric">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-1">
+                                    <i class="fas fa-memory" style="font-size: 0.8rem; color: #198754;"></i>
+                                    <span class="metric-label-compact">RAM</span>
+                                </div>
+                                <span class="metric-value-compact" id="memoryPercent">{{ system_stats.memory.percent|round(1) }}%</span>
+                            </div>
+                            <div class="progress compact-progress mt-1" style="height: 4px;">
+                                <div class="progress-bar bg-success" id="memoryBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- VRAM -->
+                        <div class="compact-metric">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-1">
+                                    <i class="fas fa-palette" style="font-size: 0.8rem; color: #0dcaf0;"></i>
+                                    <span class="metric-label-compact">VRAM</span>
+                                </div>
+                                <span class="metric-value-compact" id="vramPercent">{{ system_stats.vram.percent|round(1) if system_stats.vram.total > 0 else '--' }}%</span>
+                            </div>
+                            <div class="progress compact-progress mt-1" style="height: 4px;">
+                                <div class="progress-bar bg-info" id="vramBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Disk -->
+                        <div class="compact-metric">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-1">
+                                    <i class="fas fa-hdd" style="font-size: 0.8rem; color: #ffc107;"></i>
+                                    <span class="metric-label-compact">Disk</span>
+                                </div>
+                                <span class="metric-value-compact" id="diskPercent">{{ system_stats.disk.percent|round(1) }}%</span>
+                            </div>
+                            <div class="progress compact-progress mt-1" style="height: 4px;">
+                                <div class="progress-bar bg-warning" id="diskBar" style="width: 0%"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            {% endfor %}
-            
-            {% if not models %}
-            <div class="col-12">
-                <div class="no-models-message">
-                    <div class="no-models-icon">🔍</div>
-                    <div class="no-models-text">
-                        No models currently running
-                        <div class="no-models-subtext">
-                            Start a model to see it appear here
+
+                <!-- Models Management Section -->
+                <div class="models-management mt-4">
+                    <!-- Running Models -->
+                    {% if models %}
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center gap-2 mb-3">
+                            <i class="fas fa-play-circle text-success" style="font-size: 0.9rem;"></i>
+                            <span class="fw-semibold text-light" style="font-size: 0.95rem;">Running Models ({{ models|length }})</span>
+                        </div>
+                        <div class="row g-3">
+                            {% for model in models %}
+                            <div class="col-md-6 col-lg-4">
+                                <div class="model-card h-100">
+                                    <div class="model-header">
+                                        <div class="model-icon-wrapper">
+                                            <i class="fas fa-brain model-icon-main"></i>
+                                        </div>
+                                        <div class="model-meta">
+                                            <span class="status-indicator running">
+                                                <i class="fas fa-circle"></i>Running
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="model-title">{{ model.name }}</div>
+                                    <div class="model-specs">
+                                        <div class="spec-row">
+                                            <div class="spec-item">
+                                                <div class="spec-icon">
+                                                    <i class="fas fa-cogs"></i>
+                                                </div>
+                                                <div class="spec-content">
+                                                    <div class="spec-label">Family</div>
+                                                    <div class="spec-value">{{ model.families_str|default('Unknown') }}</div>
+                                                </div>
+                                            </div>
+                                            <div class="spec-item">
+                                                <div class="spec-icon">
+                                                    <i class="fas fa-weight"></i>
+                                                </div>
+                                                <div class="spec-content">
+                                                    <div class="spec-label">Parameters</div>
+                                                    <div class="spec-value">{{ model.parameter_size|default('Unknown') }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="spec-row">
+                                            <div class="spec-item">
+                                                <div class="spec-icon">
+                                                    <i class="fas fa-hdd"></i>
+                                                </div>
+                                                <div class="spec-content">
+                                                    <div class="spec-label">Size</div>
+                                                    <div class="spec-value">{{ model.size|default('Unknown') }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="model-actions">
+                                        <div class="btn-group w-100">
+                                            <button class="btn btn-info" onclick="showModelInfo('{{ model.name }}')" title="View model information">
+                                                <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
+                                            </button>
+                                            <button class="btn btn-warning" onclick="stopModel('{{ model.name }}')" title="Stop model">
+                                                <i class="fas fa-stop"></i> <span class="d-none d-sm-inline">Stop</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
                         </div>
                     </div>
+                    {% endif %}
+
+                    <!-- Available Models -->
+                    {% if available_models %}
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="fas fa-box text-primary" style="font-size: 0.9rem;"></i>
+                                <span class="fw-semibold text-light" style="font-size: 0.95rem;">Available Models</span>
+                                <span class="badge bg-primary text-white ms-2">{{ available_models|length }}</span>
+                            </div>
+                            <small class="text-muted">{{ available_models|length }} model{{ available_models|length != 1 and 's' or '' }} ready to deploy</small>
+                        </div>
+                        <div class="row g-3">
+                            {% for model in available_models %}
+                            <div class="col-md-6 col-lg-4">
+                                <div class="model-card h-100">
+                                    <div class="model-header">
+                                        <div class="model-icon-wrapper">
+                                            <i class="fas fa-box model-icon-main"></i>
+                                        </div>
+                                        <div class="model-meta">
+                                            <span class="status-indicator available">
+                                                <i class="fas fa-circle"></i>Available
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="model-title">{{ model.name }}</div>
+                                    <div class="model-specs">
+                                        <div class="spec-row">
+                                            <div class="spec-item">
+                                                <div class="spec-icon">
+                                                    <i class="fas fa-cogs"></i>
+                                                </div>
+                                                <div class="spec-content">
+                                                    <div class="spec-label">Family</div>
+                                                    <div class="spec-value">{{ model.details.family|default('Unknown') }}</div>
+                                                </div>
+                                            </div>
+                                            <div class="spec-item">
+                                                <div class="spec-icon">
+                                                    <i class="fas fa-weight"></i>
+                                                </div>
+                                                <div class="spec-content">
+                                                    <div class="spec-label">Parameters</div>
+                                                    <div class="spec-value">{{ model.details.parameter_size|default('Unknown') }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="spec-row">
+                                            <div class="spec-item">
+                                                <div class="spec-icon">
+                                                    <i class="fas fa-hdd"></i>
+                                                </div>
+                                                <div class="spec-content">
+                                                    <div class="spec-label">Size</div>
+                                                    <div class="spec-value">{{ model.size|filesizeformat if model.size else 'Unknown' }}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="model-actions">
+                                        <button class="btn btn-success me-2" onclick="startModel('{{ model.name }}')" title="Start model" aria-label="Start model">
+                                            <i class="fas fa-play"></i> <span class="d-none d-sm-inline">Start</span>
+                                        </button>
+                                        <button class="btn btn-info me-2" onclick="showModelInfo('{{ model.name }}')" title="View model information" aria-label="View model information">
+                                            <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
+                                        </button>
+                                        <button class="btn btn-danger" onclick="deleteModel('{{ model.name }}')" title="Delete model" aria-label="Delete model">
+                                            <i class="fas fa-trash"></i> <span class="d-none d-sm-inline">Delete</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- No Models Message -->
+                    {% if not models and not available_models %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-brain fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No Models Available</h5>
+                        <p class="text-muted">No models are installed or running. Install models using Ollama CLI.</p>
+                    </div>
+                    {% endif %}
                 </div>
-            </div>
-            {% endif %}
-            {% endif %}
         </div>
+
+    {% if error %}
+    <div class="alert alert-danger" role="alert">
+        <span class="detail-icon">⚠️</span> {{ error }}
     </div>
+    {% endif %}
 
-    <div class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            History
-        </div>
-        <div id="history-container">
-            {% for entry in history %}
-            <div class="history-item">
-                <div class="history-time">
-                    {{ entry.timestamp|datetime }}
-                </div>
-                <div class="history-content">
-                    {% for model in entry.models %}
-                    <div class="history-model">
-                        <strong>{{ model.name.split(':')[0] }}</strong>
-                        <span class="history-version">{{ model.name.split(':')[1] if ':' in model.name else 'No Version' }}</span>
-                        {% if model.families %}
-                        <div class="history-detail">{{ model.families }}</div>
-                        {% endif %}
-                        {% if model.parameter_size %}
-                        <div class="history-detail">{{ model.parameter_size }}</div>
-                        {% endif %}
-                        {% if model.size %}
-                        <div class="history-detail">{{ model.size }}</div>
-                        {% endif %}
-                        <div class="history-duration">
-                            <span class="detail-icon">⏱️</span>
-                            Active for {{ entry.timestamp|time_ago }}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-
-    <button class="toggle-button" onclick="toggleSidebar()" id="toggleButton">
-        📋
-    </button>
-
-    <script>
-        function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const toggleButton = document.getElementById('toggleButton');
-            sidebar.classList.toggle('show');
-            toggleButton.innerHTML = sidebar.classList.contains('show') ? '✕' : '📋';
-        }
-    </script>
-
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
-</html> 
+</html>
