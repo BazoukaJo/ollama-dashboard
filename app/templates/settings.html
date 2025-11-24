@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Ollama Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container py-5">
+        <div class="title-container text-center mb-4">
+            <div class="d-flex align-items-center justify-content-center gap-2">
+                <div class="title-logo-small">
+                    <img src="{{ url_for('static', filename='ollama-logo.png') }}" alt="Ollama">
+                </div>
+                <h2 class="page-title-minimal mb-0">Settings</h2>
+            </div>
+        </div>
+
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-lg-6">
+                <div class="card bg-dark text-light border-secondary shadow">
+                    <div class="card-body p-4">
+                        <form id="settingsForm">
+                            <div class="mb-4">
+                                <label for="temperature" class="form-label d-flex justify-content-between">
+                                    <span>Temperature</span>
+                                    <span class="text-info" id="temperatureValue">0.7</span>
+                                </label>
+                                <input type="range" class="form-range" id="temperature" min="0" max="1" step="0.1" value="0.7">
+                                <div class="form-text text-muted">Controls randomness. Higher values make output more random, lower values more deterministic.</div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="top_p" class="form-label d-flex justify-content-between">
+                                    <span>Top P</span>
+                                    <span class="text-info" id="topPValue">0.9</span>
+                                </label>
+                                <input type="range" class="form-range" id="top_p" min="0" max="1" step="0.05" value="0.9">
+                                <div class="form-text text-muted">Nucleus sampling. Works together with temperature.</div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="top_k" class="form-label d-flex justify-content-between">
+                                    <span>Top K</span>
+                                    <span class="text-info" id="topKValue">40</span>
+                                </label>
+                                <input type="number" class="form-control bg-dark text-light border-secondary" id="top_k" value="40" min="1" max="100">
+                                <div class="form-text text-muted">Limits the next token selection to the K most probable tokens.</div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="num_ctx" class="form-label d-flex justify-content-between">
+                                    <span>Context Window</span>
+                                    <span class="text-info" id="numCtxValue">2048</span>
+                                </label>
+                                <input type="number" class="form-control bg-dark text-light border-secondary" id="num_ctx" value="2048" step="1024" min="1024">
+                                <div class="form-text text-muted">Size of the context window used to generate the next token.</div>
+                            </div>
+
+                            <div class="mb-4">
+                                <label for="seed" class="form-label">Seed</label>
+                                <input type="number" class="form-control bg-dark text-light border-secondary" id="seed" value="0" min="0">
+                                <div class="form-text text-muted">Random seed. Set to 0 for random.</div>
+                            </div>
+
+                            <div class="d-flex justify-content-between mt-5">
+                                <a href="/" class="btn btn-outline-secondary">
+                                    <i class="fas fa-arrow-left me-2"></i>Back
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-2"></i>Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notificationArea"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Load settings on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/settings');
+                if (response.ok) {
+                    const settings = await response.json();
+                    document.getElementById('temperature').value = settings.temperature;
+                    document.getElementById('temperatureValue').textContent = settings.temperature;
+
+                    document.getElementById('top_p').value = settings.top_p;
+                    document.getElementById('topPValue').textContent = settings.top_p;
+
+                    document.getElementById('top_k').value = settings.top_k;
+                    document.getElementById('topKValue').textContent = settings.top_k;
+
+                    document.getElementById('num_ctx').value = settings.num_ctx;
+                    document.getElementById('numCtxValue').textContent = settings.num_ctx;
+
+                    document.getElementById('seed').value = settings.seed;
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+        });
+
+        // Update value displays
+        document.getElementById('temperature').addEventListener('input', (e) => {
+            document.getElementById('temperatureValue').textContent = e.target.value;
+        });
+        document.getElementById('top_p').addEventListener('input', (e) => {
+            document.getElementById('topPValue').textContent = e.target.value;
+        });
+        document.getElementById('top_k').addEventListener('input', (e) => {
+            document.getElementById('topKValue').textContent = e.target.value;
+        });
+        document.getElementById('num_ctx').addEventListener('input', (e) => {
+            document.getElementById('numCtxValue').textContent = e.target.value;
+        });
+
+        // Handle form submission
+        document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const saveBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving...';
+            saveBtn.disabled = true;
+
+            const settings = {
+                temperature: parseFloat(document.getElementById('temperature').value),
+                top_p: parseFloat(document.getElementById('top_p').value),
+                top_k: parseInt(document.getElementById('top_k').value),
+                num_ctx: parseInt(document.getElementById('num_ctx').value),
+                seed: parseInt(document.getElementById('seed').value)
+            };
+
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(settings)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showNotification('Settings saved successfully!', 'success');
+                } else {
+                    showNotification('Failed to save settings: ' + result.message, 'error');
+                }
+            } catch (error) {
+                showNotification('Error saving settings: ' + error.message, 'error');
+            } finally {
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+            }
+        });
+
+        function showNotification(message, type) {
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show position-fixed`;
+            notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            notification.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

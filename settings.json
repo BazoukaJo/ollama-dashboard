@@ -1,0 +1,7 @@
+{
+  "temperature": 0.5,
+  "top_k": 40,
+  "top_p": 0.9,
+  "num_ctx": 2048,
+  "seed": 0
+}

@@ -1,0 +1,22 @@
+Testing get_best_models():
+  Count: 9
+  Names: ['llama3', 'mistral', 'gemma', 'phi3', 'neural-chat', 'starling-lm', 'codellama', 'llama2', 'llava']
+
+Testing get_all_downloadable_models():
+DEBUG: get_all_downloadable_models() called!
+DEBUG: best models count = 9
+  Count: 24
+  Names: ['llama3', 'mistral', 'gemma', 'phi3', 'neural-chat', 'starling-lm', 'codellama', 'llama2', 'llava', 'qwen', 'wizardlm', 'orca-mini', 'vicuna', 'nous-hermes', 'dolphin-mixtral', 'solar', 'deepseek-coder', 'yi', 'zephyr', 'openchat', 'stablelm', 'falcon', 'mixtral', 'command-r']
+
+Testing get_downloadable_models('best'):
+DEBUG: get_downloadable_models called with category=best
+DEBUG: Returning best models
+  Count: 9
+
+Testing get_downloadable_models('all'):
+DEBUG: get_downloadable_models called with category=all
+DEBUG: get_all_downloadable_models() called!
+DEBUG: best models count = 9
+DEBUG: Returning 24 models
+  Count: 24
+  Names: ['llama3', 'mistral', 'gemma', 'phi3', 'neural-chat', 'starling-lm', 'codellama', 'llama2', 'llava', 'qwen', 'wizardlm', 'orca-mini', 'vicuna', 'nous-hermes', 'dolphin-mixtral', 'solar', 'deepseek-coder', 'yi', 'zephyr', 'openchat', 'stablelm', 'falcon', 'mixtral', 'command-r']

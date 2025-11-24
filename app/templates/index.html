@@ -3,20 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="30">
     <title>Ollama Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v={{ timestamp }}">
 </head>
 <body>
     <!-- Compact Mode Toggle Button -->
     <button id="compactToggle" class="compact-toggle-btn" title="Toggle Compact Mode">
         <i class="fas fa-compress"></i>
     </button>
+    <button id="settingsBtn" class="compact-toggle-btn settings-btn-position" title="Settings" onclick="window.location.href='/settings'">
+        <i class="fas fa-cog"></i>
+    </button>
 
-    <div class="container py-5">
-        <div class="title-container text-center mb-3">
+    <div class="container py-3">
+        <div class="title-container text-center mb-1">
             <div class="d-flex align-items-center justify-content-center gap-2">
                 <div class="title-logo-small">
                     <img src="{{ url_for('static', filename='ollama-logo.png') }}" alt="Ollama">
@@ -28,11 +30,17 @@
             </div>
         </div>
 
-
-
-        <div class="refresh-indicator mb-4 {% if error %}error{% endif %}" data-timezone="{{ timezone }}">
+        <div class="refresh-indicator mb-2 {% if error %}error{% endif %}" data-timezone="{{ timezone }}">
             <div class="dot"></div>
             <span>Last updated: <span id="lastUpdate"></span> • Next refresh in <span id="nextRefresh">30</span>s</span>
+        </div>
+
+        <!-- Health Status Indicator -->
+        <div class="d-flex justify-content-center mb-2">
+            <div id="healthStatus" class="badge bg-secondary health-status-badge">
+                <i class="fas fa-heartbeat me-2"></i>
+                <span id="healthText">Checking health...</span>
+            </div>
         </div>
 
         <!-- Models Management Section -->
@@ -41,10 +49,10 @@
                 <div class="compact-system-resources mb-2">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <div class="d-flex align-items-center gap-2">
-                            <i class="fas fa-server text-primary" style="font-size: 0.9rem;"></i>
-                            <span class="fw-semibold text-light" style="font-size: 0.95rem;">System Resources</span>
+                            <i class="fas fa-server text-primary section-icon"></i>
+                            <span class="fw-semibold text-light section-title-text">System Resources</span>
                         </div>
-                        <small class="text-muted" id="lastUpdateTime" style="font-size: 0.75rem;">Updated just now</small>
+                        <small class="text-muted last-update-time" id="lastUpdateTime">Updated just now</small>
                     </div>
 
 
@@ -54,7 +62,7 @@
                         <div class="compact-metric">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-1">
-                                    <i class="fas fa-microchip" style="font-size: 0.8rem; color: #0d6efd;"></i>
+                                    <i class="fas fa-microchip resource-icon resource-icon-cpu"></i>
                                     <span class="metric-label-compact">CPU</span>
                                 </div>
                                     <span class="metric-value-compact" id="cpuPercent">{{ system_stats.cpu_percent|round(1) }}%</span>
@@ -66,7 +74,7 @@
                         <div class="compact-metric">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-1">
-                                    <i class="fas fa-memory" style="font-size: 0.8rem; color: #198754;"></i>
+                                    <i class="fas fa-memory resource-icon resource-icon-ram"></i>
                                     <span class="metric-label-compact">RAM</span>
                                 </div>
                                 <span class="metric-value-compact" id="memoryPercent">{{ system_stats.memory.percent|round(1) }}%</span>
@@ -78,7 +86,7 @@
                         <div class="compact-metric">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-1">
-                                    <i class="fas fa-palette" style="font-size: 0.8rem; color: #0dcaf0;"></i>
+                                    <i class="fas fa-palette resource-icon resource-icon-gpu"></i>
                                     <span class="metric-label-compact">VRAM</span>
                                 </div>
                                 <span class="metric-value-compact" id="vramPercent">{{ system_stats.vram.percent|round(1) if system_stats.vram.total > 0 else '--' }}%</span>
@@ -90,7 +98,7 @@
                         <div class="compact-metric">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-1">
-                                    <i class="fas fa-hdd" style="font-size: 0.8rem; color: #ffc107;"></i>
+                                    <i class="fas fa-hdd resource-icon resource-icon-disk"></i>
                                     <span class="metric-label-compact">Disk</span>
                                 </div>
                                 <span class="metric-value-compact" id="diskPercent">{{ system_stats.disk.percent|round(1) }}%</span>
@@ -106,8 +114,8 @@
                     {% if models %}
                     <div class="mb-4">
                         <div class="d-flex align-items-center gap-2 mb-3">
-                            <i class="fas fa-play-circle text-success" style="font-size: 0.9rem;"></i>
-                            <span class="fw-semibold text-light" style="font-size: 0.95rem;">Running Models ({{ models|length }})</span>
+                            <i class="fas fa-play-circle text-success section-icon"></i>
+                            <span class="fw-semibold text-light section-title-text">Running Models ({{ models|length }})</span>
                         </div>
                         <div class="row g-3">
                             {% for model in models %}
@@ -124,8 +132,19 @@
                                         </div>
                                     </div>
                                     <div class="model-title">{{ model.name }}</div>
+                                    <div class="model-capabilities">
+                                        <span class="capability-icon {{ 'enabled' if model.has_reasoning else 'disabled' }}" title="Reasoning: {{ 'Available' if model.has_reasoning else 'Not available' }}">
+                                            <i class="fas fa-brain"></i>
+                                        </span>
+                                        <span class="capability-icon {{ 'enabled' if model.has_vision else 'disabled' }}" title="Image Processing: {{ 'Available' if model.has_vision else 'Not available' }}">
+                                            <i class="fas fa-image"></i>
+                                        </span>
+                                        <span class="capability-icon {{ 'enabled' if model.has_tools else 'disabled' }}" title="Tool Usage: {{ 'Available' if model.has_tools else 'Not available' }}">
+                                            <i class="fas fa-tools"></i>
+                                        </span>
+                                    </div>
                                     <div class="model-specs">
-                                        <div class="spec-row">
+                                        <div class="spec-row compact-hide">
                                             <div class="spec-item">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-cogs"></i>
@@ -145,7 +164,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="spec-row">
+                                        <div class="spec-row compact-hide">
                                             <div class="spec-item">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-hdd"></i>
@@ -156,22 +175,22 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="spec-row">
+                                        <div class="spec-row" title="System-wide usage (per-model metrics not available)">
                                             <div class="spec-item">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-memory"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label">RAM Usage</div>
+                                                    <div class="spec-label">System RAM</div>
                                                     <div class="spec-value" id="model-ram-{{ loop.index }}">Loading...</div>
                                                 </div>
                                             </div>
-                                            <div class="spec-item">
+                                            <div class="spec-item compact-hide">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-palette"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label">VRAM Usage</div>
+                                                    <div class="spec-label">System VRAM</div>
                                                     <div class="spec-value" id="model-vram-{{ loop.index }}">Loading...</div>
                                                 </div>
                                             </div>
@@ -199,8 +218,8 @@
                     <div class="mb-4">
                         <div class="d-flex align-items-center justify-content-between mb-3">
                             <div class="d-flex align-items-center gap-2">
-                                <i class="fas fa-box text-primary" style="font-size: 0.9rem;"></i>
-                                <span class="fw-semibold text-light" style="font-size: 0.95rem;">Available Models</span>
+                                <i class="fas fa-box text-primary section-icon"></i>
+                                <span class="fw-semibold text-light section-title-text">Available Models</span>
                                 <span class="badge bg-primary text-white ms-2">{{ available_models|length }}</span>
                             </div>
                             <small class="text-muted">{{ available_models|length }} model{{ available_models|length != 1 and 's' or '' }} ready to deploy</small>
@@ -220,8 +239,19 @@
                                         </div>
                                     </div>
                                     <div class="model-title">{{ model.name }}</div>
+                                    <div class="model-capabilities">
+                                        <span class="capability-icon {{ 'enabled' if model.has_reasoning else 'disabled' }}" title="Reasoning: {{ 'Available' if model.has_reasoning else 'Not available' }}">
+                                            <i class="fas fa-brain"></i>
+                                        </span>
+                                        <span class="capability-icon {{ 'enabled' if model.has_vision else 'disabled' }}" title="Image Processing: {{ 'Available' if model.has_vision else 'Not available' }}">
+                                            <i class="fas fa-image"></i>
+                                        </span>
+                                        <span class="capability-icon {{ 'enabled' if model.has_tools else 'disabled' }}" title="Tool Usage: {{ 'Available' if model.has_tools else 'Not available' }}">
+                                            <i class="fas fa-tools"></i>
+                                        </span>
+                                    </div>
                                     <div class="model-specs">
-                                        <div class="spec-row">
+                                        <div class="spec-row compact-hide">
                                             <div class="spec-item">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-cogs"></i>
@@ -241,7 +271,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="spec-row">
+                                        <div class="spec-row compact-hide">
                                             <div class="spec-item">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-hdd"></i>
@@ -249,6 +279,27 @@
                                                 <div class="spec-content">
                                                     <div class="spec-label">Size</div>
                                                     <div class="spec-value">{{ model.size|filesizeformat if model.size else 'Unknown' }}</div>
+                                                </div>
+                                            </div>
+                                            <div class="spec-item">
+                                                <div class="spec-icon">
+                                                    <i class="fas fa-memory"></i>
+                                                </div>
+                                                <div class="spec-content">
+                                                    <div class="spec-label">System RAM</div>
+                                                    <div class="spec-value" id="available-ram-{{ loop.index }}">Loading...</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- System VRAM capacity (hidden in compact mode) -->
+                                        <div class="spec-row compact-hide" title="System-wide capacities (not per model)">
+                                            <div class="spec-item">
+                                                <div class="spec-icon">
+                                                    <i class="fas fa-palette"></i>
+                                                </div>
+                                                <div class="spec-content">
+                                                    <div class="spec-label">System VRAM</div>
+                                                    <div class="spec-value" id="available-vram-{{ loop.index }}">Loading...</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -271,6 +322,37 @@
                     </div>
                     {% endif %}
 
+                    <!-- Downloadable Models -->
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="fas fa-star text-warning icon-xs"></i>
+                                <span class="fw-semibold text-light heading-xs">Best Models</span>
+                            </div>
+                            <small class="text-muted">Curated selection from Ollama library</small>
+                        </div>
+                        <div class="row g-3" id="downloadableModelsContainer">
+                            <!-- Populated by JS -->
+                            <div class="col-12 text-center py-4">
+                                <div class="spinner-border text-secondary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- View More Button -->
+                        <div class="text-center mt-3">
+                            <button id="viewMoreModelsBtn" class="btn btn-outline-secondary" onclick="toggleExtendedModels()">
+                                <i class="fas fa-plus-circle me-2"></i>View More Models
+                            </button>
+                        </div>
+
+                        <!-- Extended Models Container (hidden by default) -->
+                        <div id="extendedModelsContainer" class="row g-3 mt-2 extended-models-container">
+                            <!-- Populated by JS when expanded -->
+                        </div>
+                    </div>
+
                     <!-- No Models Message -->
                     {% if not models and not available_models %}
                     <div class="text-center py-5">
@@ -288,7 +370,7 @@
     </div>
     {% endif %}
 
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}?v={{ timestamp }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

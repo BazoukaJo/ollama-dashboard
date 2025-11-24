@@ -11,9 +11,10 @@ import pytz
 class Config:
     """Application configuration settings."""
     OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'localhost')
-    OLLAMA_PORT = int(os.getenv('OLLAMA_PORT', 11434))
-    MAX_HISTORY = int(os.getenv('MAX_HISTORY', 50))
+    OLLAMA_PORT = int(os.getenv('OLLAMA_PORT', '11434'))
+    MAX_HISTORY = int(os.getenv('MAX_HISTORY', '50'))
     HISTORY_FILE = os.getenv('HISTORY_FILE', 'history.json')
+    SETTINGS_FILE = os.getenv('SETTINGS_FILE', 'settings.json')
     STATIC_URL_PATH = ''
     STATIC_FOLDER = 'static'
     TEMPLATE_FOLDER = 'templates'
@@ -33,6 +34,7 @@ def create_app():
 
     # Load configuration
     app.config.from_object(Config)
+    app.config['START_TIME'] = datetime.utcnow()
 
     # Configure CORS
     CORS(app, resources={
@@ -116,9 +118,11 @@ def _register_error_handlers(app):
     @app.errorhandler(404)
     def not_found_error(error):
         """Handle 404 errors."""
+        _ = error  # Suppress unused warning
         return jsonify({"error": "Not found"}), 404
 
     @app.errorhandler(500)
     def internal_error(error):
         """Handle 500 errors."""
+        _ = error  # Suppress unused warning
         return jsonify({"error": "Internal server error"}), 500

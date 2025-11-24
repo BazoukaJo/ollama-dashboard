@@ -4,136 +4,154 @@
 
 // Timer and UI update functions
 function updateTimes() {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString(undefined, {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-    });
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 
-    const refreshIndicator = document.querySelector('.refresh-indicator');
-    const tzAbbr = refreshIndicator ? refreshIndicator.dataset.timezone : '';
-    const displayText = tzAbbr ? `${timeStr} ${tzAbbr}` : timeStr;
+  const refreshIndicator = document.querySelector(".refresh-indicator");
+  const tzAbbr = refreshIndicator ? refreshIndicator.dataset.timezone : "";
+  const displayText = tzAbbr ? `${timeStr} ${tzAbbr}` : timeStr;
 
-    document.getElementById('lastUpdate').textContent = displayText;
+  document.getElementById("lastUpdate").textContent = displayText;
 
-    let seconds = 30;
-    const countdown = setInterval(() => {
-        seconds--;
-        document.getElementById('nextRefresh').textContent = seconds;
-        if (seconds <= 0) clearInterval(countdown);
-    }, 1000);
+  let seconds = 30;
+  const countdown = setInterval(() => {
+    seconds--;
+    document.getElementById("nextRefresh").textContent = seconds;
+    if (seconds <= 0) clearInterval(countdown);
+  }, 1000);
 }
 
 function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const toggleButton = document.getElementById('toggleButton');
-    sidebar.classList.toggle('show');
-    toggleButton.innerHTML = sidebar.classList.contains('show') ? '✕' : '📋';
+  const sidebar = document.getElementById("sidebar");
+  const toggleButton = document.getElementById("toggleButton");
+  sidebar.classList.toggle("show");
+  toggleButton.innerHTML = sidebar.classList.contains("show") ? "✕" : "📋";
 }
 
 // Model management functions
 async function startModel(modelName) {
-    try {
-        const response = await fetch(`/api/models/start/${encodeURIComponent(modelName)}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-        const result = await response.json();
-        if (result.success) {
-            showNotification(result.message, 'success');
-            setTimeout(() => location.reload(), 2000);
-        } else {
-            showNotification(result.message, 'error');
-        }
-    } catch (error) {
-        showNotification('Failed to start model: ' + error.message, 'error');
+  try {
+    const response = await fetch(
+      `/api/models/start/${encodeURIComponent(modelName)}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    const result = await response.json();
+    if (result.success) {
+      showNotification(result.message, "success");
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      showNotification(result.message, "error");
     }
+  } catch (error) {
+    showNotification("Failed to start model: " + error.message, "error");
+  }
 }
 
 async function stopModel(modelName) {
-    const stopButton = event.target.closest('button');
-    const originalText = stopButton.innerHTML;
-    stopButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
-    stopButton.disabled = true;
+  const stopButton = event.target.closest("button");
+  const originalText = stopButton.innerHTML;
+  stopButton.innerHTML =
+    '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
+  stopButton.disabled = true;
 
-    try {
-        showNotification(`Attempting to stop model ${modelName}...`, 'info');
+  try {
+    showNotification(`Attempting to stop model ${modelName}...`, "info");
 
-        const response = await fetch(`/api/models/stop/${encodeURIComponent(modelName)}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-        const result = await response.json();
+    const response = await fetch(
+      `/api/models/stop/${encodeURIComponent(modelName)}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    const result = await response.json();
 
-        if (result.success) {
-            let notificationType = 'success';
-            let message = result.message;
+    if (result.success) {
+      let notificationType = "success";
+      let message = result.message;
 
-            if (result.force_killed) {
-                notificationType = 'warning';
-                message += ' ⚠️ Force kill was required - some data may have been lost.';
-            }
+      if (result.force_killed) {
+        notificationType = "warning";
+        message +=
+          " ⚠️ Force kill was required - some data may have been lost.";
+      }
 
-            showNotification(message, notificationType);
-            setTimeout(() => location.reload(), 3000);
-        } else {
-            showNotification(result.message, 'error');
-        }
-    } catch (error) {
-        showNotification('Failed to stop model: ' + error.message, 'error');
-    } finally {
-        stopButton.innerHTML = originalText;
-        stopButton.disabled = false;
+      showNotification(message, notificationType);
+      setTimeout(() => location.reload(), 3000);
+    } else {
+      showNotification(result.message, "error");
     }
+  } catch (error) {
+    showNotification("Failed to stop model: " + error.message, "error");
+  } finally {
+    stopButton.innerHTML = originalText;
+    stopButton.disabled = false;
+  }
 }
 
 async function deleteModel(modelName) {
-    if (!confirm(`Are you sure you want to delete the model "${modelName}"? This action cannot be undone.`)) {
-        return;
+  if (
+    !confirm(
+      `Are you sure you want to delete the model "${modelName}"? This action cannot be undone.`
+    )
+  ) {
+    return;
+  }
+
+  const deleteButton = event.target.closest("button");
+  const originalText = deleteButton.innerHTML;
+  deleteButton.innerHTML =
+    '<i class="fas fa-spinner fa-spin me-1"></i>Deleting...';
+  deleteButton.disabled = true;
+
+  try {
+    showNotification(`Deleting model ${modelName}...`, "info");
+
+    const response = await fetch(
+      `/api/models/delete/${encodeURIComponent(modelName)}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    const result = await response.json();
+
+    if (result.success) {
+      showNotification(result.message, "success");
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      showNotification(result.message, "error");
     }
-
-    const deleteButton = event.target.closest('button');
-    const originalText = deleteButton.innerHTML;
-    deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Deleting...';
-    deleteButton.disabled = true;
-
-    try {
-        showNotification(`Deleting model ${modelName}...`, 'info');
-
-        const response = await fetch(`/api/models/delete/${encodeURIComponent(modelName)}`, {
-            method: 'DELETE',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-        const result = await response.json();
-
-        if (result.success) {
-            showNotification(result.message, 'success');
-            setTimeout(() => location.reload(), 2000);
-        } else {
-            showNotification(result.message, 'error');
-        }
-    } catch (error) {
-        showNotification('Failed to delete model: ' + error.message, 'error');
-    } finally {
-        deleteButton.innerHTML = originalText;
-        deleteButton.disabled = false;
-    }
+  } catch (error) {
+    showNotification("Failed to delete model: " + error.message, "error");
+  } finally {
+    deleteButton.innerHTML = originalText;
+    deleteButton.disabled = false;
+  }
 }
 
 async function showModelInfo(modelName) {
-    try {
-        const response = await fetch(`/api/models/info/${encodeURIComponent(modelName)}`);
-        const info = await response.json();
+  try {
+    const response = await fetch(
+      `/api/models/info/${encodeURIComponent(modelName)}`
+    );
+    const info = await response.json();
 
-        if (response.ok) {
-            const modalHtml = `
+    if (response.ok) {
+      const modalHtml = `
                 <div class="modal fade" id="modelInfoModal" tabindex="-1">
                     <div class="modal-dialog modal-xl">
                         <div class="modal-content" style="background: linear-gradient(135deg, #1a1a1a 0%, #1e1e1e 100%); color: #cccccc; border: 1px solid #3e3e42;">
@@ -152,497 +170,926 @@ async function showModelInfo(modelName) {
                     </div>
                 </div>
             `;
-            document.body.insertAdjacentHTML('beforeend', modalHtml);
-            const modal = new bootstrap.Modal(document.getElementById('modelInfoModal'));
-            modal.show();
+      document.body.insertAdjacentHTML("beforeend", modalHtml);
+      const modal = new bootstrap.Modal(
+        document.getElementById("modelInfoModal")
+      );
+      modal.show();
 
-            document.getElementById('modelInfoModal').addEventListener('hidden.bs.modal', function() {
-                this.remove();
-            });
-        } else {
-            showNotification('Failed to get model info: ' + info.error, 'error');
-        }
-    } catch (error) {
-        showNotification('Failed to get model info: ' + error.message, 'error');
+      document
+        .getElementById("modelInfoModal")
+        .addEventListener("hidden.bs.modal", function () {
+          this.remove();
+        });
+    } else {
+      showNotification("Failed to get model info: " + info.error, "error");
     }
+  } catch (error) {
+    showNotification("Failed to get model info: " + error.message, "error");
+  }
 }
 
 function jsonToTable(json, level = 0) {
-    if (json === null || json === undefined) {
-        return '<span class="text-muted">null</span>';
+  if (json === null || json === undefined) {
+    return '<span class="text-muted">null</span>';
+  }
+
+  if (typeof json === "boolean") {
+    return `<span class="text-primary">${json}</span>`;
+  }
+
+  if (typeof json === "number") {
+    return `<span class="text-success">${json}</span>`;
+  }
+
+  if (typeof json === "string") {
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(json)) {
+      return `<span class="text-info">${new Date(
+        json
+      ).toLocaleString()}</span>`;
+    }
+    const maxLength = 100;
+    if (json.length > maxLength) {
+      const truncated = json.substring(0, maxLength);
+      const escapedJson = json
+        .replace(/"/g, '"')
+        .replace(/</g, "<")
+        .replace(/>/g, ">");
+      return `<span class="text-warning" title="${escapedJson}">"${truncated}..."</span>`;
+    }
+    return `<span class="text-warning">"${json}"</span>`;
+  }
+
+  if (Array.isArray(json)) {
+    if (json.length === 0) {
+      return '<span class="text-muted">[]</span>';
     }
 
-    if (typeof json === 'boolean') {
-        return `<span class="text-primary">${json}</span>`;
-    }
-
-    if (typeof json === 'number') {
-        return `<span class="text-success">${json}</span>`;
-    }
-
-    if (typeof json === 'string') {
-        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(json)) {
-            return `<span class="text-info">${new Date(json).toLocaleString()}</span>`;
-        }
-        const maxLength = 100;
-        if (json.length > maxLength) {
-            const truncated = json.substring(0, maxLength);
-            const escapedJson = json.replace(/"/g, '"').replace(/</g, '<').replace(/>/g, '>');
-            return `<span class="text-warning" title="${escapedJson}">"${truncated}..."</span>`;
-        }
-        return `<span class="text-warning">"${json}"</span>`;
-    }
-
-    if (Array.isArray(json)) {
-        if (json.length === 0) {
-            return '<span class="text-muted">[]</span>';
-        }
-
-        let html = '<div class="array-container">';
-        json.forEach((item, index) => {
-            html += `<div class="array-item">
+    let html = '<div class="array-container">';
+    json.forEach((item, index) => {
+      html += `<div class="array-item">
                 <span class="array-index">[${index}]</span>
                 ${jsonToTable(item, level + 1)}
             </div>`;
-        });
-        html += '</div>';
-        return html;
+    });
+    html += "</div>";
+    return html;
+  }
+
+  if (typeof json === "object") {
+    const keys = Object.keys(json);
+    if (keys.length === 0) {
+      return '<span class="text-muted">{}</span>';
     }
 
-    if (typeof json === 'object') {
-        const keys = Object.keys(json);
-        if (keys.length === 0) {
-            return '<span class="text-muted">{}</span>';
-        }
-
-        let html = '<table class="table table-dark table-sm json-table">';
-        if (level === 0) {
-            html += '<thead><tr><th>Property</th><th>Value</th></tr></thead>';
-        }
-        html += '<tbody>';
-
-        keys.forEach(key => {
-            const value = json[key];
-            const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-
-            html += '<tr>';
-            html += `<td class="json-key-cell" style="padding-left: ${level * 20}px"><strong>${formattedKey}</strong></td>`;
-            html += '<td class="json-value-cell">';
-
-            if (typeof value === 'object' && value !== null) {
-                html += jsonToTable(value, level + 1);
-            } else {
-                html += jsonToTable(value, level);
-            }
-
-            html += '</td>';
-            html += '</tr>';
-        });
-
-        html += '</tbody></table>';
-        return html;
+    let html = '<table class="table table-dark table-sm json-table">';
+    if (level === 0) {
+      html += "<thead><tr><th>Property</th><th>Value</th></tr></thead>";
     }
+    html += "<tbody>";
 
-    return String(json);
+    keys.forEach((key) => {
+      const value = json[key];
+      const formattedKey = key
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (l) => l.toUpperCase());
+
+      html += "<tr>";
+      html += `<td class="json-key-cell" style="padding-left: ${
+        level * 20
+      }px"><strong>${formattedKey}</strong></td>`;
+      html += '<td class="json-value-cell">';
+
+      if (typeof value === "object" && value !== null) {
+        html += jsonToTable(value, level + 1);
+      } else {
+        html += jsonToTable(value, level);
+      }
+
+      html += "</td>";
+      html += "</tr>";
+    });
+
+    html += "</tbody></table>";
+    return html;
+  }
+
+  return String(json);
 }
 
 function showNotification(message, type) {
-    const notification = document.createElement('div');
-    notification.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show position-fixed`;
-    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    notification.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert"></button>
+  const notification = document.createElement("div");
+  const isError = type === "error" || type === "danger" || type !== "success";
+  notification.className = `alert alert-${
+    type === "success" ? "success" : "danger"
+  } alert-dismissible fade show position-fixed`;
+  notification.style.cssText =
+    "top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 500px;";
+
+  // Add copy button for error messages
+  const copyButton = isError ? `
+    <button type="button" class="btn btn-sm btn-outline-light" onclick="copyErrorToClipboard(this)"
+            style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex-shrink: 0;" title="Copy error to clipboard">
+      <i class="fas fa-copy"></i> Copy
+    </button>
+  ` : '';
+
+  notification.innerHTML = `
+        <div style="display: flex; align-items: start; gap: 10px;">
+          <div style="flex: 1; min-width: 0;" data-error-message="${message.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}">${message}</div>
+          <div style="display: flex; gap: 5px; align-items: center; flex-shrink: 0;">
+            ${copyButton}
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        </div>
     `;
-    document.body.appendChild(notification);
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    if (notification.parentNode) {
+      notification.remove();
+    }
+  }, 5000);
+}
+
+function copyErrorToClipboard(button) {
+  const errorDiv = button.closest('.alert').querySelector('[data-error-message]');
+  const errorMessage = errorDiv.getAttribute('data-error-message');
+
+  navigator.clipboard.writeText(errorMessage).then(() => {
+    const originalContent = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+    button.disabled = true;
 
     setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, 5000);
+      button.innerHTML = originalContent;
+      button.disabled = false;
+    }, 2000);
+  }).catch(err => {
+    console.error('Failed to copy error:', err);
+    button.innerHTML = '<i class="fas fa-times"></i> Failed';
+    setTimeout(() => {
+      button.innerHTML = '<i class="fas fa-copy"></i> Copy';
+    }, 2000);
+  });
+}
+
+// Capability rendering using backend-provided flags
+function getCapabilitiesHTML(model) {
+  // Use backend-detected capability flags with fallback to false
+  const hasReasoning = model.has_reasoning || false;
+  const hasVision = model.has_vision || false;
+  const hasTools = model.has_tools || false;
+
+  return `
+    <span class="capability-icon ${hasReasoning ? 'enabled' : 'disabled'}" title="Reasoning: ${hasReasoning ? 'Available' : 'Not available'}">
+      <i class="fas fa-brain"></i>
+    </span>
+    <span class="capability-icon ${hasVision ? 'enabled' : 'disabled'}" title="Image Processing: ${hasVision ? 'Available' : 'Not available'}">
+      <i class="fas fa-image"></i>
+    </span>
+    <span class="capability-icon ${hasTools ? 'enabled' : 'disabled'}" title="Tool Usage: ${hasTools ? 'Available' : 'Not available'}">
+      <i class="fas fa-tools"></i>
+    </span>
+  `;
 }
 
 // Historical data storage for timelines
 const timelineData = {
-    cpu: [],
-    memory: [],
-    vram: [],
-    disk: []
+  cpu: [],
+  memory: [],
+  vram: [],
+  disk: [],
 };
 
 const MAX_TIMELINE_POINTS = 60; // 60 seconds of data
 
 // Timeline drawing function
 function drawTimeline(canvas, data, color) {
-    const ctx = canvas.getContext('2d');
-    const width = canvas.width;
-    const height = canvas.height;
+  const ctx = canvas.getContext("2d");
+  const width = canvas.width;
+  const height = canvas.height;
 
-    // Clear canvas
-    ctx.clearRect(0, 0, width, height);
+  // Clear canvas
+  ctx.clearRect(0, 0, width, height);
 
-    if (data.length < 2) return;
+  if (data.length < 2) return;
 
-    // Draw background grid
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, height * 0.25);
-    ctx.lineTo(width, height * 0.25);
-    ctx.moveTo(0, height * 0.5);
-    ctx.lineTo(width, height * 0.5);
-    ctx.moveTo(0, height * 0.75);
-    ctx.lineTo(width, height * 0.75);
-    ctx.stroke();
+  // Draw background grid
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, height * 0.25);
+  ctx.lineTo(width, height * 0.25);
+  ctx.moveTo(0, height * 0.5);
+  ctx.lineTo(width, height * 0.5);
+  ctx.moveTo(0, height * 0.75);
+  ctx.lineTo(width, height * 0.75);
+  ctx.stroke();
 
-    // Fill area under the line
-    ctx.fillStyle = color.replace('rgb', 'rgba').replace(')', ', 0.3)');
-    ctx.beginPath();
-    ctx.moveTo(0, height); // Start from bottom-left
+  // Fill area under the line
+  ctx.fillStyle = color.replace("rgb", "rgba").replace(")", ", 0.3)");
+  ctx.beginPath();
+  ctx.moveTo(0, height); // Start from bottom-left
 
-    const stepX = width / (data.length - 1);
-    for (let i = 0; i < data.length; i++) {
-        const x = i * stepX;
-        const y = height - (data[i] / 100) * height;
-        ctx.lineTo(x, y);
+  const stepX = width / (data.length - 1);
+  for (let i = 0; i < data.length; i++) {
+    const x = i * stepX;
+    const y = height - (data[i] / 100) * height;
+    ctx.lineTo(x, y);
+  }
+
+  ctx.lineTo(width, height); // Close path to bottom-right
+  ctx.closePath();
+  ctx.fill();
+
+  // Draw timeline line
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+
+  for (let i = 0; i < data.length; i++) {
+    const x = i * stepX;
+    const y = height - (data[i] / 100) * height;
+
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
     }
+  }
+  ctx.stroke();
 
-    ctx.lineTo(width, height); // Close path to bottom-right
-    ctx.closePath();
-    ctx.fill();
+  // Draw current value point
+  const currentValue = data[data.length - 1];
+  const currentX = (data.length - 1) * stepX;
+  const currentY = height - (currentValue / 100) * height;
 
-    // Draw timeline line
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-
-    for (let i = 0; i < data.length; i++) {
-        const x = i * stepX;
-        const y = height - (data[i] / 100) * height;
-
-        if (i === 0) {
-            ctx.moveTo(x, y);
-        } else {
-            ctx.lineTo(x, y);
-        }
-    }
-    ctx.stroke();
-
-    // Draw current value point
-    const currentValue = data[data.length - 1];
-    const currentX = (data.length - 1) * stepX;
-    const currentY = height - (currentValue / 100) * height;
-
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(currentX, currentY, 3, 0, 2 * Math.PI);
-    ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(currentX, currentY, 3, 0, 2 * Math.PI);
+  ctx.fill();
 }
 
 // System stats update function
 async function updateSystemStats() {
-    try {
-        const response = await fetch('/api/system/stats');
-        const stats = await response.json();
+  try {
+    const response = await fetch("/api/system/stats");
+    const stats = await response.json();
 
-        if (response.ok) {
-            // Update percentages
-            const cpuPercentEl = document.getElementById('cpuPercent');
-            const memoryPercentEl = document.getElementById('memoryPercent');
-            const vramPercentEl = document.getElementById('vramPercent');
-            const diskPercentEl = document.getElementById('diskPercent');
+    if (response.ok) {
+      // Update percentages
+      const cpuPercentEl = document.getElementById("cpuPercent");
+      const memoryPercentEl = document.getElementById("memoryPercent");
+      const vramPercentEl = document.getElementById("vramPercent");
+      const diskPercentEl = document.getElementById("diskPercent");
 
-            if (cpuPercentEl) cpuPercentEl.textContent = `${stats.cpu_percent.toFixed(1)}%`;
-            if (memoryPercentEl) memoryPercentEl.textContent = `${stats.memory.percent.toFixed(1)}%`;
-            if (vramPercentEl) vramPercentEl.textContent = stats.vram && stats.vram.total > 0 ? `${stats.vram.percent.toFixed(1)}%` : '--%';
-            if (diskPercentEl) diskPercentEl.textContent = `${stats.disk.percent.toFixed(1)}%`;
+      if (cpuPercentEl)
+        cpuPercentEl.textContent = `${stats.cpu_percent.toFixed(1)}%`;
+      if (memoryPercentEl)
+        memoryPercentEl.textContent = `${stats.memory.percent.toFixed(1)}%`;
+      if (vramPercentEl)
+        vramPercentEl.textContent =
+          stats.vram && stats.vram.total > 0
+            ? `${stats.vram.percent.toFixed(1)}%`
+            : "--%";
+      if (diskPercentEl)
+        diskPercentEl.textContent = `${stats.disk.percent.toFixed(1)}%`;
 
-            // Store historical data
-            timelineData.cpu.push(stats.cpu_percent);
-            timelineData.memory.push(stats.memory.percent);
-            timelineData.vram.push(stats.vram && stats.vram.total > 0 ? stats.vram.percent : 0);
-            timelineData.disk.push(stats.disk.percent);
+      // Store historical data
+      timelineData.cpu.push(stats.cpu_percent);
+      timelineData.memory.push(stats.memory.percent);
+      timelineData.vram.push(
+        stats.vram && stats.vram.total > 0 ? stats.vram.percent : 0
+      );
+      timelineData.disk.push(stats.disk.percent);
 
-            // Limit data points
-            if (timelineData.cpu.length > MAX_TIMELINE_POINTS) {
-                timelineData.cpu.shift();
-                timelineData.memory.shift();
-                timelineData.vram.shift();
-                timelineData.disk.shift();
-            }
+      // Limit data points
+      if (timelineData.cpu.length > MAX_TIMELINE_POINTS) {
+        timelineData.cpu.shift();
+        timelineData.memory.shift();
+        timelineData.vram.shift();
+        timelineData.disk.shift();
+      }
 
-            // Update timelines
-            const cpuCanvas = document.getElementById('cpuTimeline');
-            const memoryCanvas = document.getElementById('memoryTimeline');
-            const vramCanvas = document.getElementById('vramTimeline');
-            const diskCanvas = document.getElementById('diskTimeline');
+      // Update timelines
+      const cpuCanvas = document.getElementById("cpuTimeline");
+      const memoryCanvas = document.getElementById("memoryTimeline");
+      const vramCanvas = document.getElementById("vramTimeline");
+      const diskCanvas = document.getElementById("diskTimeline");
 
-            if (cpuCanvas) drawTimeline(cpuCanvas, timelineData.cpu, '#0d6efd');
-            if (memoryCanvas) drawTimeline(memoryCanvas, timelineData.memory, '#198754');
-            if (vramCanvas) drawTimeline(vramCanvas, timelineData.vram, '#0dcaf0');
-            if (diskCanvas) drawTimeline(diskCanvas, timelineData.disk, '#ffc107');
+      if (cpuCanvas) drawTimeline(cpuCanvas, timelineData.cpu, "#0d6efd");
+      if (memoryCanvas)
+        drawTimeline(memoryCanvas, timelineData.memory, "#198754");
+      if (vramCanvas) drawTimeline(vramCanvas, timelineData.vram, "#0dcaf0");
+      if (diskCanvas) drawTimeline(diskCanvas, timelineData.disk, "#ffc107");
 
-            // Update last update time
-            const lastUpdateTimeEl = document.getElementById('lastUpdateTime');
-            if (lastUpdateTimeEl) lastUpdateTimeEl.textContent = new Date().toLocaleTimeString();
-        }
-    } catch (error) {
-        console.log('Failed to update system stats:', error);
+      // Update last update time
+      const lastUpdateTimeEl = document.getElementById("lastUpdateTime");
+      if (lastUpdateTimeEl)
+        lastUpdateTimeEl.textContent = new Date().toLocaleTimeString();
     }
+  } catch (error) {
+    console.log("Failed to update system stats:", error);
+  }
 }
 
 // Model data update function
 async function updateModelData() {
-    try {
-        // Update running models
-        const runningResponse = await fetch('/api/models/running');
-        if (runningResponse.ok) {
-            const runningModels = await runningResponse.json();
-            updateRunningModelsDisplay(runningModels);
-        }
-
-        // Update available models (less frequently)
-        const availableResponse = await fetch('/api/models/available');
-        if (availableResponse.ok) {
-            const availableModels = await availableResponse.json();
-            updateAvailableModelsDisplay(availableModels.models || []);
-        }
-
-        // Update Ollama version
-        const versionResponse = await fetch('/api/version');
-        if (versionResponse.ok) {
-            const versionData = await versionResponse.json();
-            updateVersionDisplay(versionData.version || 'Unknown');
-        }
-
-        // Update model memory usage
-        const memoryResponse = await fetch('/api/models/memory/usage');
-        if (memoryResponse.ok) {
-            const memoryData = await memoryResponse.json();
-            updateModelMemoryDisplay(memoryData);
-        }
-    } catch (error) {
-        console.log('Failed to update model data:', error);
+  try {
+    // Update running models
+    const runningResponse = await fetch("/api/models/running");
+    if (runningResponse.ok) {
+      const runningModels = await runningResponse.json();
+      updateRunningModelsDisplay(runningModels);
     }
+
+    // Update available models (less frequently)
+    const availableResponse = await fetch("/api/models/available");
+    if (availableResponse.ok) {
+      const availableModels = await availableResponse.json();
+      updateAvailableModelsDisplay(availableModels.models || []);
+    }
+
+    // Update Ollama version
+    const versionResponse = await fetch("/api/version");
+    if (versionResponse.ok) {
+      const versionData = await versionResponse.json();
+      updateVersionDisplay(versionData.version || "Unknown");
+    }
+
+    // Update model memory usage
+    const memoryResponse = await fetch("/api/models/memory/usage");
+    if (memoryResponse.ok) {
+      const memoryData = await memoryResponse.json();
+      updateModelMemoryDisplay(memoryData);
+    }
+  } catch (error) {
+    console.log("Failed to update model data:", error);
+  }
 }
 
 function updateRunningModelsDisplay(models) {
-    const runningModelsContainer = document.getElementById('runningModelsContainer');
-    if (!runningModelsContainer) return;
+  const runningModelsContainer = document.getElementById(
+    "runningModelsContainer"
+  );
+  if (!runningModelsContainer) return;
 
-    // Only update if there are changes to avoid unnecessary DOM manipulation
-    const currentCount = runningModelsContainer.querySelectorAll('.model-card').length;
-    if (currentCount !== models.length) {
-        // Models count changed, trigger a page reload to get fresh data
-        location.reload();
-        return;
+  // Only update if there are changes to avoid unnecessary DOM manipulation
+  const currentCount =
+    runningModelsContainer.querySelectorAll(".model-card").length;
+  if (currentCount !== models.length) {
+    // Models count changed, trigger a page reload to get fresh data
+    location.reload();
+    return;
+  }
+
+  // Update individual model cards with new data
+  models.forEach((model, index) => {
+    const modelCard =
+      runningModelsContainer.querySelectorAll(".model-card")[index];
+    if (modelCard) {
+      // Update expiration time if it exists
+      const expiresEl = modelCard.querySelector(".model-expires");
+      if (expiresEl && model.expires_at) {
+        expiresEl.textContent =
+          model.expires_at.relative || model.expires_at.local || "";
+      }
+
+      // Update size if it changed
+      const sizeEl = modelCard.querySelector(".model-size");
+      if (sizeEl && model.formatted_size) {
+        sizeEl.textContent = model.formatted_size;
+      }
     }
-
-    // Update individual model cards with new data
-    models.forEach((model, index) => {
-        const modelCard = runningModelsContainer.querySelectorAll('.model-card')[index];
-        if (modelCard) {
-            // Update expiration time if it exists
-            const expiresEl = modelCard.querySelector('.model-expires');
-            if (expiresEl && model.expires_at) {
-                expiresEl.textContent = model.expires_at.relative || model.expires_at.local || '';
-            }
-
-            // Update size if it changed
-            const sizeEl = modelCard.querySelector('.model-size');
-            if (sizeEl && model.formatted_size) {
-                sizeEl.textContent = model.formatted_size;
-            }
-        }
-    });
+  });
 }
 
 function updateAvailableModelsDisplay(models) {
-    const availableModelsContainer = document.getElementById('availableModelsContainer');
-    if (!availableModelsContainer) return;
+  const availableModelsContainer = document.getElementById(
+    "availableModelsContainer"
+  );
+  if (!availableModelsContainer) return;
 
-    // Update the count display
-    const countEl = document.getElementById('availableModelsCount');
-    if (countEl) {
-        countEl.textContent = models.length;
-    }
+  // Update the count display
+  const countEl = document.getElementById("availableModelsCount");
+  if (countEl) {
+    countEl.textContent = models.length;
+  }
 }
 
 function updateVersionDisplay(version) {
-    const versionEl = document.getElementById('ollamaVersion');
-    if (versionEl) {
-        versionEl.textContent = version;
-    }
+  const versionEl = document.getElementById("ollamaVersion");
+  if (versionEl) {
+    versionEl.textContent = version;
+  }
 }
 
 function updateModelMemoryDisplay(memoryData) {
-    if (!memoryData || !memoryData.models) return;
+  if (!memoryData || !memoryData.models) return;
 
-    // Update each model's memory usage display
-    memoryData.models.forEach((model, index) => {
-        const ramEl = document.getElementById(`model-ram-${index + 1}`);
-        const vramEl = document.getElementById(`model-vram-${index + 1}`);
+  // Update each model's memory usage display
+  memoryData.models.forEach((model, index) => {
+    const ramEl = document.getElementById(`model-ram-${index + 1}`);
+    const vramEl = document.getElementById(`model-vram-${index + 1}`);
 
-        if (ramEl) {
-            // Since Ollama doesn't provide per-model RAM usage, show system RAM usage
-            const systemRam = memoryData.system_ram;
-            if (systemRam && systemRam.total > 0) {
-                const usedGB = (systemRam.used / (1024**3)).toFixed(1);
-                const totalGB = (systemRam.total / (1024**3)).toFixed(1);
-                ramEl.textContent = `${usedGB}GB / ${totalGB}GB`;
-            } else {
-                ramEl.textContent = 'N/A';
-            }
-        }
+    if (ramEl) {
+      // Since Ollama doesn't provide per-model RAM usage, show system RAM usage
+      const systemRam = memoryData.system_ram;
+      if (systemRam && systemRam.total > 0) {
+        const usedGB = (systemRam.used / 1024 ** 3).toFixed(1);
+        const totalGB = (systemRam.total / 1024 ** 3).toFixed(1);
+        ramEl.textContent = `${usedGB}GB / ${totalGB}GB`;
+      } else {
+        ramEl.textContent = "N/A";
+      }
+    }
 
-        if (vramEl) {
-            // Since Ollama doesn't provide per-model VRAM usage, show system VRAM usage
-            const systemVram = memoryData.system_vram;
-            if (systemVram && systemVram.total > 0) {
-                const usedGB = (systemVram.used / (1024**3)).toFixed(1);
-                const totalGB = (systemVram.total / (1024**3)).toFixed(1);
-                vramEl.textContent = `${usedGB}GB / ${totalGB}GB`;
-            } else {
-                vramEl.textContent = 'No GPU';
-            }
-        }
+    if (vramEl) {
+      // Since Ollama doesn't provide per-model VRAM usage, show system VRAM usage
+      const systemVram = memoryData.system_vram;
+      if (systemVram && systemVram.total > 0) {
+        const usedGB = (systemVram.used / 1024 ** 3).toFixed(1);
+        const totalGB = (systemVram.total / 1024 ** 3).toFixed(1);
+        vramEl.textContent = `${usedGB}GB / ${totalGB}GB`;
+      } else {
+        vramEl.textContent = "No GPU";
+      }
+    }
+  });
+
+  // Update available model placeholders with system-wide usage
+  const systemRam = memoryData.system_ram;
+  const systemVram = memoryData.system_vram;
+  if (systemRam && systemRam.total > 0) {
+    const usedGB = (systemRam.used / 1024 ** 3).toFixed(1);
+    const totalGB = (systemRam.total / 1024 ** 3).toFixed(1);
+    document.querySelectorAll('[id^="available-ram-"]').forEach(el => {
+      el.textContent = `${usedGB}GB / ${totalGB}GB`;
     });
+  } else {
+    document.querySelectorAll('[id^="available-ram-"]').forEach(el => {
+      el.textContent = 'N/A';
+    });
+  }
+  if (systemVram && systemVram.total > 0) {
+    const usedGB = (systemVram.used / 1024 ** 3).toFixed(1);
+    const totalGB = (systemVram.total / 1024 ** 3).toFixed(1);
+    document.querySelectorAll('[id^="available-vram-"]').forEach(el => {
+      el.textContent = `${usedGB}GB / ${totalGB}GB`;
+    });
+  } else {
+    document.querySelectorAll('[id^="available-vram-"]').forEach(el => {
+      el.textContent = 'No GPU';
+    });
+  }
 }
 
 // Service management functions
 async function startOllamaService() {
-    const startBtn = document.getElementById('startServiceBtn');
-    const originalText = startBtn.innerHTML;
-    startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    startBtn.disabled = true;
+  const startBtn = document.getElementById("startServiceBtn");
+  const originalText = startBtn.innerHTML;
+  startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  startBtn.disabled = true;
 
-    try {
-        const response = await fetch('/api/service/start', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-        const result = await response.json();
+  try {
+    const response = await fetch("/api/service/start", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    const result = await response.json();
 
-        if (result.success) {
-            showNotification(result.message, 'success');
-            setTimeout(() => location.reload(), 3000);
-        } else {
-            showNotification(result.message, 'error');
-            startBtn.disabled = false;
-        }
-    } catch (error) {
-        showNotification('Failed to start service: ' + error.message, 'error');
-        startBtn.disabled = false;
-    } finally {
-        startBtn.innerHTML = originalText;
+    if (result.success) {
+      showNotification(result.message, "success");
+      setTimeout(() => location.reload(), 3000);
+    } else {
+      showNotification(result.message, "error");
+      startBtn.disabled = false;
     }
+  } catch (error) {
+    showNotification("Failed to start service: " + error.message, "error");
+    startBtn.disabled = false;
+  } finally {
+    startBtn.innerHTML = originalText;
+  }
 }
 
 async function stopOllamaService() {
-    const stopBtn = document.getElementById('stopServiceBtn');
-    const originalText = stopBtn.innerHTML;
-    stopBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    stopBtn.disabled = true;
+  const stopBtn = document.getElementById("stopServiceBtn");
+  const originalText = stopBtn.innerHTML;
+  stopBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  stopBtn.disabled = true;
 
-    try {
-        const response = await fetch('/api/service/stop', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-        const result = await response.json();
+  try {
+    const response = await fetch("/api/service/stop", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    const result = await response.json();
 
-        if (result.success) {
-            showNotification(result.message, 'success');
-            setTimeout(() => location.reload(), 3000);
-        } else {
-            showNotification(result.message, 'error');
-            stopBtn.disabled = false;
-        }
-    } catch (error) {
-        showNotification('Failed to stop service: ' + error.message, 'error');
-        stopBtn.disabled = false;
-    } finally {
-        stopBtn.innerHTML = originalText;
+    if (result.success) {
+      showNotification(result.message, "success");
+      setTimeout(() => location.reload(), 3000);
+    } else {
+      showNotification(result.message, "error");
+      stopBtn.disabled = false;
     }
+  } catch (error) {
+    showNotification("Failed to stop service: " + error.message, "error");
+    stopBtn.disabled = false;
+  } finally {
+    stopBtn.innerHTML = originalText;
+  }
 }
 
 async function restartOllamaService() {
-    const restartBtn = document.getElementById('restartServiceBtn');
-    const originalText = restartBtn.innerHTML;
-    restartBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    restartBtn.disabled = true;
+  const restartBtn = document.getElementById("restartServiceBtn");
+  const originalText = restartBtn.innerHTML;
+  restartBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+  restartBtn.disabled = true;
 
-    try {
-        const response = await fetch('/api/service/restart', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        });
-        const result = await response.json();
+  try {
+    const response = await fetch("/api/service/restart", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    const result = await response.json();
 
-        if (result.success) {
-            showNotification(result.message, 'success');
-            setTimeout(() => location.reload(), 5000);
-        } else {
-            showNotification(result.message, 'error');
-            restartBtn.disabled = false;
-        }
-    } catch (error) {
-        showNotification('Failed to restart service: ' + error.message, 'error');
-        restartBtn.disabled = false;
-    } finally {
-        restartBtn.innerHTML = originalText;
+    if (result.success) {
+      showNotification(result.message, "success");
+      setTimeout(() => location.reload(), 5000);
+    } else {
+      showNotification(result.message, "error");
+      restartBtn.disabled = false;
     }
+  } catch (error) {
+    showNotification("Failed to restart service: " + error.message, "error");
+    restartBtn.disabled = false;
+  } finally {
+    restartBtn.innerHTML = originalText;
+  }
 }
 
 // Compact mode functionality
 function initializeCompactMode() {
-    const compactToggle = document.getElementById('compactToggle');
-    const body = document.body;
+  const compactToggle = document.getElementById("compactToggle");
+  const body = document.body;
 
-    // Check if compact mode was previously enabled
-    const isCompact = localStorage.getItem('compactMode') === 'true';
+  // Check if compact mode was previously enabled
+  const isCompact = localStorage.getItem("compactMode") === "true";
 
-    if (isCompact) {
-        body.classList.add('compact-mode');
-        compactToggle.classList.add('active');
-        compactToggle.innerHTML = '<i class="fas fa-expand"></i>';
+  if (isCompact) {
+    body.classList.add("compact-mode");
+    compactToggle.classList.add("active");
+    compactToggle.innerHTML = '<i class="fas fa-expand"></i>';
+  }
+
+  // Toggle compact mode on button click
+  compactToggle.addEventListener("click", function () {
+    const isCurrentlyCompact = body.classList.contains("compact-mode");
+
+    if (isCurrentlyCompact) {
+      body.classList.remove("compact-mode");
+      compactToggle.classList.remove("active");
+      compactToggle.innerHTML = '<i class="fas fa-compress"></i>';
+      localStorage.setItem("compactMode", "false");
+    } else {
+      body.classList.add("compact-mode");
+      compactToggle.classList.add("active");
+      compactToggle.innerHTML = '<i class="fas fa-expand"></i>';
+      localStorage.setItem("compactMode", "true");
     }
+  });
+}
 
-    // Toggle compact mode on button click
-    compactToggle.addEventListener('click', function() {
-        const isCurrentlyCompact = body.classList.contains('compact-mode');
+// Health status monitoring
+async function updateHealthStatus() {
+  try {
+    const response = await fetch('/api/health');
+    const health = await response.json();
 
-        if (isCurrentlyCompact) {
-            body.classList.remove('compact-mode');
-            compactToggle.classList.remove('active');
-            compactToggle.innerHTML = '<i class="fas fa-compress"></i>';
-            localStorage.setItem('compactMode', 'false');
-        } else {
-            body.classList.add('compact-mode');
-            compactToggle.classList.add('active');
-            compactToggle.innerHTML = '<i class="fas fa-expand"></i>';
-            localStorage.setItem('compactMode', 'true');
-        }
-    });
+    const healthBadge = document.getElementById('healthStatus');
+    const healthText = document.getElementById('healthText');
+
+    if (!healthBadge || !healthText) return;
+
+    if (health.status === 'healthy') {
+      healthBadge.className = 'badge bg-success';
+      healthBadge.style.padding = '0.5rem 1rem';
+      healthBadge.style.fontSize = '0.85rem';
+      const uptimeMin = Math.floor(health.uptime_seconds / 60);
+      const uptimeHr = Math.floor(uptimeMin / 60);
+      const uptimeDisplay = uptimeHr > 0 ? `${uptimeHr}h ${uptimeMin % 60}m` : `${uptimeMin}m`;
+      healthText.innerHTML = `Healthy • Uptime: ${uptimeDisplay} • ${health.models.running_count} running / ${health.models.available_count} available`;
+    } else if (health.status === 'degraded') {
+      healthBadge.className = 'badge bg-warning';
+      healthBadge.style.padding = '0.5rem 1rem';
+      healthBadge.style.fontSize = '0.85rem';
+      healthText.innerHTML = 'Degraded • Ollama service not running';
+    } else {
+      healthBadge.className = 'badge bg-danger';
+      healthBadge.style.padding = '0.5rem 1rem';
+      healthBadge.style.fontSize = '0.85rem';
+      healthText.innerHTML = 'Unhealthy • ' + (health.error || 'Unknown error');
+    }
+  } catch (error) {
+    const healthBadge = document.getElementById('healthStatus');
+    const healthText = document.getElementById('healthText');
+    if (healthBadge && healthText) {
+      healthBadge.className = 'badge bg-danger';
+      healthBadge.style.padding = '0.5rem 1rem';
+      healthBadge.style.fontSize = '0.85rem';
+      healthText.innerHTML = 'Health check failed';
+    }
+  }
+}
+
+// Downloadable models functionality - Global scope for onclick handlers
+let extendedModelsLoaded = false;
+
+async function loadExtendedModels() {
+  const container = document.getElementById("extendedModelsContainer");
+  if (!container) return;
+
+  try {
+    const response = await fetch("/api/models/downloadable?category=all");
+    if (response.ok) {
+      const data = await response.json();
+      renderExtendedModels(data.models, container);
+      extendedModelsLoaded = true;
+    } else {
+      container.innerHTML = '<div class="col-12 text-center text-danger">Failed to load extended models</div>';
+    }
+  } catch (error) {
+    console.error("Error loading extended models:", error);
+    container.innerHTML = '<div class="col-12 text-center text-danger">Error loading models</div>';
+  }
+}
+
+function renderExtendedModels(models, container) {
+  if (!models || models.length === 0) {
+    container.innerHTML = '<div class="col-12 text-center text-muted">No models available</div>';
+    return;
+  }
+
+  container.innerHTML = models
+    .map(
+      (model) => `
+        <div class="col-md-6 col-lg-4">
+            <div class="model-card h-100">
+                <div class="model-header">
+                    <div class="model-icon-wrapper">
+                        <i class="fas fa-cloud model-icon-main"></i>
+                    </div>
+                    <div class="model-meta">
+                        <span class="status-indicator" style="color: #0dcaf0;">
+                            <i class="fas fa-circle"></i>Downloadable
+                        </span>
+                    </div>
+                </div>
+                <div class="model-title">${model.name || 'Unknown'}</div>
+                <div class="model-capabilities">${getCapabilitiesHTML(model)}</div>
+                <div class="model-description text-muted small" style="height: 28px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;">
+                    ${model.description || 'No description available'}
+                </div>
+                <div class="model-specs">
+                  <div class="spec-row compact-hide">
+                        <div class="spec-item">
+                            <div class="spec-icon">
+                                <i class="fas fa-weight"></i>
+                            </div>
+                            <div class="spec-content">
+                                <div class="spec-label">Parameters</div>
+                                <div class="spec-value">${model.parameter_size || 'Unknown'}</div>
+                            </div>
+                        </div>
+                        <div class="spec-item">
+                            <div class="spec-icon">
+                                <i class="fas fa-hdd"></i>
+                            </div>
+                            <div class="spec-content">
+                                <div class="spec-label">Size</div>
+                                <div class="spec-value">${model.size || 'Unknown'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="model-actions">
+                    <button class="btn btn-primary w-100" onclick="pullModel('${model.name}')" title="Download model">
+                        <i class="fas fa-download"></i> Download
+                    </button>
+                </div>
+            </div>
+        </div>
+    `
+    )
+    .join("");
+}
+
+async function toggleExtendedModels() {
+  const container = document.getElementById("extendedModelsContainer");
+  const button = document.getElementById("viewMoreModelsBtn");
+
+  if (container.style.display === "none" || container.style.display === "") {
+    // Load extended models if not already loaded
+    if (!extendedModelsLoaded) {
+      button.innerHTML =
+        '<i class="fas fa-spinner fa-spin me-2"></i>Loading...';
+      button.disabled = true;
+      await loadExtendedModels();
+      button.disabled = false;
+    }
+    // Show extended models
+    container.style.display = "flex";
+    button.innerHTML = '<i class="fas fa-minus-circle me-2"></i>Show Less';
+  } else {
+    // Hide extended models
+    container.style.display = "none";
+    button.innerHTML =
+      '<i class="fas fa-plus-circle me-2"></i>View More Models';
+  }
 }
 
 // Initialize when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    initializeCompactMode();
-    updateTimes();
-    updateSystemStats();
-    updateModelData();
+document.addEventListener("DOMContentLoaded", function () {
+  initializeCompactMode();
 
-    // Update system stats every 1 second
-    setInterval(updateSystemStats, 1000);
+  // Local function for initial load
+  async function loadDownloadableModels() {
+    const container = document.getElementById("downloadableModelsContainer");
+    if (!container) return;
 
-    // Update model data every 10 seconds
-    setInterval(updateModelData, 10000);
+    try {
+      const response = await fetch("/api/models/downloadable?category=best");
+      if (response.ok) {
+        const data = await response.json();
+        renderDownloadableModels(data.models, container);
+      } else {
+        container.innerHTML =
+          '<div class="col-12 text-center text-danger">Failed to load models</div>';
+      }
+    } catch (error) {
+      console.error("Error loading downloadable models:", error);
+      container.innerHTML =
+        '<div class="col-12 text-center text-danger">Error loading models</div>';
+    }
+  }
+
+  // Legacy pullModel removed; unified implementation appears later (warm load + retry).
+
+  // Load downloadable models on page load
+  document.addEventListener("DOMContentLoaded", function () {
+    loadDownloadableModels();
+  });
+  updateTimes();
+  updateSystemStats();
+  updateModelData();
+  updateHealthStatus();
+
+  // Update system stats every 1 second
+  setInterval(updateSystemStats, 1000);
+
+  // Update model data every 10 seconds
+  setInterval(updateModelData, 10000);
+
+  // Update health status every 15 seconds
+  setInterval(updateHealthStatus, 15000);
+
+  // Load downloadable models
+  loadDownloadableModels();
 });
+
+// Downloadable models functionality
+async function loadDownloadableModels() {
+  const container = document.getElementById("downloadableModelsContainer");
+  if (!container) return;
+
+  try {
+    const response = await fetch("/api/models/downloadable?category=best");
+    if (response.ok) {
+      const data = await response.json();
+      renderDownloadableModels(data.models);
+    } else {
+      container.innerHTML =
+        '<div class="col-12 text-center text-danger">Failed to load models</div>';
+    }
+  } catch (error) {
+    console.error("Error loading downloadable models:", error);
+    container.innerHTML =
+      '<div class="col-12 text-center text-danger">Error loading models</div>';
+  }
+}
+
+function renderDownloadableModels(models) {
+  const container = document.getElementById("downloadableModelsContainer");
+  if (!container) return;
+
+  if (!models || models.length === 0) {
+    container.innerHTML =
+      '<div class="col-12 text-center text-muted">No models available</div>';
+    return;
+  }
+
+  container.innerHTML = models
+    .map(
+      (model) => `
+        <div class="col-md-6 col-lg-4">
+            <div class="model-card h-100">
+                <div class="model-header">
+                    <div class="model-icon-wrapper">
+                        <i class="fas fa-cloud model-icon-main"></i>
+                    </div>
+                    <div class="model-meta">
+                        <span class="status-indicator" style="color: #0dcaf0;">
+                            <i class="fas fa-circle"></i>Downloadable
+                        </span>
+                    </div>
+                </div>
+                <div class="model-title">${model.name || 'Unknown'}</div>
+                <div class="model-capabilities">${getCapabilitiesHTML(model)}</div>
+                <div class="model-description text-muted small" style="height: 28px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;">
+                    ${model.description || 'No description available'}
+                </div>
+                <div class="model-specs">
+                  <div class="spec-row compact-hide">
+                        <div class="spec-item">
+                            <div class="spec-icon">
+                                <i class="fas fa-weight"></i>
+                            </div>
+                            <div class="spec-content">
+                                <div class="spec-label">Parameters</div>
+                                <div class="spec-value">${model.parameter_size || 'Unknown'}</div>
+                            </div>
+                        </div>
+                        <div class="spec-item">
+                            <div class="spec-icon">
+                                <i class="fas fa-hdd"></i>
+                            </div>
+                            <div class="spec-content">
+                                <div class="spec-label">Size</div>
+                                <div class="spec-value">${model.size || 'Unknown'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="model-actions">
+                    <button class="btn btn-primary w-100" onclick="pullModel('${model.name}')" title="Download model">
+                        <i class="fas fa-download"></i> Download
+                    </button>
+                </div>
+            </div>
+        </div>
+    `
+    )
+    .join("");
+}
+
+async function pullModel(modelName) {
+  const button = event.target.closest("button");
+  const originalText = button.innerHTML;
+  button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Downloading...';
+  button.disabled = true;
+
+  showNotification(`Starting download for ${modelName}. This may take a while...`, "info");
+
+  try {
+    // Step 1: Pull model
+    const pullResp = await fetch(`/api/models/pull/${encodeURIComponent(modelName)}`, { method: "POST" });
+    const pullResult = await pullResp.json();
+    if (!pullResult.success) {
+      showNotification(pullResult.message || "Pull failed", "error");
+      button.innerHTML = originalText;
+      button.disabled = false;
+      return;
+    }
+    showNotification(pullResult.message, "success");
+
+    // Step 2: Warm/load model
+    button.innerHTML = '<i class="fas fa-fire me-1"></i>Loading...';
+    showNotification(`Loading model ${modelName}...`, "info");
+    const startResp = await fetch(`/api/models/start/${encodeURIComponent(modelName)}`, { method: "POST" });
+    const startResult = await startResp.json();
+    if (startResult.success) {
+      showNotification(startResult.message, "success");
+      button.innerHTML = '<i class="fas fa-check me-1"></i>Ready';
+      setTimeout(() => {
+        updateModelData();
+        location.reload();
+      }, 1500);
+    } else {
+      showNotification(startResult.message || "Model load failed", "error");
+      button.innerHTML = originalText;
+      button.disabled = false;
+    }
+  } catch (err) {
+    showNotification(`Download or load failed: ${err.message}`, "error");
+    button.innerHTML = originalText;
+    button.disabled = false;
+  }
+}

@@ -45,7 +45,8 @@ def index():
                              system_stats=system_stats,
                              error=None,
                              timezone=_get_timezone_name(),
-                             ollama_version=version)
+                             ollama_version=version,
+                             timestamp=int(time.time()))
     except Exception as e:
         return render_template('index.html',
                              models=[],
@@ -53,7 +54,8 @@ def index():
                              system_stats={'cpu_percent': 0, 'memory': {'percent': 0}, 'vram': {'percent': 0}, 'disk': {'percent': 0}},
                              error=str(e),
                              timezone=_get_timezone_name(),
-                             ollama_version='Unknown')
+                             ollama_version='Unknown',
+                             timestamp=int(time.time()))
 
 @bp.route('/api/test')
 def test():
@@ -94,14 +96,17 @@ def _handle_model_error(response, model_name, operation="operation"):
     }, response.status_code
 
 
-@bp.route('/api/models/start/<model_name>', methods=['POST'])
+@bp.route('/api/models/start/<model_name>', methods=['POST'], endpoint='api_start_model')
 def start_model(model_name):
     """
     Start a model by loading it into memory.
 
     Attempts to generate with the model first, and if that fails,
     tries to pull the model from the registry before loading.
+    Retries up to 3 times for transient connection errors (forcibly closed).
     """
+    import time
+
     try:
         # Check if model is already running
         running_models = ollama_service.get_running_models()
@@ -112,40 +117,89 @@ def start_model(model_name):
         if not ollama_service.get_service_status():
             return {"success": False, "message": "Ollama service is not running. Please start the service first."}, 503
 
+        def _is_transient_error(error_text):
+            """Check if error is transient (connection forcibly closed, etc.)"""
+            transient_indicators = [
+                'forcibly closed',
+                'connection reset',
+                'broken pipe',
+                'wsarecv',
+                'connection aborted'
+            ]
+            error_lower = error_text.lower()
+            return any(indicator in error_lower for indicator in transient_indicators)
+
+        def _attempt_generate(retry_num=0, max_retries=3, timeout=60):
+            """Attempt to generate with retry logic for transient errors"""
+            try:
+                response = requests.post(
+                    _get_ollama_url("generate"),
+                    json={"model": model_name, "prompt": "Hello", "stream": False, "keep_alive": "24h"},
+                    timeout=timeout
+                )
+
+                if response.status_code == 200:
+                    return {"success": True, "response": response}
+
+                # Check if it's a transient error - check both text and JSON
+                error_text = response.text
+                try:
+                    error_json = response.json()
+                    if 'error' in error_json:
+                        error_text = error_text + " " + str(error_json['error'])
+                except:
+                    pass
+
+                # Log the error for debugging
+                print(f"[DEBUG] Attempt {retry_num + 1}/{max_retries + 1}: Response status {response.status_code}")
+                print(f"[DEBUG] Error text: {error_text[:200]}")  # First 200 chars
+                print(f"[DEBUG] Is transient: {_is_transient_error(error_text)}")
+
+                if _is_transient_error(error_text) and retry_num < max_retries:
+                    wait_time = 2 ** retry_num  # Exponential backoff: 1s, 2s, 4s
+                    print(f"[DEBUG] Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                    return _attempt_generate(retry_num + 1, max_retries, timeout + 30)  # Increase timeout on retry
+
+                return {"success": False, "response": response}
+
+            except requests.exceptions.Timeout:
+                if retry_num < max_retries:
+                    time.sleep(2)
+                    return _attempt_generate(retry_num + 1, max_retries, timeout + 30)
+                raise
+            except requests.exceptions.ConnectionError as e:
+                if _is_transient_error(str(e)) and retry_num < max_retries:
+                    time.sleep(2 ** retry_num)
+                    return _attempt_generate(retry_num + 1, max_retries, timeout + 30)
+                raise
+
         # Try to generate with the model to load it
         try:
-            response = requests.post(
-                _get_ollama_url("generate"),
-                json={"model": model_name, "prompt": "Hello", "stream": False, "keep_alive": "24h"},
-                timeout=30
-            )
+            result = _attempt_generate()
 
-            if response.status_code == 200:
+            if result["success"]:
                 return {"success": True, "message": f"Model {model_name} started successfully"}
 
             # Handle specific errors
-            error_result, status_code = _handle_model_error(response, model_name, "start")
+            error_result, status_code = _handle_model_error(result["response"], model_name, "start")
             if error_result["success"] is False:
                 # Try to pull the model first, then generate
                 try:
                     pull_response = requests.post(
                         _get_ollama_url("pull"),
                         json={"name": model_name, "stream": False},
-                        timeout=300
+                        timeout=600
                     )
 
                     if pull_response.status_code == 200:
-                        # Try to generate again after pulling
-                        gen_response = requests.post(
-                            _get_ollama_url("generate"),
-                            json={"model": model_name, "prompt": "Hello", "stream": False, "keep_alive": "24h"},
-                            timeout=30
-                        )
+                        # Try to generate again after pulling with retry logic
+                        result = _attempt_generate()
 
-                        if gen_response.status_code == 200:
+                        if result["success"]:
                             return {"success": True, "message": f"Model {model_name} downloaded and started successfully"}
 
-                        error_result, status_code = _handle_model_error(gen_response, model_name, "start after download")
+                        error_result, status_code = _handle_model_error(result["response"], model_name, "start after download")
                         return error_result, status_code
                     else:
                         return {"success": False, "message": f"Failed to download model: {pull_response.text}"}, 400
@@ -154,8 +208,10 @@ def start_model(model_name):
                     return {"success": False, "message": "Model download timed out. The model might be too large."}, 408
 
         except requests.exceptions.Timeout:
-            return {"success": False, "message": "Model loading timed out. Try a smaller model."}, 408
-        except requests.exceptions.ConnectionError:
+            return {"success": False, "message": "Model loading timed out after retries. Try a smaller model or check system resources."}, 408
+        except requests.exceptions.ConnectionError as e:
+            if _is_transient_error(str(e)):
+                return {"success": False, "message": f"Model loading failed after 3 retries due to connection issues. This can happen with large models on first load. Please try again."}, 503
             return {"success": False, "message": "Cannot connect to Ollama server. Please ensure Ollama is running."}, 503
 
     except Exception as e:
@@ -350,6 +406,17 @@ def chat():
         if context:
             chat_data["context"] = context
 
+        # Load and apply settings
+        settings = ollama_service.load_settings()
+        options = {
+            "temperature": settings.get("temperature", 0.7),
+            "top_k": settings.get("top_k", 40),
+            "top_p": settings.get("top_p", 0.9),
+            "num_ctx": settings.get("num_ctx", 2048),
+            "seed": settings.get("seed", 0)
+        }
+        chat_data["options"] = options
+
         try:
             response = requests.post(
                 _get_ollama_url("generate"),
@@ -521,6 +588,145 @@ def get_models_memory_usage():
         return memory_usage if memory_usage else ({"error": "Memory monitoring not available"}, 503)
     except Exception as e:
         return {"error": str(e)}, 500
+
+
+
+@bp.route('/api/models/pull/<model_name>', methods=['POST'])
+def pull_model(model_name):
+    """Pull a model."""
+    try:
+        result = ollama_service.pull_model(model_name)
+        return (result, 200) if result["success"] else (result, 500)
+    except Exception as e:
+        return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
+
+
+@bp.route('/api/models/downloadable')
+def api_get_downloadable_models():
+    """Get list of downloadable models."""
+    try:
+        category = request.args.get('category', 'best')
+        print(f"DEBUG ROUTE: category parameter = '{category}'")
+        models = ollama_service.get_downloadable_models(category)
+        print(f"DEBUG ROUTE: got {len(models)} models")
+        return {"models": models}
+    except Exception as e:
+        return {"error": str(e), "models": []}, 500
+
+
+def _json_error(message, status=500):
+    return jsonify({"success": False, "message": message}), status
+
+def _json_success(message, extra=None, status=200):
+    payload = {"success": True, "message": message}
+    if extra:
+        payload.update(extra)
+    return jsonify(payload), status
+
+@bp.route('/api/models/pull/<model_name>', methods=['POST'])
+def api_pull_model(model_name):
+    """Pull a model with standardized JSON response."""
+    try:
+        result = ollama_service.pull_model(model_name)
+        if result.get("success"):
+            return _json_success(result.get("message", f"Pulled {model_name}"))
+        return _json_error(result.get("message", "Failed to pull model"))
+    except Exception as e:
+        return _json_error(f"Unexpected error pulling model: {str(e)}")
+
+
+# Removed duplicate warm-load start_model route; unified logic provided earlier with endpoint 'api_start_model'.
+
+
+@bp.route('/api/test-models-debug')
+def test_models_debug():
+    """Test endpoint to debug model counts."""
+    best = ollama_service.get_best_models()
+    all_models = ollama_service.get_all_downloadable_models()
+    best_via_method = ollama_service.get_downloadable_models('best')
+    all_via_method = ollama_service.get_downloadable_models('all')
+
+    return {
+        "best_count": len(best),
+        "all_downloadable_count": len(all_models),
+        "via_method_best_count": len(best_via_method),
+        "via_method_all_count": len(all_via_method),
+        "via_method_all_names": [m['name'] for m in all_via_method]
+    }
+
+
+@bp.route('/settings')
+def settings():
+    """Render the settings page."""
+    return render_template('settings.html')
+
+
+@bp.route('/api/settings', methods=['GET', 'POST'])
+def api_settings():
+    """Get or update settings."""
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            if ollama_service.save_settings(data):
+                return {"success": True, "message": "Settings saved successfully"}
+            else:
+                return {"success": False, "message": "Failed to save settings"}, 500
+        except Exception as e:
+            return {"success": False, "message": f"Error saving settings: {str(e)}"}, 500
+    else:
+        try:
+            settings = ollama_service.load_settings()
+            return settings
+        except Exception as e:
+            return {"error": str(e)}, 500
+
+
+@bp.route('/api/health')
+def get_health():
+    """Production health monitoring endpoint."""
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+
+        # Calculate uptime
+        start_time = current_app.config.get('START_TIME')
+        uptime_seconds = 0
+        if start_time:
+            uptime_seconds = int((datetime.utcnow() - start_time).total_seconds())
+
+        # Get model counts
+        running_models = ollama_service.get_running_models()
+        available_models = ollama_service.get_available_models()
+
+        # Get system stats
+        system_stats = ollama_service.get_system_stats()
+
+        # Check Ollama service status
+        ollama_running = ollama_service.get_service_status()
+
+        return {
+            "status": "healthy" if ollama_running else "degraded",
+            "uptime_seconds": uptime_seconds,
+            "ollama_service_running": ollama_running,
+            "models": {
+                "running_count": len(running_models),
+                "available_count": len(available_models),
+                "per_model_metrics_available": False
+            },
+            "system": {
+                "cpu_percent": system_stats.get('cpu_percent', 0),
+                "memory_percent": system_stats.get('memory', {}).get('percent', 0),
+                "vram_percent": system_stats.get('vram', {}).get('percent', 0) if system_stats.get('vram', {}).get('total', 0) > 0 else None,
+                "disk_percent": system_stats.get('disk', {}).get('percent', 0)
+            },
+            "timestamp": datetime.utcnow().isoformat() + 'Z'
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat() + 'Z'
+        }, 503
 
 
 def init_app(app):

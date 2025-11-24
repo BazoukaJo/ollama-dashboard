@@ -26,6 +26,8 @@ Ollama Dashboard provides a clean, minimal web interface to:
 - 🤖 Model management (start/stop/delete)
 - 📊 System performance monitoring
 - 🔧 Service management controls
+- 🧠 Dynamic capability icons (vision detection)
+- 🚀 Warm start endpoint to pre-load models and avoid first-call socket errors
 
 ### Dashboard Features
 
@@ -52,6 +54,26 @@ Ollama Dashboard provides a clean, minimal web interface to:
 - CPU, memory, and VRAM usage
 - Disk space monitoring
 - Real-time performance metrics
+
+## Warm Start & Capabilities
+
+Some larger or multimodal models can trigger a "forcibly closed" socket error the first time they are used after download. To mitigate this the dashboard now performs an optional warm start sequence:
+
+1. Download model via `POST /api/models/pull/<model>`.
+2. Optionally call `POST /api/models/start/<model>` which issues a trivial generate request and keeps the model alive.
+3. The start endpoint retries transient connection reset / forcibly closed / timeout errors up to 3 times.
+
+Vision capability is detected if:
+* Model name matches one of: `llava`, `bakllava`, `llava-llama3`, `llava-phi3`, `moondream`
+* Backend metadata sets `has_vision: true`
+* Families include projector / clip related indicators
+
+The frontend renders capability icons dynamically (implemented in `app/static/js/main.js`). Reasoning and tool usage icons are placeholders for future expansion.
+
+Manual warm start example:
+```bash
+curl -X POST http://127.0.0.1:5000/api/models/start/llava
+```
 
 ## Prerequisites
 
@@ -165,14 +187,14 @@ The project includes comprehensive tests to ensure functionality:
 ### Running Tests
 
 ```bash
-# Run all tests
-pytest
+# Run all tests (pytest)
+python -m pytest -q
 
 # Run specific test file
-pytest tests/test_ollama_service.py
+python -m pytest tests/test_capabilities_pytest.py::test_all_downloadable_models_include_vision_flags -q
 
 # Run with coverage
-pytest --cov=app --cov-report=html
+python -m pytest --cov=app --cov-report=html
 ```
 
 ### Test Files
@@ -182,6 +204,8 @@ pytest --cov=app --cov-report=html
 - `test_chat_models.py` - Chat model integration tests
 - `test_disk.py` - Disk usage and storage tests
 - `test_models.py` - Model management tests
+- `tests/test_start_model_pytest.py` - Warm start endpoint tests
+- `tests/test_capabilities_pytest.py` - Capability detection & metadata tests
 
 ## Project Structure
 

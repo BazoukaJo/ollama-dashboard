@@ -5,11 +5,12 @@ class Config:
     OLLAMA_PORT = int(os.getenv('OLLAMA_PORT', 11434))
     MAX_HISTORY = int(os.getenv('MAX_HISTORY', 50))
     HISTORY_FILE = os.getenv('HISTORY_FILE', 'history.json')
-    
+    SETTINGS_FILE = os.getenv('SETTINGS_FILE', 'settings.json')
+
     # CORS settings
     CORS_HEADERS = 'Content-Type'
     CORS_RESOURCES = {r"/*": {"origins": "*"}}
-    
+
     # Flask settings
     STATIC_FOLDER = 'static'
-    TEMPLATE_FOLDER = 'templates' 
+    TEMPLATE_FOLDER = 'templates'

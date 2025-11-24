@@ -86,6 +86,12 @@ class OllamaService:
                                 else:
                                     model['families_str'] = model.get('details', {}).get('family', 'Unknown')
 
+                                # Detect and add capabilities
+                                capabilities = self._detect_model_capabilities(model)
+                                model['has_vision'] = capabilities['has_vision']
+                                model['has_tools'] = capabilities['has_tools']
+                                model['has_reasoning'] = capabilities['has_reasoning']
+
                                 # Format expiration times
                                 if model.get('expires_at'):
                                     if model['expires_at'] == 'Stopping':
@@ -115,7 +121,10 @@ class OllamaService:
                                     'parameter_size': model.get('details', {}).get('parameter_size', ''),
                                     'size': model.get('formatted_size', ''),
                                     'expires_at': model.get('expires_at'),
-                                    'details': model.get('details', {})
+                                    'details': model.get('details', {}),
+                                    'has_vision': model.get('has_vision', False),
+                                    'has_tools': model.get('has_tools', False),
+                                    'has_reasoning': model.get('has_reasoning', False)
                                 })
 
                             with self._stats_lock:
@@ -433,6 +442,86 @@ class OllamaService:
                     'percent': 0
                 }
 
+    def _detect_model_capabilities(self, model):
+        """Detect capabilities for a model based on metadata."""
+        capabilities = {
+            'has_vision': False,
+            'has_tools': False,
+            'has_reasoning': False
+        }
+
+        model_name = model.get('name', '').lower()
+        details = model.get('details', {}) or {}
+        families = details.get('families', []) or []
+
+        # Tokenize model name for precise matching (avoid substring false positives)
+        import re
+        tokens = re.split(r'[\-_:]', model_name)
+        token_set = set(tokens)
+
+        # --- Vision Detection ---
+        # Strict allowlist of known vision model base identifiers
+        vision_allow = {
+            'llava', 'bakllava', 'moondream', 'qwen2-vl', 'qwen2.5-vl', 'qwen3-vl',
+            'llava-llama3', 'llava-phi3', 'cogvlm', 'yi-vl', 'deepseek-vl', 'paligemma', 'fuyu', 'idefics'
+        }
+        # Pattern: qwen* with '-vl' suffix
+        if any(v in model_name for v in vision_allow):
+            capabilities['has_vision'] = True
+        # Families heuristic: presence of vision encoders
+        if isinstance(families, list):
+            for fam in families:
+                fam_l = str(fam).lower()
+                if any(x in fam_l for x in ['clip', 'projector', 'vision', 'multimodal', 'vl']):
+                    capabilities['has_vision'] = True
+                    break
+        elif isinstance(families, str):
+            fam_l = families.lower()
+            if any(x in fam_l for x in ['clip', 'projector', 'vision', 'multimodal', 'vl']):
+                capabilities['has_vision'] = True
+
+        # --- Tool / Function Calling Detection ---
+        # Allowlist of bases known to expose tool/function calling in Ollama or upstream releases
+        tool_allow_exact = {
+            'llama3.1', 'llama3.2', 'llama3.3',
+            'mistral', 'mixtral', 'command-r', 'command-r-plus',
+            'firefunction', 'qwen2.5', 'qwen3', 'granite3', 'hermes3', 'nemotron'
+        }
+        # Version exclusions / older variants without tooling
+        tool_exclude = {'llama3.0', 'qwen2.0', 'hermes2', 'hermes-2'}
+
+        # Match by prefix tokens (e.g. llama3.1:8b => startswith llama3.1)
+        if any(model_name.startswith(t) for t in tool_allow_exact) and not any(model_name.startswith(e) for e in tool_exclude):
+            capabilities['has_tools'] = True
+
+        # Secondary heuristic: if a later version appears (e.g. llama3.2) treat as tools-capable
+        version_pattern_match = re.search(r'(llama3\.[1-9])', model_name)
+        if version_pattern_match and version_pattern_match.group(1) not in tool_exclude:
+            capabilities['has_tools'] = True
+
+        # Qwen pattern: qwen3 or qwen2.5 variants (not plain qwen)
+        if re.search(r'qwen(2\.5|3)', model_name):
+            capabilities['has_tools'] = True
+
+        # --- Reasoning Detection ---
+        reasoning_allow = {
+            'deepseek-r1', 'qwq', 'marco-o1', 'k0-math'
+        }
+        if any(r in model_name for r in reasoning_allow):
+            capabilities['has_reasoning'] = True
+
+        # Pattern heuristics: models containing explicit reasoning suffixes/tokens
+        reasoning_token_triggers = {'reasoning', 'cot', 'chain-of-thought', 'think'}
+        if any(tok in model_name for tok in reasoning_token_triggers):
+            capabilities['has_reasoning'] = True
+
+        # R1 token heuristic: token 'r1' preceded by alphabetic base (avoid matching 'v1')
+        if 'r1' in token_set and not any(t.startswith('v1') for t in token_set):
+            if any(base in model_name for base in ['deepseek', 'llama', 'qwen', 'phi', 'mixtral']):
+                capabilities['has_reasoning'] = True
+
+        return capabilities
+
     def get_available_models(self):
         """Get list of available models (not just running ones)."""
         # Check cache first (models list changes infrequently)
@@ -452,6 +541,15 @@ class OllamaService:
             response = self._session.get(tags_url, timeout=10)
             response.raise_for_status()
             models = response.json().get('models', [])
+
+            # Add capabilities to each model
+            for model in models:
+                capabilities = self._detect_model_capabilities(model)
+                # Explicitly set each capability to override any None values
+                model['has_vision'] = capabilities['has_vision']
+                model['has_tools'] = capabilities['has_tools']
+                model['has_reasoning'] = capabilities['has_reasoning']
+
             self._set_cached('available_models', models)
             return models
         except Exception:
@@ -480,6 +578,12 @@ class OllamaService:
                     model['families_str'] = ', '.join(families)
                 else:
                     model['families_str'] = model.get('details', {}).get('family', 'Unknown')
+
+                # Detect and add capabilities
+                capabilities = self._detect_model_capabilities(model)
+                model['has_vision'] = capabilities['has_vision']
+                model['has_tools'] = capabilities['has_tools']
+                model['has_reasoning'] = capabilities['has_reasoning']
 
                 # Format expiration times
                 if model.get('expires_at'):
@@ -510,7 +614,10 @@ class OllamaService:
                     'parameter_size': model.get('details', {}).get('parameter_size', ''),
                     'size': model.get('formatted_size', ''),
                     'expires_at': model.get('expires_at'),
-                    'details': model.get('details', {})
+                    'details': model.get('details', {}),
+                    'has_vision': model.get('has_vision', False),
+                    'has_tools': model.get('has_tools', False),
+                    'has_reasoning': model.get('has_reasoning', False)
                 })
 
             if current_models:
@@ -1100,3 +1207,423 @@ class OllamaService:
                 'models': [],
                 'error': str(e)
             }
+
+    # Duplicate legacy implementations of get_downloadable_models/pull_model removed.
+    # Unified versions with category support are defined later in file.
+
+    def load_settings(self):
+        """Load settings from file."""
+        try:
+            if not self.app:
+                return self.get_default_settings()
+
+            settings_file = self.app.config.get('SETTINGS_FILE', 'settings.json')
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r') as f:
+                    return json.load(f)
+            return self.get_default_settings()
+        except Exception as e:
+            print(f"Error loading settings: {e}")
+            return self.get_default_settings()
+
+    def save_settings(self, settings):
+        """Save settings to file."""
+        try:
+            if not self.app:
+                return False
+
+            settings_file = self.app.config.get('SETTINGS_FILE', 'settings.json')
+
+            # Validate settings
+            default_settings = self.get_default_settings()
+            clean_settings = {}
+
+            for key, default_value in default_settings.items():
+                if key in settings:
+                    # Basic type validation
+                    if isinstance(default_value, (int, float)) and isinstance(settings[key], (int, float, str)):
+                        try:
+                            if isinstance(default_value, int):
+                                clean_settings[key] = int(settings[key])
+                            else:
+                                clean_settings[key] = float(settings[key])
+                        except ValueError:
+                            clean_settings[key] = default_value
+                    else:
+                        clean_settings[key] = settings[key]
+                else:
+                    clean_settings[key] = default_value
+
+            with open(settings_file, 'w') as f:
+                json.dump(clean_settings, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"Error saving settings: {e}")
+            return False
+
+    def get_default_settings(self):
+        """Get default model settings."""
+        return {
+            "temperature": 0.7,
+            "top_k": 40,
+            "top_p": 0.9,
+            "num_ctx": 2048,
+            "seed": 0 # 0 means random
+        }
+
+    def get_best_models(self):
+        """Get a curated list of the best/most popular downloadable models."""
+        return [
+            {
+                "name": "llama3",
+                "description": "Meta's latest open LLM",
+                "parameter_size": "8B",
+                "size": "4.7GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "llama3.1",
+                "description": "Meta Llama 3.1 with tool calling",
+                "parameter_size": "8B",
+                "size": "4.7GB",
+                "has_vision": False,
+                "has_tools": True,
+                "has_reasoning": False
+            },
+            {
+                "name": "mistral",
+                "description": "Mistral AI's 7B model",
+                "parameter_size": "7B",
+                "size": "4.1GB",
+                "has_vision": False,
+                "has_tools": True,
+                "has_reasoning": False
+            },
+            {
+                "name": "gemma",
+                "description": "Google's open model",
+                "parameter_size": "7B",
+                "size": "5.0GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "phi3",
+                "description": "Microsoft's lightweight model",
+                "parameter_size": "3.8B",
+                "size": "2.3GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "neural-chat",
+                "description": "Fine-tuned model for chat",
+                "parameter_size": "7B",
+                "size": "4.1GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "starling-lm",
+                "description": "High quality RLHF model",
+                "parameter_size": "7B",
+                "size": "4.1GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "codellama",
+                "description": "Code specialized model",
+                "parameter_size": "7B",
+                "size": "3.8GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "llama2",
+                "description": "Meta's previous generation",
+                "parameter_size": "7B",
+                "size": "3.8GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "llava",
+                "description": "Multimodal (image + text)",
+                "parameter_size": "7B",
+                "size": "4.5GB",
+                "has_vision": True,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "qwen3-vl",
+                "description": "Alibaba multimodal + tool-capable model",
+                "parameter_size": "4B/8B",
+                "size": "3.0GB / 5.5GB",
+                "has_vision": True,
+                "has_tools": True,
+                "has_reasoning": False
+            },
+            {
+                "name": "deepseek-r1",
+                "description": "DeepSeek reasoning model (chain-of-thought)",
+                "parameter_size": "8B/32B",
+                "size": "4.7GB / 19GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": True
+            }
+        ]
+
+    def get_all_downloadable_models(self):
+        """Get extended list of all downloadable models."""
+        print("DEBUG: get_all_downloadable_models() called!")
+        best = self.get_best_models()
+        print(f"DEBUG: best models count = {len(best)}")
+        additional = [
+            {
+                "name": "qwen",
+                "description": "Alibaba's multilingual model",
+                "parameter_size": "7B",
+                "size": "4.5GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "qwen3-vl",
+                "description": "Alibaba's multimodal vision model",
+                "parameter_size": "4B/8B",
+                "size": "3.0GB / 5.5GB",
+                "has_vision": True,
+                "has_tools": True,
+                "has_reasoning": False
+            },
+            {
+                "name": "wizardlm",
+                "description": "Instruction-following model",
+                "parameter_size": "7B",
+                "size": "3.8GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "orca-mini",
+                "description": "Small but capable model",
+                "parameter_size": "3B",
+                "size": "1.9GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "vicuna",
+                "description": "Fine-tuned LLaMA model",
+                "parameter_size": "7B",
+                "size": "3.8GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "nous-hermes",
+                "description": "Long context model",
+                "parameter_size": "7B",
+                "size": "3.8GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "dolphin-mixtral",
+                "description": "Uncensored Mixtral variant",
+                "parameter_size": "8x7B",
+                "size": "26GB",
+                "has_vision": False,
+                "has_tools": True,
+                "has_reasoning": False
+            },
+            {
+                "name": "solar",
+                "description": "Upstage's SOLAR model",
+                "parameter_size": "10.7B",
+                "size": "6.1GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "deepseek-coder",
+                "description": "Code-focused model",
+                "parameter_size": "6.7B",
+                "size": "3.8GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "yi",
+                "description": "01.AI's bilingual model",
+                "parameter_size": "6B",
+                "size": "3.5GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "zephyr",
+                "description": "HuggingFace's fine-tuned Mistral",
+                "parameter_size": "7B",
+                "size": "4.1GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "openchat",
+                "description": "OpenChat 3.5 model",
+                "parameter_size": "7B",
+                "size": "4.1GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "stablelm",
+                "description": "Stability AI's language model",
+                "parameter_size": "3B",
+                "size": "1.6GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "falcon",
+                "description": "TII's open-source model",
+                "parameter_size": "7B",
+                "size": "3.8GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "mixtral",
+                "description": "Mistral's MoE model",
+                "parameter_size": "8x7B",
+                "size": "26GB",
+                "has_vision": False,
+                "has_tools": True,
+                "has_reasoning": False
+            },
+            {
+                "name": "command-r",
+                "description": "Cohere's command model",
+                "parameter_size": "35B",
+                "size": "20GB",
+                "has_vision": False,
+                "has_tools": True,
+                "has_reasoning": False
+            },
+            {
+                "name": "bakllava",
+                "description": "Multimodal LLaVA variant",
+                "parameter_size": "7B",
+                "size": "4.5GB",
+                "has_vision": True,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "llava-llama3",
+                "description": "LLaVA with Llama 3 base",
+                "parameter_size": "8B",
+                "size": "5.5GB",
+                "has_vision": True,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "llava-phi3",
+                "description": "LLaVA with Phi-3 base",
+                "parameter_size": "3.8B",
+                "size": "2.9GB",
+                "has_vision": True,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "moondream",
+                "description": "Tiny vision language model",
+                "parameter_size": "1.6B",
+                "size": "1.7GB",
+                "has_vision": True,
+                "has_tools": False,
+                "has_reasoning": False
+            },
+            {
+                "name": "deepseek-r1",
+                "description": "Advanced reasoning model with chain-of-thought",
+                "parameter_size": "8B/32B/671B",
+                "size": "4.7GB / 19GB / 400GB+",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": True
+            },
+            {
+                "name": "qwq",
+                "description": "Qwen with Questions - reasoning specialist",
+                "parameter_size": "32B",
+                "size": "19GB",
+                "has_vision": False,
+                "has_tools": False,
+                "has_reasoning": True
+            }
+        ]
+        return best + additional
+
+    def get_downloadable_models(self, category='best'):
+        """Get downloadable models by category."""
+        print(f"DEBUG: get_downloadable_models called with category={category} [VERSION_MARKER_20251123_1440]")
+        if category == 'all':
+            result = self.get_all_downloadable_models()
+            print(f"DEBUG: Returning {len(result)} models")
+            return result
+        print(f"DEBUG: Returning best models")
+        return self.get_best_models()
+
+    def pull_model(self, model_name):
+        """Pull a model from the Ollama library."""
+        try:
+            if self.app:
+                host = self.app.config.get('OLLAMA_HOST')
+                port = self.app.config.get('OLLAMA_PORT')
+            else:
+                host = os.getenv('OLLAMA_HOST', 'localhost')
+                port = int(os.getenv('OLLAMA_PORT', 11434))
+
+            pull_url = f"http://{host}:{port}/api/pull"
+
+            response = self._session.post(
+                pull_url,
+                json={"name": model_name, "stream": False},
+                timeout=3600
+            )
+
+            if response.status_code == 200:
+                return {"success": True, "message": f"Model {model_name} pulled successfully"}
+            else:
+                return {"success": False, "message": f"Failed to pull model: {response.text}"}
+
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+

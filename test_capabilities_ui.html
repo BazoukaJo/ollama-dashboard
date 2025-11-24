@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capabilities Test Page</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a1a; color: #ccc; }
+        .test-section { margin: 20px 0; padding: 15px; background: #2a2a2a; border-radius: 8px; }
+        .test-section h2 { color: #4a9eff; }
+        .capability-icon { display: inline-block; margin: 5px; padding: 8px; border-radius: 5px; }
+        .capability-icon.enabled { background: #28a745; color: white; }
+        .capability-icon.disabled { background: #6c757d; color: #aaa; }
+        .model-card { background: #333; padding: 15px; margin: 10px 0; border-radius: 8px; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .warning { color: #ffc107; }
+    </style>
+</head>
+<body>
+    <h1>Ollama Dashboard - Capabilities Display Test</h1>
+
+    <div class="test-section">
+        <h2>1. JavaScript Functions Test</h2>
+        <div id="js-test"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Best Downloadable Models (category=best)</h2>
+        <div id="best-models"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Extended Downloadable Models (category=all)</h2>
+        <div id="all-models"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Available Models</h2>
+        <div id="available-models"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. Running Models</h2>
+        <div id="running-models"></div>
+    </div>
+
+    <script>
+        // Copy the capability detection functions from main.js
+        function hasVisionCapability(model) {
+            const visionModelNames = ['llava', 'bakllava', 'llava-llama3', 'llava-phi3', 'moondream', 'qwen-vl', 'qwen2-vl', 'qwen2.5-vl', 'qwen3-vl'];
+            const modelNameLower = (model.name || '').toLowerCase();
+
+            if (visionModelNames.some(name => modelNameLower.includes(name))) {
+                return true;
+            }
+
+            if (model.details && model.details.families) {
+                const families = Array.isArray(model.details.families)
+                    ? model.details.families
+                    : [model.details.families];
+                return families.some(family =>
+                    family && (family.toLowerCase().includes('clip') || family.toLowerCase().includes('projector'))
+                );
+            }
+
+            if (model.has_vision === true) {
+                return true;
+            }
+
+            return false;
+        }
+
+        function getCapabilitiesHTML(model) {
+            const hasVision = hasVisionCapability(model);
+
+            return `
+                <span class="capability-icon disabled" title="Reasoning: Not available">
+                    <i class="fas fa-brain"></i>
+                </span>
+                <span class="capability-icon ${hasVision ? 'enabled' : 'disabled'}" title="Image Processing: ${hasVision ? 'Available' : 'Not available'}">
+                    <i class="fas fa-image"></i>
+                </span>
+                <span class="capability-icon disabled" title="Tool Usage: Not available">
+                    <i class="fas fa-tools"></i>
+                </span>
+            `;
+        }
+
+        // Test 1: JS Functions
+        function testJsFunctions() {
+            const testModels = [
+                { name: 'llava', has_vision: true },
+                { name: 'qwen3-vl:4b', has_vision: true },
+                { name: 'mistral', has_vision: false }
+            ];
+
+            let html = '<div>';
+            testModels.forEach(model => {
+                const hasVision = hasVisionCapability(model);
+                const status = hasVision ? '<span class="success">✓ PASS</span>' : '<span class="error">✗ FAIL</span>';
+                html += `<div>${model.name}: ${status} (Expected: ${model.has_vision}, Got: ${hasVision})</div>`;
+            });
+            html += '</div>';
+            document.getElementById('js-test').innerHTML = html;
+        }
+
+        // Test 2-5: API Endpoints
+        async function testEndpoint(url, containerId, title) {
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                const models = data.models || data;
+
+                if (!models || models.length === 0) {
+                    document.getElementById(containerId).innerHTML = '<div class="warning">No models found</div>';
+                    return;
+                }
+
+                let html = `<div><strong>${models.length} models loaded</strong></div>`;
+
+                const visionModels = models.filter(m => m.has_vision === true);
+                html += `<div class="success">${visionModels.length} vision-capable models found</div>`;
+
+                models.slice(0, 5).forEach(model => {
+                    const visionStatus = model.has_vision ? '<span class="success">has_vision: true</span>' : '<span>has_vision: false</span>';
+                    html += `
+                        <div class="model-card">
+                            <strong>${model.name}</strong><br>
+                            ${visionStatus}<br>
+                            <div style="margin-top: 10px;">
+                                ${getCapabilitiesHTML(model)}
+                            </div>
+                        </div>
+                    `;
+                });
+
+                if (models.length > 5) {
+                    html += `<div><em>... and ${models.length - 5} more models</em></div>`;
+                }
+
+                document.getElementById(containerId).innerHTML = html;
+            } catch (error) {
+                document.getElementById(containerId).innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        // Run all tests
+        async function runAllTests() {
+            testJsFunctions();
+            await testEndpoint('/api/models/downloadable?category=best', 'best-models', 'Best Models');
+            await testEndpoint('/api/models/downloadable?category=all', 'all-models', 'All Models');
+            await testEndpoint('/api/models/available', 'available-models', 'Available Models');
+            await testEndpoint('/api/models/running', 'running-models', 'Running Models');
+        }
+
+        runAllTests();
+    </script>
+</body>
+</html>

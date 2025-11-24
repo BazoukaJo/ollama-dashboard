@@ -1,0 +1,3 @@
+@echo off
+echo Starting Ollama Dashboard...
+python wsgi.py
