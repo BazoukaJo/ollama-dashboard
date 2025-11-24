@@ -19,7 +19,7 @@ def normalize_available_model_entry(service, entry):
             pass
     try:
         model = ensure_capability_flags(model)
-    except Exception:
+    except (ValueError, KeyError, TypeError):
         model.setdefault('has_vision', False)
         model.setdefault('has_tools', False)
         model.setdefault('has_reasoning', False)

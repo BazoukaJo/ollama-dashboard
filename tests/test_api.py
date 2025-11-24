@@ -1,3 +1,4 @@
+"""API endpoint tests for Ollama Dashboard."""
 import requests
 import json
 

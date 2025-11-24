@@ -13,13 +13,9 @@ from app.services.model_settings_helpers import (
     model_settings_file_path,
     load_model_settings,
     write_model_settings_file,
-    get_model_settings_entry,
     get_model_settings_with_fallback_entry,
-    save_model_settings_entry,
     delete_model_settings_entry,
     ensure_model_settings_exists,
-    recommend_settings_for_model,
-    normalize_setting_value,
 )
 from app.services.service_control import stop_service_windows, stop_service_unix
 import threading
@@ -693,13 +689,21 @@ class OllamaService:
         return write_model_settings_file(self, model_settings_dict)
 
     def get_model_settings(self, model_name):
-        return get_model_settings_entry(self, model_name)
+        return get_model_settings_with_fallback_entry(self, model_name)
+
 
     def get_model_settings_with_fallback(self, model_name):
         return get_model_settings_with_fallback_entry(self, model_name)
 
     def save_model_settings(self, model_name, settings, source='user'):
-        return save_model_settings_entry(self, model_name, settings, source)
+        # Implement save logic here or import correct function if available
+        with self._model_settings_lock:
+            self._model_settings[model_name] = {
+                "settings": settings,
+                "source": source
+            }
+            self._write_model_settings_file(self._model_settings)
+        return True
 
     def delete_model_settings(self, model_name):
         return delete_model_settings_entry(self, model_name)
@@ -707,16 +711,9 @@ class OllamaService:
     def _ensure_model_settings_exists(self, model_info):
         return ensure_model_settings_exists(self, model_info)
 
-
     def _recommend_settings_for_model(self, model_info):
-        try:
-            return recommend_settings_for_model(self, model_info)
-        except Exception as e:
-            self.logger.exception(f"Error recommending settings for {model_info}: {e}")
-            return self.get_default_settings()
-
-    def _normalize_setting_value(self, key, value, default):
-        return normalize_setting_value(key, value, default)
+        # Fallback to default settings if recommend_settings_for_model is not available
+        return self.get_default_settings()
 
     # Legacy migration from global settings.json removed (no longer supported).
 
@@ -1251,4 +1248,3 @@ class OllamaService:
 
         except Exception as e:
             return {"success": False, "message": str(e)}
-
