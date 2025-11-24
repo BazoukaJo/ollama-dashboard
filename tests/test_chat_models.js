@@ -157,3 +157,70 @@ async function runTest() {
 
 // Execute test
 runTest().catch(console.error);
+// Test script to verify chat model population works
+// Run with: node test_chat_models.js
+
+// Mock the DOM API
+const mockElements = {};
+
+global.document = {
+    getElementById: function(id) {
+        if (id === 'chatModelSelect') {
+            if (!mockElements[id]) {
+                mockElements[id] = {
+                    innerHTML: '',
+                    appendChild: function(option) {
+                        // Build proper HTML option tag
+                        const html = `<option value="${option.value}">${option.textContent}</option>`;
+                        this.innerHTML += html;
+                    },
+                    options: [],
+                    addEventListener: function() {}
+                };
+            }
+            return mockElements[id];
+        }
+        return null;
+    },
+    querySelectorAll: function() {
+        return [];
+    },
+    createElement: function(tag) {
+        if (tag === 'option') {
+            return {
+                value: '',
+                textContent: '',
+                outerHTML: ''
+            };
+        }
+        return {};
+    }
+};
+
+// Mock fetch API
+global.fetch = async function(url) {
+    console.log('Mock fetch called with URL:', url);
+    return {
+        ok: true,
+        status: 200,
+        json: async function() {
+            return {
+                models: [
+                    { name: 'llama3.2:1b' },
+                    { name: 'llama3:latest' },
+                    { name: 'qwen3-vl:8b' }
+                ]
+            };
+        }
+    };
+};
+
+// Mock console (avoid recursion)
+const realConsole = console;
+global.console = {
+    log: function(...args) { realConsole.log('[TEST]', ...args); },
+    error: function(...args) { realConsole.error('[TEST ERROR]', ...args); },
+    warn: function(...args) { realConsole.warn('[TEST WARN]', ...args); }
+};
+
+// (rest of the script continues in tests/test_chat_models.js)

@@ -1,78 +1,68 @@
-# AI Coding Agent Instructions for `ollama-dashboard`
+## Copilot Instructions — ollama-dashboard
 
-## 1. Architecture Overview
-Flask app with factory (`app/__init__.py`) + single blueprint (`app/routes`). Core logic lives in `OllamaService` (`app/services/ollama.py`) which handles Ollama API calls, caching, background data collection, and capability detection. Routes are thin controllers delegating to the service. Templates + static assets under `app/templates` and `app/static`.
+**Purpose:** Enable AI agents to work productively by providing essential, actionable context. Follow existing patterns; do not introduce new architectural layers.
 
-## 2. Data & Background Flow
-`OllamaService` starts a background thread (`_background_updates_worker`) that periodically refreshes: system stats (≈2s), running models (≈10s), available models + version (≈30s / 5m). Results cached in `self._cache` with TTL access via `_get_cached`. Prefer using service getters rather than new direct HTTP calls to avoid duplicating logic.
+### Architecture & Data Flow
+- Single Flask app (`OllamaDashboard.py`) with one blueprint (`app/routes/main.py`).
+- Core logic in `OllamaService` (`app/services/ollama.py`).
+- Background thread updates caches (system≈2s, running≈10s, available≈30s, version≈300s). Restart the process after service/capability/JS edits to clear stale caches.
+- API routes: input validation → service method → standardized JSON response.
 
-## 3. Core Service Patterns
-- All outgoing Ollama requests use the session (`self._session`) for reuse.
-- Use `get_running_models()` for normalized model entries: includes formatted sizes, families string, capability flags, expiration formatting.
-- Capability detection central in `_detect_model_capabilities`: vision inferred by name (`llava`, `bakllava`, `moondream`, `qwen*-vl`, etc.) or families containing `clip` / `projector`.
-- Downloadable model lists: `get_best_models()`, `get_all_downloadable_models()`, `get_downloadable_models(category)` with `category` = `best|all`.
+### Key Patterns & Conventions
+- Always call `ollama_service.init_app(app)` after `create_app()` (see `app/__init__.py`, `routes/init_app`).
+- Service layer handles: HTTP to Ollama, caching (`_get_cached/_set_cached`), capability detection, per-model settings, atomic JSON persistence, health reporting.
+- Frontend JS (`app/static/js/main.js`): select cards via `[data-model-name]`, escape selectors with `cssEscape()`, never use index positions or raw names in inline handlers.
 
-## 4. Routes & Response Conventions
-- Routes live in `app/routes/main.py` on blueprint `bp` imported from `app/routes/__init__.py`.
-- Error normalization for model operations via `_handle_model_error` returning `{success: False, message: ...}` + HTTP code.
-- Success responses for pull/start/delete maintain `{success: bool, message: str}` pattern.
-- Some helpers (`_json_success`, `_json_error`) unify JSON structure—reuse them when adding similar endpoints.
-- Health endpoints: `/ping` (factory) + `/api/health` (aggregated status with uptime + system metrics).
+### Caching & Performance
+- Use service getters (`get_running_models`, `get_available_models`, `get_model_info_cached`)—never re-call API endpoints directly.
+- Always reuse `self._session` for HTTP; never instantiate ad-hoc `requests.Session()`.
+- Add new periodic data in `_background_updates_worker`; keep per-cycle additions <100ms. Expose cache age via `get_component_health()` if critical.
 
-## 5. Warm Start & Model Management
-`/api/models/start/<model>` attempts a generate first; on failure attempts a pull then generates again. Keep this retry flow intact; extend by adjusting error classification only inside `_handle_model_error`.
-Stopping models prefers graceful unload (generate with `keep_alive: 0s`) before scanning/killing processes (Windows + *nix fallbacks). Do NOT bypass this without justification.
+### Capability Flags
+- Only set/extend `has_vision`, `has_tools`, `has_reasoning` in `_detect_model_capabilities` (see `app/services/ollama.py`).
+- Do not mutate flags in routes or JS; UI reads backend booleans passively.
 
-## 6. System & Capability Surfaces
-System stats: `get_system_stats()` pulls cached values; VRAM via multiple strategies (pynvml, GPUtil, `nvidia-smi`). If adding metrics, modify `_get_system_stats_raw` and ensure thread still lightweight (<100ms typical).
-Model capabilities currently limited to vision; tools/reasoning placeholders retained for future expansion—set them explicitly if implementing.
+### Per-Model Settings
+- Stored in `model_settings.json` (atomic write: `.tmp` → `os.replace`).
+- No global settings. Defaults auto-created via `_recommend_settings_for_model` (size/capability heuristics).
+- All mutations guarded by `_model_settings_lock`. Never write JSON directly in routes.
 
-## 7. Configuration & Environment
-Runtime config via env vars consumed in `Config` or app factory: `OLLAMA_HOST`, `OLLAMA_PORT`, `MAX_HISTORY`, `HISTORY_FILE`, `SETTINGS_FILE`. Docker uses these defaults; do not hardcode host/port in new code—always read from `app.config` or env fallback inside service when `self.app` absent.
-Settings persistence: JSON file (`settings.json`) accessed via `load_settings()` / `save_settings()`; type coercion + defaults applied. Extend settings by adding to `get_default_settings()` and validation loop in `save_settings()`.
+### Warm Start & Service Control
+- `/api/models/start/<model>`: attempts small generate (keep_alive 24h), handles transient errors with exponential backoff + optional pull + retry (max 3).
+- Start/stop/restart logic in `OllamaService` only; routes wrap and return JSON.
 
-## 8. History & State
-Running model snapshots stored in memory + persisted to `history.json` via `update_history()` / `save_history()`. Chat history stored separately in `chat_history.json` via `get_chat_history()` / `save_chat_session()`. When introducing new persisted artifacts, follow this pattern: atomic write (open, dump), capped length, ISO timestamps. Both files live in workspace root by default; Docker mounts `history.json` as volume.
+### Persistence Files
+- `history.json` (capped by `MAX_HISTORY`), `chat_history.json` (bounded 100 sessions), `model_settings.json` (per-model defaults). All use atomic write pattern.
 
-## 9. Testing Patterns
-Test suite uses both `unittest` (`tests/test_ollama_service.py`) and `pytest` (e.g. `tests/test_start_model_pytest.py`). Common mocking strategy: patch network calls (`@patch('app.routes.main.requests.post')`) or service methods. New tests should prefer pytest style for clarity unless extending existing unittest file. Quick run: `python -m pytest -q`. For targeted capability tests see `tests/test_capabilities_pytest.py`.
+### Model Lists & Aliases
+- Curated lists in `get_best_models`/`get_all_downloadable_models` include aliases (e.g. `llava`, `moondream`) for capability tests. Preserve/extend aliases when adding models.
 
-## 10. Adding New Functionality
-- Put external/Ollama interaction in `OllamaService` (keep routes thin).
-- Cache results if called frequently; pick TTL matching volatility (e.g. metadata 300s, live stats ≤10s).
-- Reuse error patterns: return structured JSON + appropriate status; avoid raising raw exceptions in routes.
-- When adding a route needing model info, use `get_model_info_cached(model_name)` before a costly API call.
+### Frontend Patterns
+- Select cards via `[data-model-name]`; never use raw names in inline onclick. Escape dynamic HTML/selectors. Capability icons rely on backend booleans only.
 
-## 11. Performance & Safety Guidelines
-- Avoid blocking operations in request path—push periodic tasks into background thread when feasible.
-- Respect existing retry / timeout values (e.g. generate: timeout ~30–120s; pull: large timeout 3600s).
-- Do not spawn additional long-lived threads without consolidating into `_background_updates_worker`.
+### Testing & Developer Workflow
+- Run all tests: `python -m pytest -q`
+- Targeted test: `python -m pytest tests/test_start_model_pytest.py::test_start_model_success -q`
+- Coverage: `python -m pytest --cov=app --cov-report=html`
+- Playwright UI: install dev deps, then `python -m playwright install --with-deps`
+- After editing service/routes/capability logic or `main.js`: restart (`Ctrl+C`, `python wsgi.py`)
 
-## 12. Frontend Integration Notes
-Capability icons rendered in `app/static/js/main.js`; if adding new capability flags, ensure service sets explicit boolean fields and update JS/icon mapping together.
+### Health & Reliability
+- Use `/api/health` and `get_component_health()` to inspect `background_thread_alive`, cache ages, failure counters.
+- If `stale_flags.running_models` or thread dead: restart process.
+- Backoff escalates to ~32s on repeated `/api/ps` failures; do not remove without replacement.
 
-## 13. Common Pitfalls
-- Directly re-calling Ollama endpoints without session can degrade performance—use `self._session`.
-- Forgetting to initialize service with app (`ollama_service.init_app(app)`) leads to missing config/history; factory handles this via `init_main_bp(app)`.
-- Modifying time formatting: keep local + relative dual representation used in running models.
+### Extension & Integration Guidelines
+- New capability: extend `_detect_model_capabilities` + add UI icon logic (JS).
+- New periodic data: background worker + health exposure.
+- New model default heuristic: adjust `_recommend_settings_for_model` (retain normalization + locking).
+- Avoid: direct Ollama HTTP in routes/JS, extra threads in request handlers, bypassing warm start logic, non-atomic JSON writes.
 
-## 14. Deployment & Scripts
-Entry point: `wsgi.py` (runs on port 5000). Windows monitoring & service control scripts in `scripts/`. Docker config in `docker/` (compose + gunicorn). Keep new operational scripts in `scripts/` with concise README updates.
+### Quick Commands
+- Install & run: `pip install -r requirements.txt` then `python OllamaDashboard.py`
+- Docker: `./scripts/build.sh`
+- Example targeted test: `python -m pytest tests/test_capabilities_pytest.py::test_all_downloadable_models_include_vision_flags -q`
 
-Docker-specific: Ollama accessed via `host.docker.internal` (set in `OLLAMA_HOST`). When debugging startup failures, check: 1) Ollama service status, 2) Port 5000 availability, 3) Python process cleanup (`Stop-Process -Name python -Force`), 4) Background thread initialization in `OllamaService.init_app()`.
+**Entrypoint:** Use `OllamaDashboard.py` (not `wsgi.py`).
 
-## 15. Debugging & Common Issues
-**App won't start**: Most failures traced to: (a) Ollama service not running, (b) Port 5000 already bound, (c) Orphaned Python processes. Solution: Clean processes (`Stop-Process -Name python -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2`), verify Ollama status, then start.
-
-**Service initialization errors**: If `ollama_service` methods fail, ensure `init_app()` called in blueprint init (`app/routes/__init__.py` calls `init_main_bp(app)`). Service requires app context for config/history access.
-
-**Test failures**: Mock pattern: `@patch('app.routes.main.requests.post')` + `@patch('app.routes.main.ollama_service.get_running_models')`. Always mock both network + service methods to avoid real API calls. See `tests/test_start_model_pytest.py` for canonical pattern.
-
-## 16. Extension Strategy Example
-Example: Add per-model token throughput stats:
-1. Extend `get_model_performance()` to record timestamped metrics.
-2. Append to a capped JSON file `model_perf_history.json` (≤100 entries/model).
-3. New route `/api/models/performance/<model>/history` delegating to service method.
-
----
-Provide feedback if additional conventions or workflows seem unclear so this doc can be refined.
+**Feedback:** If any section is unclear or incomplete, specify which to refine.

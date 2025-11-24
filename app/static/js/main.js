@@ -57,11 +57,13 @@ async function startModel(modelName) {
 }
 
 async function stopModel(modelName) {
-  const stopButton = event.target.closest("button");
-  const originalText = stopButton.innerHTML;
-  stopButton.innerHTML =
-    '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
-  stopButton.disabled = true;
+  const card = document.querySelector(`.model-card[data-model-name="${cssEscape(modelName)}"]`);
+  const stopButton = card ? card.querySelector('button[title="Stop model"]') : null;
+  const originalText = stopButton ? stopButton.innerHTML : null;
+  if (stopButton) {
+    stopButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
+    stopButton.disabled = true;
+  }
 
   try {
     showNotification(`Attempting to stop model ${modelName}...`, "info");
@@ -95,8 +97,10 @@ async function stopModel(modelName) {
   } catch (error) {
     showNotification("Failed to stop model: " + error.message, "error");
   } finally {
-    stopButton.innerHTML = originalText;
-    stopButton.disabled = false;
+    if (stopButton && originalText !== null) {
+      stopButton.innerHTML = originalText;
+      stopButton.disabled = false;
+    }
   }
 }
 
@@ -109,11 +113,13 @@ async function deleteModel(modelName) {
     return;
   }
 
-  const deleteButton = event.target.closest("button");
-  const originalText = deleteButton.innerHTML;
-  deleteButton.innerHTML =
-    '<i class="fas fa-spinner fa-spin me-1"></i>Deleting...';
-  deleteButton.disabled = true;
+  const card = document.querySelector(`.model-card[data-model-name="${cssEscape(modelName)}"]`);
+  const deleteButton = card ? card.querySelector('button[title="Delete model"]') : null;
+  const originalText = deleteButton ? deleteButton.innerHTML : null;
+  if (deleteButton) {
+    deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Deleting...';
+    deleteButton.disabled = true;
+  }
 
   try {
     showNotification(`Deleting model ${modelName}...`, "info");
@@ -138,8 +144,10 @@ async function deleteModel(modelName) {
   } catch (error) {
     showNotification("Failed to delete model: " + error.message, "error");
   } finally {
-    deleteButton.innerHTML = originalText;
-    deleteButton.disabled = false;
+    if (deleteButton && originalText !== null) {
+      deleteButton.innerHTML = originalText;
+      deleteButton.disabled = false;
+    }
   }
 }
 
@@ -188,6 +196,19 @@ async function showModelInfo(modelName) {
     showNotification("Failed to get model info: " + error.message, "error");
   }
 }
+
+// Settings logic extracted to modules/settings.js; legacy global kept via window.openModelSettingsModal
+
+// Service control logic extracted to modules/serviceControl.js
+
+// Model settings related helper functions removed (submit/delete) now in settings.js
+
+// Health status & service control update functions extracted to serviceControl.js
+
+// Removed DOMContentLoaded initialization (moved to modules/bootstrap.js)
+// (Removed inline settings modal construction block; now provided by modules/settings.js)
+
+// submitModelSettings & deleteModelSettings moved to settings.js
 
 function jsonToTable(json, level = 0) {
   if (json === null || json === undefined) {
@@ -276,6 +297,8 @@ function jsonToTable(json, level = 0) {
 
   return String(json);
 }
+
+// Moved escapeHtml and cssEscape to modules/utils.js; legacy globals preserved there.
 
 function showNotification(message, type) {
   const notification = document.createElement("div");
@@ -496,36 +519,48 @@ async function updateSystemStats() {
 
 // Model data update function
 async function updateModelData() {
+  // Update running models
   try {
-    // Update running models
     const runningResponse = await fetch("/api/models/running");
     if (runningResponse.ok) {
       const runningModels = await runningResponse.json();
       updateRunningModelsDisplay(runningModels);
     }
+  } catch (error) {
+    console.log("Failed to update running models:", error);
+  }
 
-    // Update available models (less frequently)
+  // Update available models (less frequently)
+  try {
     const availableResponse = await fetch("/api/models/available");
     if (availableResponse.ok) {
       const availableModels = await availableResponse.json();
       updateAvailableModelsDisplay(availableModels.models || []);
     }
+  } catch (error) {
+    console.log("Failed to update available models:", error);
+  }
 
-    // Update Ollama version
+  // Update Ollama version
+  try {
     const versionResponse = await fetch("/api/version");
     if (versionResponse.ok) {
       const versionData = await versionResponse.json();
       updateVersionDisplay(versionData.version || "Unknown");
     }
+  } catch (error) {
+    console.log("Failed to update Ollama version:", error);
+  }
 
-    // Update model memory usage
+  // Update model memory usage
+  try {
     const memoryResponse = await fetch("/api/models/memory/usage");
     if (memoryResponse.ok) {
       const memoryData = await memoryResponse.json();
       updateModelMemoryDisplay(memoryData);
     }
   } catch (error) {
-    console.log("Failed to update model data:", error);
+    console.log("Failed to update model memory usage:", error);
   }
 }
 
@@ -545,9 +580,20 @@ function updateRunningModelsDisplay(models) {
   }
 
   // Update individual model cards with new data
-  models.forEach((model, index) => {
-    const modelCard =
-      runningModelsContainer.querySelectorAll(".model-card")[index];
+  models.forEach((model) => {
+    // Find model card by model data attribute for robust and reliable lookup
+    let modelCard = runningModelsContainer.querySelector(`.model-card[data-model-name="${cssEscape(model.name)}"]`);
+    // Fallback: compare dataset values for safety
+    if (!modelCard) {
+      const cards = runningModelsContainer.querySelectorAll('.model-card');
+      for (let i = 0; i < cards.length; i++) {
+        const dataName = cards[i].dataset && cards[i].dataset.modelName ? cards[i].dataset.modelName.trim() : '';
+        if (dataName === model.name) {
+          modelCard = cards[i];
+          break;
+        }
+      }
+    }
     if (modelCard) {
       // Update expiration time if it exists
       const expiresEl = modelCard.querySelector(".model-expires");
@@ -560,6 +606,43 @@ function updateRunningModelsDisplay(models) {
       const sizeEl = modelCard.querySelector(".model-size");
       if (sizeEl && model.formatted_size) {
         sizeEl.textContent = model.formatted_size;
+      }
+
+      // Update capability icons (reasoning, vision, tools)
+      try {
+        const caps = modelCard.querySelectorAll('.capability-icon');
+        if (caps && caps.length >= 3) {
+          const [reasoningEl, visionEl, toolsEl] = caps;
+          if (model.has_reasoning) {
+            reasoningEl.classList.add('enabled');
+            reasoningEl.classList.remove('disabled');
+            reasoningEl.setAttribute('title', 'Reasoning: Available');
+          } else {
+            reasoningEl.classList.add('disabled');
+            reasoningEl.classList.remove('enabled');
+            reasoningEl.setAttribute('title', 'Reasoning: Not available');
+          }
+          if (model.has_vision) {
+            visionEl.classList.add('enabled');
+            visionEl.classList.remove('disabled');
+            visionEl.setAttribute('title', 'Image Processing: Available');
+          } else {
+            visionEl.classList.add('disabled');
+            visionEl.classList.remove('enabled');
+            visionEl.setAttribute('title', 'Image Processing: Not available');
+          }
+          if (model.has_tools) {
+            toolsEl.classList.add('enabled');
+            toolsEl.classList.remove('disabled');
+            toolsEl.setAttribute('title', 'Tool Usage: Available');
+          } else {
+            toolsEl.classList.add('disabled');
+            toolsEl.classList.remove('enabled');
+            toolsEl.setAttribute('title', 'Tool Usage: Not available');
+          }
+        }
+      } catch (err) {
+        console.log('Failed to update capability icons for running model', model.name, err);
       }
     }
   });
@@ -575,6 +658,40 @@ function updateAvailableModelsDisplay(models) {
   const countEl = document.getElementById("availableModelsCount");
   if (countEl) {
     countEl.textContent = models.length;
+  }
+
+  // Update capability icons for available models in the DOM
+  try {
+    const availableCards = document.querySelectorAll('#availableModelsContainer .model-card');
+    availableCards.forEach(card => {
+      const titleEl = card.querySelector('.model-title');
+      // Prefer dataset attribute if present
+      const name = (card.dataset && card.dataset.modelName) ? card.dataset.modelName.trim() : (titleEl ? titleEl.textContent.trim() : null);
+      if (!name) return;
+      const matching = models.find(m => (m.name && m.name.trim() === name));
+      if (!matching) return;
+      const caps = card.querySelectorAll('.capability-icon');
+      if (caps && caps.length >= 3) {
+        const [reasoningEl, visionEl, toolsEl] = caps;
+        if (matching.has_reasoning) {
+          reasoningEl.classList.add('enabled'); reasoningEl.classList.remove('disabled'); reasoningEl.setAttribute('title', 'Reasoning: Available');
+        } else {
+          reasoningEl.classList.add('disabled'); reasoningEl.classList.remove('enabled'); reasoningEl.setAttribute('title', 'Reasoning: Not available');
+        }
+        if (matching.has_vision) {
+          visionEl.classList.add('enabled'); visionEl.classList.remove('disabled'); visionEl.setAttribute('title', 'Image Processing: Available');
+        } else {
+          visionEl.classList.add('disabled'); visionEl.classList.remove('enabled'); visionEl.setAttribute('title', 'Image Processing: Not available');
+        }
+        if (matching.has_tools) {
+          toolsEl.classList.add('enabled'); toolsEl.classList.remove('disabled'); toolsEl.setAttribute('title', 'Tool Usage: Available');
+        } else {
+          toolsEl.classList.add('disabled'); toolsEl.classList.remove('enabled'); toolsEl.setAttribute('title', 'Tool Usage: Not available');
+        }
+      }
+    });
+  } catch (err) {
+    console.log('Failed to update capability icons for available models', err);
   }
 }
 
@@ -645,96 +762,7 @@ function updateModelMemoryDisplay(memoryData) {
   }
 }
 
-// Service management functions
-async function startOllamaService() {
-  const startBtn = document.getElementById("startServiceBtn");
-  const originalText = startBtn.innerHTML;
-  startBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-  startBtn.disabled = true;
-
-  try {
-    const response = await fetch("/api/service/start", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    const result = await response.json();
-
-    if (result.success) {
-      showNotification(result.message, "success");
-      setTimeout(() => location.reload(), 3000);
-    } else {
-      showNotification(result.message, "error");
-      startBtn.disabled = false;
-    }
-  } catch (error) {
-    showNotification("Failed to start service: " + error.message, "error");
-    startBtn.disabled = false;
-  } finally {
-    startBtn.innerHTML = originalText;
-  }
-}
-
-async function stopOllamaService() {
-  const stopBtn = document.getElementById("stopServiceBtn");
-  const originalText = stopBtn.innerHTML;
-  stopBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-  stopBtn.disabled = true;
-
-  try {
-    const response = await fetch("/api/service/stop", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    const result = await response.json();
-
-    if (result.success) {
-      showNotification(result.message, "success");
-      setTimeout(() => location.reload(), 3000);
-    } else {
-      showNotification(result.message, "error");
-      stopBtn.disabled = false;
-    }
-  } catch (error) {
-    showNotification("Failed to stop service: " + error.message, "error");
-    stopBtn.disabled = false;
-  } finally {
-    stopBtn.innerHTML = originalText;
-  }
-}
-
-async function restartOllamaService() {
-  const restartBtn = document.getElementById("restartServiceBtn");
-  const originalText = restartBtn.innerHTML;
-  restartBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-  restartBtn.disabled = true;
-
-  try {
-    const response = await fetch("/api/service/restart", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    const result = await response.json();
-
-    if (result.success) {
-      showNotification(result.message, "success");
-      setTimeout(() => location.reload(), 5000);
-    } else {
-      showNotification(result.message, "error");
-      restartBtn.disabled = false;
-    }
-  } catch (error) {
-    showNotification("Failed to restart service: " + error.message, "error");
-    restartBtn.disabled = false;
-  } finally {
-    restartBtn.innerHTML = originalText;
-  }
-}
+// Service management functions moved to serviceControl.js
 
 // Compact mode functionality
 function initializeCompactMode() {
@@ -768,47 +796,40 @@ function initializeCompactMode() {
   });
 }
 
-// Health status monitoring
-async function updateHealthStatus() {
+// Reload application UI / data
+async function reloadApplication() {
+  const btn = document.getElementById('reloadBtn');
+  if (!btn) return;
+  const icon = btn.querySelector('i');
+  const originalClass = icon ? icon.className : '';
   try {
-    const response = await fetch('/api/health');
-    const health = await response.json();
-
-    const healthBadge = document.getElementById('healthStatus');
-    const healthText = document.getElementById('healthText');
-
-    if (!healthBadge || !healthText) return;
-
-    if (health.status === 'healthy') {
-      healthBadge.className = 'badge bg-success';
-      healthBadge.style.padding = '0.5rem 1rem';
-      healthBadge.style.fontSize = '0.85rem';
-      const uptimeMin = Math.floor(health.uptime_seconds / 60);
-      const uptimeHr = Math.floor(uptimeMin / 60);
-      const uptimeDisplay = uptimeHr > 0 ? `${uptimeHr}h ${uptimeMin % 60}m` : `${uptimeMin}m`;
-      healthText.innerHTML = `Healthy • Uptime: ${uptimeDisplay} • ${health.models.running_count} running / ${health.models.available_count} available`;
-    } else if (health.status === 'degraded') {
-      healthBadge.className = 'badge bg-warning';
-      healthBadge.style.padding = '0.5rem 1rem';
-      healthBadge.style.fontSize = '0.85rem';
-      healthText.innerHTML = 'Degraded • Ollama service not running';
-    } else {
-      healthBadge.className = 'badge bg-danger';
-      healthBadge.style.padding = '0.5rem 1rem';
-      healthBadge.style.fontSize = '0.85rem';
-      healthText.innerHTML = 'Unhealthy • ' + (health.error || 'Unknown error');
+    // Show spinner
+    if (icon) {
+      icon.classList.add('fa-spin');
+      icon.classList.add('spinning');
     }
-  } catch (error) {
-    const healthBadge = document.getElementById('healthStatus');
-    const healthText = document.getElementById('healthText');
-    if (healthBadge && healthText) {
-      healthBadge.className = 'badge bg-danger';
-      healthBadge.style.padding = '0.5rem 1rem';
-      healthBadge.style.fontSize = '0.85rem';
-      healthText.innerHTML = 'Health check failed';
+    btn.disabled = true;
+    showNotification('Reloading application...', 'info');
+
+    // Perform a full page reload (bypass partial refresh)
+    // Use a small delay so the spinner is visible briefly for visual feedback
+    setTimeout(() => {
+      // Add a cache-busting timestamp query param to ensure fresh reload
+      const url = new URL(window.location.href);
+      url.searchParams.set('r', Date.now());
+      window.location.href = url.toString();
+    }, 200);
+  } catch (err) {
+    showNotification('Failed to reload: ' + (err.message || err), 'error');
+  } finally {
+    btn.disabled = false;
+    if (icon) {
+      icon.className = originalClass;
     }
   }
 }
+
+// updateHealthStatus & updateServiceControlButtons moved to serviceControl.js
 
 // Downloadable models functionality - Global scope for onclick handlers
 let extendedModelsLoaded = false;
@@ -837,59 +858,9 @@ function renderExtendedModels(models, container) {
     container.innerHTML = '<div class="col-12 text-center text-muted">No models available</div>';
     return;
   }
-
-  container.innerHTML = models
-    .map(
-      (model) => `
-        <div class="col-md-6 col-lg-4">
-            <div class="model-card h-100">
-                <div class="model-header">
-                    <div class="model-icon-wrapper">
-                        <i class="fas fa-cloud model-icon-main"></i>
-                    </div>
-                    <div class="model-meta">
-                        <span class="status-indicator" style="color: #0dcaf0;">
-                            <i class="fas fa-circle"></i>Downloadable
-                        </span>
-                    </div>
-                </div>
-                <div class="model-title">${model.name || 'Unknown'}</div>
-                <div class="model-capabilities">${getCapabilitiesHTML(model)}</div>
-                <div class="model-description text-muted small" style="height: 28px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;">
-                    ${model.description || 'No description available'}
-                </div>
-                <div class="model-specs">
-                  <div class="spec-row compact-hide">
-                        <div class="spec-item">
-                            <div class="spec-icon">
-                                <i class="fas fa-weight"></i>
-                            </div>
-                            <div class="spec-content">
-                                <div class="spec-label">Parameters</div>
-                                <div class="spec-value">${model.parameter_size || 'Unknown'}</div>
-                            </div>
-                        </div>
-                        <div class="spec-item">
-                            <div class="spec-icon">
-                                <i class="fas fa-hdd"></i>
-                            </div>
-                            <div class="spec-content">
-                                <div class="spec-label">Size</div>
-                                <div class="spec-value">${model.size || 'Unknown'}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="model-actions">
-                    <button class="btn btn-primary w-100" onclick="pullModel('${model.name}')" title="Download model">
-                        <i class="fas fa-download"></i> Download
-                    </button>
-                </div>
-            </div>
-        </div>
-    `
-    )
-    .join("");
+  container.innerHTML = models.map(m => (window.modelCards && window.modelCards.buildDownloadableModelCardHTML)
+  ? window.modelCards.buildDownloadableModelCardHTML(m)
+  : `<!-- modelCards module missing -->`).join("");
 }
 
 async function toggleExtendedModels() {
@@ -917,53 +888,7 @@ async function toggleExtendedModels() {
 }
 
 // Initialize when page loads
-document.addEventListener("DOMContentLoaded", function () {
-  initializeCompactMode();
-
-  // Local function for initial load
-  async function loadDownloadableModels() {
-    const container = document.getElementById("downloadableModelsContainer");
-    if (!container) return;
-
-    try {
-      const response = await fetch("/api/models/downloadable?category=best");
-      if (response.ok) {
-        const data = await response.json();
-        renderDownloadableModels(data.models, container);
-      } else {
-        container.innerHTML =
-          '<div class="col-12 text-center text-danger">Failed to load models</div>';
-      }
-    } catch (error) {
-      console.error("Error loading downloadable models:", error);
-      container.innerHTML =
-        '<div class="col-12 text-center text-danger">Error loading models</div>';
-    }
-  }
-
-  // Legacy pullModel removed; unified implementation appears later (warm load + retry).
-
-  // Load downloadable models on page load
-  document.addEventListener("DOMContentLoaded", function () {
-    loadDownloadableModels();
-  });
-  updateTimes();
-  updateSystemStats();
-  updateModelData();
-  updateHealthStatus();
-
-  // Update system stats every 1 second
-  setInterval(updateSystemStats, 1000);
-
-  // Update model data every 10 seconds
-  setInterval(updateModelData, 10000);
-
-  // Update health status every 15 seconds
-  setInterval(updateHealthStatus, 15000);
-
-  // Load downloadable models
-  loadDownloadableModels();
-});
+// Initialization handled by modules/bootstrap.js
 
 // Downloadable models functionality
 async function loadDownloadableModels() {
@@ -995,66 +920,19 @@ function renderDownloadableModels(models) {
       '<div class="col-12 text-center text-muted">No models available</div>';
     return;
   }
-
-  container.innerHTML = models
-    .map(
-      (model) => `
-        <div class="col-md-6 col-lg-4">
-            <div class="model-card h-100">
-                <div class="model-header">
-                    <div class="model-icon-wrapper">
-                        <i class="fas fa-cloud model-icon-main"></i>
-                    </div>
-                    <div class="model-meta">
-                        <span class="status-indicator" style="color: #0dcaf0;">
-                            <i class="fas fa-circle"></i>Downloadable
-                        </span>
-                    </div>
-                </div>
-                <div class="model-title">${model.name || 'Unknown'}</div>
-                <div class="model-capabilities">${getCapabilitiesHTML(model)}</div>
-                <div class="model-description text-muted small" style="height: 28px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;">
-                    ${model.description || 'No description available'}
-                </div>
-                <div class="model-specs">
-                  <div class="spec-row compact-hide">
-                        <div class="spec-item">
-                            <div class="spec-icon">
-                                <i class="fas fa-weight"></i>
-                            </div>
-                            <div class="spec-content">
-                                <div class="spec-label">Parameters</div>
-                                <div class="spec-value">${model.parameter_size || 'Unknown'}</div>
-                            </div>
-                        </div>
-                        <div class="spec-item">
-                            <div class="spec-icon">
-                                <i class="fas fa-hdd"></i>
-                            </div>
-                            <div class="spec-content">
-                                <div class="spec-label">Size</div>
-                                <div class="spec-value">${model.size || 'Unknown'}</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="model-actions">
-                    <button class="btn btn-primary w-100" onclick="pullModel('${model.name}')" title="Download model">
-                        <i class="fas fa-download"></i> Download
-                    </button>
-                </div>
-            </div>
-        </div>
-    `
-    )
-    .join("");
+  container.innerHTML = models.map(m => (window.modelCards && window.modelCards.buildDownloadableModelCardHTML)
+  ? window.modelCards.buildDownloadableModelCardHTML(m)
+  : `<!-- modelCards module missing -->`).join("");
 }
 
 async function pullModel(modelName) {
-  const button = event.target.closest("button");
-  const originalText = button.innerHTML;
-  button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Downloading...';
-  button.disabled = true;
+  const card = document.querySelector(`.model-card[data-model-name="${cssEscape(modelName)}"]`);
+  const button = card ? card.querySelector('button[title="Download model"]') : null;
+  const originalText = button ? button.innerHTML : null;
+  if (button) {
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Downloading...';
+    button.disabled = true;
+  }
 
   showNotification(`Starting download for ${modelName}. This may take a while...`, "info");
 
@@ -1064,32 +942,29 @@ async function pullModel(modelName) {
     const pullResult = await pullResp.json();
     if (!pullResult.success) {
       showNotification(pullResult.message || "Pull failed", "error");
-      button.innerHTML = originalText;
-      button.disabled = false;
+      if (button && originalText !== null) { button.innerHTML = originalText; button.disabled = false; }
       return;
     }
     showNotification(pullResult.message, "success");
 
     // Step 2: Warm/load model
-    button.innerHTML = '<i class="fas fa-fire me-1"></i>Loading...';
+    if (button) button.innerHTML = '<i class="fas fa-fire me-1"></i>Loading...';
     showNotification(`Loading model ${modelName}...`, "info");
     const startResp = await fetch(`/api/models/start/${encodeURIComponent(modelName)}`, { method: "POST" });
     const startResult = await startResp.json();
     if (startResult.success) {
       showNotification(startResult.message, "success");
-      button.innerHTML = '<i class="fas fa-check me-1"></i>Ready';
+      if (button) button.innerHTML = '<i class="fas fa-check me-1"></i>Ready';
       setTimeout(() => {
         updateModelData();
         location.reload();
       }, 1500);
     } else {
       showNotification(startResult.message || "Model load failed", "error");
-      button.innerHTML = originalText;
-      button.disabled = false;
+      if (button && originalText !== null) { button.innerHTML = originalText; button.disabled = false; }
     }
   } catch (err) {
     showNotification(`Download or load failed: ${err.message}`, "error");
-    button.innerHTML = originalText;
-    button.disabled = false;
+    if (button && originalText !== null) { button.innerHTML = originalText; button.disabled = false; }
   }
 }

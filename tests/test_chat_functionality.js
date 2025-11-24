@@ -42,7 +42,7 @@ global.document = {
                     value: '',
                     disabled: false,
                     appendChild: function(child) {
-                        this.innerHTML += child.outerHTML || child.innerHTML || '';
+                        this.innerHTML += child.outerHTML || child.innerHTML || child.textContent || '';
                     },
                     options: [],
                     addEventListener: function() {},
@@ -476,3 +476,150 @@ async function runAllTests() {
 
 // Execute all tests
 runAllTests().catch(console.error);
+// Comprehensive test for chat functionality
+// Run with: node test_chat_functionality.js
+
+// Mock the DOM API and fetch calls (contents moved from root file)
+const mockElements = {};
+
+global.document = {
+    getElementById: function(id) {
+        if (!mockElements[id]) {
+            if (id === 'chatModelSelect') {
+                mockElements[id] = {
+                    innerHTML: '',
+                    value: '',
+                    disabled: false,
+                    appendChild: function(option) {
+                        const html = `<option value="${option.value}">${option.textContent}</option>`;
+                        this.innerHTML += html;
+                    },
+                    options: [],
+                    addEventListener: function() {},
+                    focus: function() {},
+                    scrollTop: 0,
+                    children: []
+                };
+            } else if (id === 'chatMessages') {
+                mockElements[id] = {
+                    innerHTML: '',
+                    value: '',
+                    disabled: false,
+                    appendChild: function(child) {
+                        this.innerHTML += child.outerHTML || child.innerHTML || '';
+                    },
+                    options: [],
+                    addEventListener: function() {},
+                    focus: function() {},
+                    scrollTop: 0,
+                    children: []
+                };
+            } else {
+                mockElements[id] = {
+                    innerHTML: '',
+                    value: '',
+                    disabled: false,
+                    appendChild: function(child) {
+                        this.innerHTML += child.outerHTML || child.innerHTML || child.textContent || '';
+                    },
+                    options: [],
+                    addEventListener: function() {},
+                    focus: function() {},
+                    scrollTop: 0,
+                    children: []
+                };
+            }
+        }
+        return mockElements[id];
+    },
+    querySelectorAll: function() {
+        return [];
+    },
+    createElement: function(tag) {
+        if (tag === 'option') {
+            return {
+                value: '',
+                textContent: '',
+                outerHTML: ''
+            };
+        }
+        if (tag === 'div') {
+            return {
+                className: '',
+                innerHTML: '',
+                outerHTML: '',
+                appendChild: function(child) {
+                    this.innerHTML += child.outerHTML || child.innerHTML || child.textContent || '';
+                }
+            };
+        }
+        return {};
+    },
+    createTextNode: function(text) {
+        return { textContent: text };
+    }
+};
+
+// Mock fetch API with different responses
+let fetchCallCount = 0;
+global.fetch = async function(url, options = {}) {
+    console.log(`Mock fetch #${++fetchCallCount} called with URL:`, url);
+
+    if (url.includes('/api/models/available')) {
+        return {
+            ok: true,
+            status: 200,
+            json: async function() {
+                return {
+                    models: [
+                        { name: 'llama3.2:1b' },
+                        { name: 'llama3:latest' },
+                        { name: 'qwen3-vl:8b' }
+                    ]
+                };
+            }
+        };
+    }
+
+    if (url.includes('/api/chat')) {
+        return {
+            ok: true,
+            status: 200,
+            json: async function() {
+                return {
+                    response: "Hello! This is a test response from the AI model.",
+                    context: [1, 2, 3, 4, 5]
+                };
+            }
+        };
+    }
+
+    if (url.includes('/api/chat/history')) {
+        if (options.method === 'POST') {
+            return { ok: true, status: 200 };
+        }
+        return {
+            ok: true,
+            status: 200,
+            json: async function() {
+                return { history: [] };
+            }
+        };
+    }
+
+    return {
+        ok: false,
+        status: 404,
+        json: async function() { return { error: 'Not found' }; }
+    };
+};
+
+// Mock console
+const realConsole = console;
+global.console = {
+    log: function(...args) { realConsole.log('[CHAT TEST]', ...args); },
+    error: function(...args) { realConsole.error('[CHAT TEST ERROR]', ...args); },
+    warn: function(...args) { realConsole.warn('[CHAT TEST WARN]', ...args); }
+};
+
+// (file continues - the rest of the content is the same as root script)

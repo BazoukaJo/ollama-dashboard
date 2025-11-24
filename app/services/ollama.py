@@ -1,4 +1,6 @@
 from flask import current_app
+import logging
+import re  # kept for other helpers; capability detection moved to capabilities.py
 import requests
 from datetime import datetime, timezone, timedelta
 import time
@@ -6,42 +8,57 @@ import json
 import os
 from collections import deque
 import psutil
+import platform
+from app.services.model_settings_helpers import (
+    model_settings_file_path,
+    load_model_settings,
+    write_model_settings_file,
+    get_model_settings_entry,
+    get_model_settings_with_fallback_entry,
+    save_model_settings_entry,
+    delete_model_settings_entry,
+    ensure_model_settings_exists,
+    recommend_settings_for_model,
+    normalize_setting_value,
+)
+from app.services.service_control import stop_service_windows, stop_service_unix
 import threading
 import atexit
+from app.services.system_stats import models_memory_usage
 
 class OllamaService:
     def __init__(self, app=None):
         self.app = app
-        # Performance optimizations
         self._cache = {}
         self._cache_timestamps = {}
-        self._session = requests.Session()  # Connection pooling
+        self._session = requests.Session()
         self._background_stats = None
         self._stats_lock = threading.Lock()
+        self.logger = logging.getLogger(__name__)
+        self._model_settings_lock = threading.Lock()
+        self._model_settings = {}
         self._stop_background = threading.Event()
-
+        self._consecutive_ps_failures = 0
+        self._last_background_error = None
         if app is not None:
             self.init_app(app)
         else:
-            self.history = deque(maxlen=50)  # Default max history
+            self.history = deque(maxlen=50)
 
     def init_app(self, app):
-        """Initialize the service with the Flask app"""
         self.app = app
         with self.app.app_context():
-            self.history = self.load_history()
-
-        # Start background data collection
+            self.history = self.load_history()  # Load history from file
         self._start_background_updates()
-
-        # Register cleanup
+        try:
+            self._model_settings = self.load_model_settings()
+        except Exception as e:
+            self.logger.exception("Model settings load error: %s", e)  # Log model settings load error
         atexit.register(self._cleanup)
 
     def _start_background_updates(self):
-        """Start background data collection for all data types"""
         if self._background_stats and self._background_stats.is_alive():
             return
-
         self._stop_background.clear()
         self._background_stats = threading.Thread(
             target=self._background_updates_worker,
@@ -51,109 +68,60 @@ class OllamaService:
         self._background_stats.start()
 
     def _background_updates_worker(self):
-        """Background worker for collecting all data types"""
         while not self._stop_background.is_set():
             try:
-                # Collect system stats
+                cycle_had_ps_failure = False
                 stats = self._get_system_stats_raw()
                 with self._stats_lock:
                     self._cache['system_stats'] = stats
                     self._cache_timestamps['system_stats'] = datetime.now()
-
-                # Collect running models (every 10 seconds)
                 if not hasattr(self, '_model_update_counter'):
                     self._model_update_counter = 0
                 self._model_update_counter += 1
-
-                if self._model_update_counter >= 5:  # Every 10 seconds (5 * 2)
+                if self._model_update_counter >= 5:  # Check if model update counter exceeds threshold
                     try:
-                        # Get and process running models (same logic as get_running_models method)
                         response = self._session.get(self.get_api_url(), timeout=5)
                         if response.status_code == 200:
                             data = response.json()
                             models = data.get('models', [])
-
-                            # Process models the same way as get_running_models
-                            current_models = []
-                            for model in models:
-                                # Format size
-                                model['formatted_size'] = self.format_size(model['size'])
-
-                                # Format families
-                                families = model.get('details', {}).get('families', [])
-                                if families:
-                                    model['families_str'] = ', '.join(families)
-                                else:
-                                    model['families_str'] = model.get('details', {}).get('family', 'Unknown')
-
-                                # Detect and add capabilities
-                                capabilities = self._detect_model_capabilities(model)
-                                model['has_vision'] = capabilities['has_vision']
-                                model['has_tools'] = capabilities['has_tools']
-                                model['has_reasoning'] = capabilities['has_reasoning']
-
-                                # Format expiration times
-                                if model.get('expires_at'):
-                                    if model['expires_at'] == 'Stopping':
-                                        model['expires_at'] = {
-                                            'local': 'Stopping...',
-                                            'relative': 'Process is stopping'
-                                        }
-                                    else:
-                                        try:
-                                            # Handle microseconds by truncating them
-                                            expires_at = model['expires_at'].replace('Z', '+00:00')
-                                            expires_at = expires_at.split('.')[0] + '+00:00'
-                                            expires_dt = datetime.fromisoformat(expires_at)
-                                            local_dt = expires_dt.astimezone()
-                                            relative_time = self.format_relative_time(expires_dt)
-                                            tz_abbr = time.strftime('%Z')
-                                            model['expires_at'] = {
-                                                'local': local_dt.strftime(f'%-I:%M %p, %b %-d ({tz_abbr})'),
-                                                'relative': relative_time
-                                            }
-                                        except Exception as e:
-                                            model['expires_at'] = None
-
-                                current_models.append({
-                                    'name': model['name'],
-                                    'families_str': model.get('families_str', ''),
-                                    'parameter_size': model.get('details', {}).get('parameter_size', ''),
-                                    'size': model.get('formatted_size', ''),
-                                    'expires_at': model.get('expires_at'),
-                                    'details': model.get('details', {}),
-                                    'has_vision': model.get('has_vision', False),
-                                    'has_tools': model.get('has_tools', False),
-                                    'has_reasoning': model.get('has_reasoning', False)
-                                })
-
+                            current_models = [self._format_running_model_entry(m) for m in models]
+                            for m in current_models:
+                                try:
+                                    self._ensure_model_settings_exists(m)
+                                except Exception:
+                                    pass
                             with self._stats_lock:
                                 self._cache['running_models'] = current_models
                                 self._cache_timestamps['running_models'] = datetime.now()
+                            self._consecutive_ps_failures = 0
+                        else:
+                            cycle_had_ps_failure = True
+                            self._last_background_error = f"ps status {response.status_code}"
                     except Exception as e:
-                        print(f"Background model collection error: {e}")
-
-                    # Get available models (every 30 seconds)
-                    if self._model_update_counter >= 15:  # Every 30 seconds (15 * 2)
+                        cycle_had_ps_failure = True
+                        self.logger.exception("Background model collection error: %s", e)
+                        self._last_background_error = str(e)
+                    if self._model_update_counter >= 15:
                         try:
                             if self.app:
                                 host = self.app.config.get('OLLAMA_HOST')
                                 port = self.app.config.get('OLLAMA_PORT')
                             else:
                                 host = os.getenv('OLLAMA_HOST', 'localhost')
-                                port = int(os.getenv('OLLAMA_PORT', 11434))
-
+                                port = int(os.getenv('OLLAMA_PORT', '11434'))
                             tags_url = f"http://{host}:{port}/api/tags"
                             response = self._session.get(tags_url, timeout=10)
                             if response.status_code == 200:
                                 models = response.json().get('models', [])
+                                models = [self._normalize_available_model_entry(m) for m in models]
                                 with self._stats_lock:
                                     self._cache['available_models'] = models
                                     self._cache_timestamps['available_models'] = datetime.now()
+                            else:
+                                self._last_background_error = f"tags status {response.status_code}"
                         except Exception as e:
-                            print(f"Background available models collection error: {e}")
-
-                        # Get Ollama version (every 5 minutes)
+                            self.logger.exception("Background available models collection error: %s", e)
+                            self._last_background_error = str(e)
                         try:
                             version_url = f"http://{host}:{port}/api/version"
                             response = self._session.get(version_url, timeout=5)
@@ -163,53 +131,109 @@ class OllamaService:
                                 with self._stats_lock:
                                     self._cache['ollama_version'] = version
                                     self._cache_timestamps['ollama_version'] = datetime.now()
+                            else:
+                                self._last_background_error = f"version status {response.status_code}"
                         except Exception as e:
-                            print(f"Background version collection error: {e}")
-
-                        self._model_update_counter = 0  # Reset counter
-
+                            self.logger.exception("Background version collection error: %s", e)
+                            self._last_background_error = str(e)
+                        self._model_update_counter = 0
+                if cycle_had_ps_failure:
+                    self._consecutive_ps_failures += 1
+                else:
+                    self._consecutive_ps_failures = 0
             except Exception as e:
-                print(f"Background updates error: {e}")
+                self.logger.exception("Background updates error: %s", e)
+                self._last_background_error = str(e)
+            base_interval = 2
+            backoff_multiplier = 2 ** min(4, self._consecutive_ps_failures) if self._consecutive_ps_failures > 0 else 1
+            sleep_seconds = base_interval * backoff_multiplier
+            self._stop_background.wait(sleep_seconds)
 
-            # Sleep for 2 seconds between collections
-            self._stop_background.wait(2)
-
-    def _cleanup(self):
-        """Cleanup background threads"""
-        self._stop_background.set()
-        if self._background_stats:
-            self._background_stats.join(timeout=1)
-        self._session.close()
-
-    def _get_cached(self, key, ttl_seconds=30):
-        """Get cached data if still valid"""
-        if key in self._cache_timestamps:
-            age = (datetime.now() - self._cache_timestamps[key]).total_seconds()
-            if age < ttl_seconds:
-                return self._cache.get(key)
+    # Simple cache helpers restored after refactor corruption
+    def _get_cached(self, key, ttl_seconds):
+        ts = self._cache_timestamps.get(key)
+        if not ts:
+            return None
+        if (datetime.now() - ts).total_seconds() < ttl_seconds:
+            return self._cache.get(key)
         return None
 
-    def _set_cached(self, key, data):
-        """Cache data with timestamp"""
-        self._cache[key] = data
+    def _set_cached(self, key, value):
+        self._cache[key] = value
         self._cache_timestamps[key] = datetime.now()
+
+    def get_component_health(self):
+        """Return health/status information for background thread and caches."""
+        now = datetime.now()
+        age_info = {}
+        stale = {}
+        ttl_map = {
+            'system_stats': 5,
+            'running_models': 10,
+            'available_models': 60,
+            'ollama_version': 300
+        }
+        for key, ttl in ttl_map.items():
+            ts = self._cache_timestamps.get(key)
+            if ts:
+                age = (now - ts).total_seconds()
+            else:
+                age = None
+            age_info[key] = age
+            stale[key] = (age is None) or (age > ttl)
+
+        # Health status logic
+        thread_alive = bool(self._background_stats and self._background_stats.is_alive())
+        running_models = self._cache.get('running_models', [])
+        available_models = self._cache.get('available_models', [])
+        degraded = not thread_alive or self._consecutive_ps_failures > 0 or stale.get('system_stats', True)
+        unhealthy = self._last_background_error is not None or not thread_alive
+        status = 'healthy'
+        if unhealthy:
+            status = 'unhealthy'
+        elif degraded:
+            status = 'degraded'
+        return {
+            'status': status,
+            'background_thread_alive': thread_alive,
+            'consecutive_ps_failures': self._consecutive_ps_failures,
+            'last_background_error': self._last_background_error,
+            'cache_age_seconds': age_info,
+            'stale_flags': stale,
+            'models': {
+                'running_count': len(running_models),
+                'available_count': len(available_models)
+            },
+            'uptime_seconds': int((datetime.now() - self.app.config.get('START_TIME', datetime.now())).total_seconds()) if self.app else 0,
+            'error': self._last_background_error
+        }
+
+    def clear_all_caches(self):
+        """Clear all cached data and timestamps (used after service restart)."""
+        self._cache.clear()
+        self._cache_timestamps.clear()
+
+    def _normalize_available_model_entry(self, entry):
+        from app.services.model_helpers import normalize_available_model_entry
+        return normalize_available_model_entry(self, entry)
+
+    def _format_running_model_entry(self, model, include_has_custom_settings=False):
+        from app.services.model_helpers import format_running_model_entry
+        return format_running_model_entry(self, model, include_has_custom_settings)
 
     def get_api_url(self):
         try:
-            # Get host and port from app config if available, otherwise use environment/defaults
             if self.app:
                 host = self.app.config.get('OLLAMA_HOST')
                 port = self.app.config.get('OLLAMA_PORT')
             else:
-                import os
                 host = os.getenv('OLLAMA_HOST', 'localhost')
-                port = int(os.getenv('OLLAMA_PORT', 11434))
-
+                port = int(os.getenv('OLLAMA_PORT', '11434'))
             if not host or not port:
                 raise ValueError(f"Missing configuration: OLLAMA_HOST={host}, OLLAMA_PORT={port}")
             return f"http://{host}:{port}/api/ps"
         except Exception as e:
-            raise Exception(f"Failed to connect to Ollama server: {str(e)}. Please ensure Ollama is running and accessible.")
+            raise ConnectionError(f"Failed to connect to Ollama server: {str(e)}. Please ensure Ollama is running and accessible.") from e
 
     def format_size(self, size_bytes):
         for unit in ['B', 'KB', 'MB', 'GB']:
@@ -221,11 +245,9 @@ class OllamaService:
     def format_relative_time(self, target_dt):
         now = datetime.now(timezone.utc)
         diff = target_dt - now
-
         days = diff.days
         hours = diff.seconds // 3600
         minutes = (diff.seconds % 3600) // 60
-
         if days > 0:
             if hours > 12:
                 days += 1
@@ -249,310 +271,126 @@ class OllamaService:
             return "less than a minute"
 
     def get_ollama_version(self):
-        # Check cache first (version changes rarely)
-        cached = self._get_cached('ollama_version', ttl_seconds=300)  # 5 minutes
+        cached = self._get_cached('ollama_version', ttl_seconds=300)
         if cached is not None:
             return cached
-
-        try:
-            version_url = f"http://{self.app.config.get('OLLAMA_HOST')}:{self.app.config.get('OLLAMA_PORT')}/api/version"
-            response = self._session.get(version_url, timeout=5)
-            response.raise_for_status()
-            data = response.json()
-            version = data.get('version', 'Unknown')
-            self._set_cached('ollama_version', version)
-            return version
-        except Exception as e:
-            return 'Unknown'
-
-    def get_system_stats(self):
-        """Get basic system statistics"""
-        # Check cache first (system stats are collected in background)
-        cached = self._get_cached('system_stats', ttl_seconds=5)  # 5 seconds
-        if cached is not None:
-            return cached
-
-        # Fallback to direct collection if cache miss
-        return self._get_system_stats_raw()
-
-    def _get_system_stats_raw(self):
-        """Get system stats without caching (used by background worker)"""
-        try:
-            import psutil
-
-            # Get VRAM information
-            vram_info = self._get_vram_info()
-
-            return {
-                'cpu_percent': psutil.cpu_percent(interval=0.1),  # Much faster, no blocking
-                'memory': {
-                    'total': psutil.virtual_memory().total,
-                    'available': psutil.virtual_memory().available,
-                    'percent': psutil.virtual_memory().percent
-                },
-                'vram': vram_info,
-                'disk': self._get_disk_info()
-            }
-        except ImportError:
-            # Return mock data if psutil is not available
-            return {
-                'cpu_percent': 25.5,
-                'memory': {
-                    'total': 17179869184,  # 16GB
-                    'available': 8589934592,  # 8GB
-                    'percent': 50.0
-                },
-                'vram': {
-                    'total': 8589934592,  # 8GB
-                    'used': 2147483648,   # 2GB
-                    'free': 6442450944,   # 6GB
-                    'percent': 25.0
-                },
-                'disk': {
-                    'total': 1000204886016,  # ~1TB
-                    'free': 500000000000,   # ~500GB
-                    'percent': 50.0
-                }
-            }
-        except Exception as e:
-            return {
-                'cpu_percent': 0,
-                'memory': {
-                    'total': 0,
-                    'available': 0,
-                    'percent': 0
-                },
-                'vram': {
-                    'total': 0,
-                    'used': 0,
-                    'free': 0,
-                    'percent': 0
-                },
-                'disk': {
-                    'total': 0,
-                    'free': 0,
-                    'percent': 0
-                }
-            }
-
-    def _get_vram_info(self):
-        """Get VRAM (GPU memory) information"""
-        try:
-            # Try to get NVIDIA GPU memory info
-            try:
-                import pynvml
-                pynvml.nvmlInit()
-                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-                info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-                pynvml.nvmlShutdown()
-                return {
-                    'total': info.total,
-                    'used': info.used,
-                    'free': info.free,
-                    'percent': (info.used / info.total) * 100 if info.total > 0 else 0
-                }
-            except (ImportError, Exception):
-                pass
-
-            # Try GPUtil for GPU info
-            try:
-                import GPUtil
-                gpus = GPUtil.getGPUs()
-                if gpus:
-                    gpu = gpus[0]  # Get first GPU
-                    return {
-                        'total': gpu.memoryTotal * 1024 * 1024,  # Convert MB to bytes
-                        'used': gpu.memoryUsed * 1024 * 1024,
-                        'free': gpu.memoryFree * 1024 * 1024,
-                        'percent': gpu.memoryUtil * 100
-                    }
-            except (ImportError, Exception):
-                pass
-
-            # Fallback: Try to get GPU info from system
-            try:
-                import subprocess
-                # Try nvidia-smi command
-                result = subprocess.run(['nvidia-smi', '--query-gpu=memory.total,memory.used,memory.free', '--format=csv,noheader,nounits'],
-                                      capture_output=True, text=True, timeout=5)
-                if result.returncode == 0:
-                    lines = result.stdout.strip().split('\n')
-                    if lines:
-                        parts = lines[0].split(',')
-                        if len(parts) >= 3:
-                            total = int(parts[0].strip()) * 1024 * 1024  # Convert MB to bytes
-                            used = int(parts[1].strip()) * 1024 * 1024
-                            free = int(parts[2].strip()) * 1024 * 1024
-                            return {
-                                'total': total,
-                                'used': used,
-                                'free': free,
-                                'percent': (used / total) * 100 if total > 0 else 0
-                            }
-            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
-                pass
-
-        except Exception:
-            pass
-
-        # Return default VRAM info if no GPU detected
-        return {
-            'total': 0,
-            'used': 0,
-            'free': 0,
-            'percent': 0
-        }
-
-    def _get_disk_info(self):
-        """Get disk usage information for the system drive."""
-        try:
-            import platform
-
-            if platform.system() == "Windows":
-                system_drive = os.environ.get('SystemDrive', 'C:') + '\\'
-                usage = psutil.disk_usage(system_drive)
-            else:
-                usage = psutil.disk_usage('/')
-
-            return {
-                'total': usage.total,
-                'free': usage.free,
-                'used': usage.used,
-                'percent': usage.percent
-            }
-
-        except Exception:
-            # Fallback: try to get disk info for current directory
-            try:
-                current_dir = os.getcwd()
-                drive = os.path.splitdrive(current_dir)[0] if platform.system() == "Windows" else '/'
-                usage = psutil.disk_usage(drive + ('\\' if platform.system() == "Windows" else ''))
-                return {
-                    'total': usage.total,
-                    'free': usage.free,
-                    'used': usage.used,
-                    'percent': usage.percent
-                }
-            except Exception:
-                # Last resort: return zeros
-                return {
-                    'total': 0,
-                    'free': 0,
-                    'used': 0,
-                    'percent': 0
-                }
-
-    def _detect_model_capabilities(self, model):
-        """Detect capabilities for a model based on metadata."""
-        capabilities = {
-            'has_vision': False,
-            'has_tools': False,
-            'has_reasoning': False
-        }
-
-        model_name = model.get('name', '').lower()
-        details = model.get('details', {}) or {}
-        families = details.get('families', []) or []
-
-        # Tokenize model name for precise matching (avoid substring false positives)
-        import re
-        tokens = re.split(r'[\-_:]', model_name)
-        token_set = set(tokens)
-
-        # --- Vision Detection ---
-        # Strict allowlist of known vision model base identifiers
-        vision_allow = {
-            'llava', 'bakllava', 'moondream', 'qwen2-vl', 'qwen2.5-vl', 'qwen3-vl',
-            'llava-llama3', 'llava-phi3', 'cogvlm', 'yi-vl', 'deepseek-vl', 'paligemma', 'fuyu', 'idefics'
-        }
-        # Pattern: qwen* with '-vl' suffix
-        if any(v in model_name for v in vision_allow):
-            capabilities['has_vision'] = True
-        # Families heuristic: presence of vision encoders
-        if isinstance(families, list):
-            for fam in families:
-                fam_l = str(fam).lower()
-                if any(x in fam_l for x in ['clip', 'projector', 'vision', 'multimodal', 'vl']):
-                    capabilities['has_vision'] = True
-                    break
-        elif isinstance(families, str):
-            fam_l = families.lower()
-            if any(x in fam_l for x in ['clip', 'projector', 'vision', 'multimodal', 'vl']):
-                capabilities['has_vision'] = True
-
-        # --- Tool / Function Calling Detection ---
-        # Allowlist of bases known to expose tool/function calling in Ollama or upstream releases
-        tool_allow_exact = {
-            'llama3.1', 'llama3.2', 'llama3.3',
-            'mistral', 'mixtral', 'command-r', 'command-r-plus',
-            'firefunction', 'qwen2.5', 'qwen3', 'granite3', 'hermes3', 'nemotron'
-        }
-        # Version exclusions / older variants without tooling
-        tool_exclude = {'llama3.0', 'qwen2.0', 'hermes2', 'hermes-2'}
-
-        # Match by prefix tokens (e.g. llama3.1:8b => startswith llama3.1)
-        if any(model_name.startswith(t) for t in tool_allow_exact) and not any(model_name.startswith(e) for e in tool_exclude):
-            capabilities['has_tools'] = True
-
-        # Secondary heuristic: if a later version appears (e.g. llama3.2) treat as tools-capable
-        version_pattern_match = re.search(r'(llama3\.[1-9])', model_name)
-        if version_pattern_match and version_pattern_match.group(1) not in tool_exclude:
-            capabilities['has_tools'] = True
-
-        # Qwen pattern: qwen3 or qwen2.5 variants (not plain qwen)
-        if re.search(r'qwen(2\.5|3)', model_name):
-            capabilities['has_tools'] = True
-
-        # --- Reasoning Detection ---
-        reasoning_allow = {
-            'deepseek-r1', 'qwq', 'marco-o1', 'k0-math'
-        }
-        if any(r in model_name for r in reasoning_allow):
-            capabilities['has_reasoning'] = True
-
-        # Pattern heuristics: models containing explicit reasoning suffixes/tokens
-        reasoning_token_triggers = {'reasoning', 'cot', 'chain-of-thought', 'think'}
-        if any(tok in model_name for tok in reasoning_token_triggers):
-            capabilities['has_reasoning'] = True
-
-        # R1 token heuristic: token 'r1' preceded by alphabetic base (avoid matching 'v1')
-        if 'r1' in token_set and not any(t.startswith('v1') for t in token_set):
-            if any(base in model_name for base in ['deepseek', 'llama', 'qwen', 'phi', 'mixtral']):
-                capabilities['has_reasoning'] = True
-
-        return capabilities
-
-    def get_available_models(self):
-        """Get list of available models (not just running ones)."""
-        # Check cache first (models list changes infrequently)
-        cached = self._get_cached('available_models', ttl_seconds=60)  # 1 minute
-        if cached is not None:
-            return cached
-
         try:
             if self.app:
                 host = self.app.config.get('OLLAMA_HOST')
                 port = self.app.config.get('OLLAMA_PORT')
             else:
                 host = os.getenv('OLLAMA_HOST', 'localhost')
-                port = int(os.getenv('OLLAMA_PORT', 11434))
+                port = int(os.getenv('OLLAMA_PORT', '11434'))
+            url = f"http://{host}:{port}/api/version"
+            response = self._session.get(url, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            version = data.get('version', 'Unknown')
+            self._set_cached('ollama_version', version)
+            return version
+        except Exception:
+            return 'Unknown'
 
+    def get_system_stats(self):
+        cached = self._get_cached('system_stats', ttl_seconds=5)
+        if cached is not None:
+            stats = cached
+        else:
+            from app.services.system_stats import collect_system_stats
+            stats = collect_system_stats()
+            self._set_cached('system_stats', stats)
+        # Ensure vram dict is complete and always present
+        if 'vram' not in stats or not isinstance(stats['vram'], dict):
+            stats['vram'] = {'total': 0, 'used': 0, 'free': 0, 'percent': 0}
+        else:
+            for k in ['total', 'used', 'free', 'percent']:
+                if k not in stats['vram'] or stats['vram'][k] is None:
+                    stats['vram'][k] = 0
+        # Defensive: ensure stats['memory'] and stats['disk'] are also dicts with expected keys
+        if 'memory' not in stats or not isinstance(stats['memory'], dict):
+            stats['memory'] = {'percent': 0, 'total': 0, 'available': 0, 'used': 0}
+        else:
+            for k in ['percent', 'total', 'available', 'used']:
+                if k not in stats['memory'] or stats['memory'][k] is None:
+                    stats['memory'][k] = 0
+        if 'disk' not in stats or not isinstance(stats['disk'], dict):
+            stats['disk'] = {'percent': 0, 'total': 0, 'used': 0, 'free': 0}
+        else:
+            for k in ['percent', 'total', 'used', 'free']:
+                if k not in stats['disk'] or stats['disk'][k] is None:
+                    stats['disk'][k] = 0
+        return stats
+
+    def _get_system_stats_raw(self):
+        from app.services.system_stats import collect_system_stats
+        return collect_system_stats()
+
+    def _get_vram_info(self):
+        from app.services.system_stats import get_vram_info
+        return get_vram_info()
+
+    def _get_disk_info(self):
+        from app.services.system_stats import get_disk_info
+        return get_disk_info()
+
+    def _detect_model_capabilities(self, model):
+        """Delegate capability detection to capabilities helper module."""
+        from app.services.capabilities import detect_capabilities
+        model_name = model.get('name', '')
+        details = model.get('details', {}) or {}
+        families = details.get('families', []) or []
+        return detect_capabilities(model_name, families)
+
+    def _ensure_capability_flags(self, model):
+        """Delegate normalization to helper to keep logic centralized."""
+        from app.services.capabilities import ensure_capability_flags
+        return ensure_capability_flags(model)
+
+    def get_detailed_model_info(self, model_name):
+        """Get detailed model information including capabilities for better detection."""
+        try:
+            response = self._session.post(
+                self.get_api_url().replace('/api/ps', '/api/show'),
+                json={"name": model_name},
+                timeout=10
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+
+                # Add capabilities detection based on detailed info
+                capabilities = self._detect_model_capabilities({'name': model_name, 'details': data.get('details', {})})
+                data['capabilities'] = capabilities
+
+                return data
+            return None
+        except Exception as e:
+            self.logger.debug("Failed to get detailed info for %s: %s", model_name, e)
+            return None
+
+    def get_available_models(self):
+        """Get list of available models (not just running ones). Ensures capability flags are booleans."""
+        cached = self._get_cached('available_models', ttl_seconds=60)  # 1 minute
+        # Treat empty list as stale/miss to allow tests to patch responses
+        if cached:
+            return [self._normalize_available_model_entry(m) for m in cached]
+        try:
+            if self.app:
+                host = self.app.config.get('OLLAMA_HOST')
+                port = self.app.config.get('OLLAMA_PORT')
+            else:
+                host = os.getenv('OLLAMA_HOST', 'localhost')
+                port = int(os.getenv('OLLAMA_PORT', '11434'))
             tags_url = f"http://{host}:{port}/api/tags"
             response = self._session.get(tags_url, timeout=10)
             response.raise_for_status()
-            models = response.json().get('models', [])
-
-            # Add capabilities to each model
-            for model in models:
-                capabilities = self._detect_model_capabilities(model)
-                # Explicitly set each capability to override any None values
-                model['has_vision'] = capabilities['has_vision']
-                model['has_tools'] = capabilities['has_tools']
-                model['has_reasoning'] = capabilities['has_reasoning']
-
-            self._set_cached('available_models', models)
-            return models
-        except Exception:
+            raw_json = response.json()
+            models = raw_json.get('models', []) if isinstance(raw_json, dict) else []
+            normalized = [self._normalize_available_model_entry(m) for m in models]
+            self._set_cached('available_models', normalized)
+            return normalized
+        except Exception as e:
+            self.logger.debug("Error fetching available models: %s", e)
             return []
 
     def get_running_models(self):
@@ -566,59 +404,7 @@ class OllamaService:
             response.raise_for_status()
             data = response.json()
             models = data.get('models', [])
-
-            current_models = []
-            for model in models:
-                # Format size
-                model['formatted_size'] = self.format_size(model['size'])
-
-                # Format families
-                families = model.get('details', {}).get('families', [])
-                if families:
-                    model['families_str'] = ', '.join(families)
-                else:
-                    model['families_str'] = model.get('details', {}).get('family', 'Unknown')
-
-                # Detect and add capabilities
-                capabilities = self._detect_model_capabilities(model)
-                model['has_vision'] = capabilities['has_vision']
-                model['has_tools'] = capabilities['has_tools']
-                model['has_reasoning'] = capabilities['has_reasoning']
-
-                # Format expiration times
-                if model.get('expires_at'):
-                    if model['expires_at'] == 'Stopping':
-                        model['expires_at'] = {
-                            'local': 'Stopping...',
-                            'relative': 'Process is stopping'
-                        }
-                    else:
-                        try:
-                            # Handle microseconds by truncating them
-                            expires_at = model['expires_at'].replace('Z', '+00:00')
-                            expires_at = expires_at.split('.')[0] + '+00:00'
-                            expires_dt = datetime.fromisoformat(expires_at)
-                            local_dt = expires_dt.astimezone()
-                            relative_time = self.format_relative_time(expires_dt)
-                            tz_abbr = time.strftime('%Z')
-                            model['expires_at'] = {
-                                'local': local_dt.strftime(f'%-I:%M %p, %b %-d ({tz_abbr})'),
-                                'relative': relative_time
-                            }
-                        except Exception as e:
-                            model['expires_at'] = None
-
-                current_models.append({
-                    'name': model['name'],
-                    'families_str': model.get('families_str', ''),
-                    'parameter_size': model.get('details', {}).get('parameter_size', ''),
-                    'size': model.get('formatted_size', ''),
-                    'expires_at': model.get('expires_at'),
-                    'details': model.get('details', {}),
-                    'has_vision': model.get('has_vision', False),
-                    'has_tools': model.get('has_tools', False),
-                    'has_reasoning': model.get('has_reasoning', False)
-                })
+            current_models = [self._format_running_model_entry(m, include_has_custom_settings=True) for m in models]
 
             if current_models:
                 self.update_history(current_models)
@@ -633,24 +419,20 @@ class OllamaService:
             raise Exception(f"Error fetching models: {str(e)}")
 
     def load_history(self):
-        try:
-            if not self.app:
-                return deque(maxlen=50)  # Default max history when no app context
+        if not self.app:
+            return deque(maxlen=50)  # Default max history when no app context
 
-            history_file = self.app.config['HISTORY_FILE']
-            max_history = self.app.config['MAX_HISTORY']
+        history_file = self.app.config['HISTORY_FILE']
+        max_history = self.app.config['MAX_HISTORY']
 
-            if os.path.exists(history_file):
-                with open(history_file, 'r') as f:
-                    history = json.load(f)
-                    return deque(history, maxlen=max_history)
-            else:
-                with open(history_file, 'w') as f:
-                    json.dump([], f)
-                return deque(maxlen=max_history)
-        except Exception as e:
-            print(f"Error handling history file: {str(e)}")
-            return deque(maxlen=50)  # Default max history
+        if os.path.exists(history_file):
+            with open(history_file, 'r', encoding='utf-8') as f:
+                history = json.load(f)
+                return deque(history, maxlen=max_history)
+        else:
+            with open(history_file, 'w', encoding='utf-8') as f:
+                json.dump([], f)
+            return deque(maxlen=max_history)
 
     def update_history(self, models):
         timestamp = datetime.now().isoformat()
@@ -663,20 +445,57 @@ class OllamaService:
     def save_history(self):
         if not self.app:
             return  # Skip saving when no app context
-        with open(self.app.config['HISTORY_FILE'], 'w') as f:
+        with open(self.app.config['HISTORY_FILE'], 'w', encoding='utf-8') as f:
             json.dump(list(self.history), f)
+
+    def _cleanup(self):
+        """Cleanup resources on process exit."""
+        try:
+            if hasattr(self, '_stop_background') and self._stop_background:
+                self._stop_background.set()
+            if hasattr(self, '_background_stats') and self._background_stats and self._background_stats.is_alive():
+                self._background_stats.join(timeout=2)
+        except Exception:
+            pass
+        try:
+            self.save_history()
+        except Exception:
+            pass
 
     def format_datetime(self, value):
         try:
             if isinstance(value, str):
-                # Handle timezone offset in the ISO format string
-                dt = datetime.fromisoformat(value.replace('Z', '+00:00').split('.')[0])
+                v = value
+                # Normalize 'Z' suffix to '+00:00' for fromisoformat
+                if v.endswith('Z'):
+                    v = v.replace('Z', '+00:00')
+                # Try parsing with optional fractional seconds removed
+                try:
+                    dt = datetime.fromisoformat(v)
+                except Exception:
+                    if '.' in v:
+                        base = v.split('.')[0]
+                        try:
+                            dt = datetime.fromisoformat(base)
+                        except Exception:
+                            return value
+                    else:
+                        return value
             else:
                 dt = value
+            # If naive datetime assume UTC then convert to local timezone
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
             local_dt = dt.astimezone()
-            tz_abbr = time.strftime('%Z')
-            return local_dt.strftime(f'%-I:%M %p, %b %-d ({tz_abbr})')
-        except Exception as e:
+            tz_abbr = local_dt.tzname() or ''
+            # Hour without leading zero, minute, AM/PM
+            hour = str(int(local_dt.strftime('%I')))
+            minute = local_dt.strftime('%M')
+            ampm = local_dt.strftime('%p')
+            month_abbr = local_dt.strftime('%b')
+            day = str(int(local_dt.strftime('%d')))
+            return f"{hour}:{minute} {ampm}, {month_abbr} {day} ({tz_abbr})"
+        except Exception:
             return str(value)
 
     def format_time_ago(self, value):
@@ -705,18 +524,21 @@ class OllamaService:
     def get_chat_history(self):
         """Get chat history"""
         try:
+            if not self.app or not hasattr(self.app, "config"):
+                return []
             chat_history_file = os.path.join(os.path.dirname(self.app.config['HISTORY_FILE']), 'chat_history.json')
             if os.path.exists(chat_history_file):
-                with open(chat_history_file, 'r') as f:
+                with open(chat_history_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
             return []
         except Exception as e:
-            print(f"Error loading chat history: {str(e)}")
+            self.logger.exception("Error loading chat history: %s", e)
             return []
-
     def save_chat_session(self, session_data):
         """Save a chat session"""
         try:
+            if not self.app or not hasattr(self.app, "config"):
+                return
             chat_history_file = os.path.join(os.path.dirname(self.app.config['HISTORY_FILE']), 'chat_history.json')
             history = self.get_chat_history()
 
@@ -729,10 +551,10 @@ class OllamaService:
             # Keep only last 100 sessions
             history = history[:100]
 
-            with open(chat_history_file, 'w') as f:
+            with open(chat_history_file, 'w', encoding='utf-8') as f:
                 json.dump(history, f, indent=2)
         except Exception as e:
-            print(f"Error saving chat session: {str(e)}")
+            self.logger.exception("Error saving chat session: %s", e)
 
     def get_model_performance(self, model_name):
         """Get performance metrics for a model"""
@@ -744,8 +566,15 @@ class OllamaService:
             test_prompt = "Hello, how are you?"
             start_time = time.time()
 
+            if self.app and hasattr(self.app, "config"):
+                host = self.app.config.get('OLLAMA_HOST', 'localhost')
+                port = self.app.config.get('OLLAMA_PORT', 11434)
+            else:
+                host = os.getenv('OLLAMA_HOST', 'localhost')
+                port = int(os.getenv('OLLAMA_PORT', 11434))
+
             response = requests.post(
-                f"http://{self.app.config.get('OLLAMA_HOST')}:{self.app.config.get('OLLAMA_PORT')}/api/generate",
+                f"http://{host}:{port}/api/generate",
                 json={
                     "model": model_name,
                     "prompt": test_prompt,
@@ -791,11 +620,13 @@ class OllamaService:
     def get_system_stats_history(self):
         """Get historical system stats"""
         try:
+            if not self.app or not hasattr(self.app, "config"):
+                return []
             stats_history_file = os.path.join(os.path.dirname(self.app.config['HISTORY_FILE']), 'system_stats_history.json')
 
             # Initialize or load existing history
             if os.path.exists(stats_history_file):
-                with open(stats_history_file, 'r') as f:
+                with open(stats_history_file, 'r', encoding='utf-8') as f:
                     history = json.load(f)
             else:
                 history = []
@@ -810,13 +641,13 @@ class OllamaService:
                 history = history[-100:]
 
                 # Save updated history
-                with open(stats_history_file, 'w') as f:
+                with open(stats_history_file, 'w', encoding='utf-8') as f:
                     json.dump(history, f, indent=2)
 
             return history
 
         except Exception as e:
-            print(f"Error getting system stats history: {str(e)}")
+            self.logger.exception("Error getting system stats history: %s", e)
             return []
 
     def get_model_info_cached(self, model_name):
@@ -836,20 +667,273 @@ class OllamaService:
 
             return None
         except Exception as e:
-            print(f"Error getting model info for {model_name}: {str(e)}")
+            self.logger.exception(f"Error getting model info_cached for {model_name}: {e}")
             return None
+
+    def _has_custom_settings(self, model_name):
+        try:
+            with self._model_settings_lock:
+                if not self._model_settings:
+                    self._model_settings = self.load_model_settings() or {}
+                entry = self._model_settings.get(model_name)
+                return bool(entry) and entry.get('source') == 'user'
+        except Exception:
+            return False
+
+    # Global settings & autosave toggle removed; per-model recommendations always saved when first seen.
+
+    # ----------------- Model Settings (per-model defaults) -----------------
+    def _model_settings_file_path(self):
+        return model_settings_file_path(self)
+
+    def load_model_settings(self):
+        return load_model_settings(self)
+
+    def _write_model_settings_file(self, model_settings_dict):
+        return write_model_settings_file(self, model_settings_dict)
+
+    def get_model_settings(self, model_name):
+        return get_model_settings_entry(self, model_name)
+
+    def get_model_settings_with_fallback(self, model_name):
+        return get_model_settings_with_fallback_entry(self, model_name)
+
+    def save_model_settings(self, model_name, settings, source='user'):
+        return save_model_settings_entry(self, model_name, settings, source)
+
+    def delete_model_settings(self, model_name):
+        return delete_model_settings_entry(self, model_name)
+
+    def _ensure_model_settings_exists(self, model_info):
+        return ensure_model_settings_exists(self, model_info)
+
+
+    def _recommend_settings_for_model(self, model_info):
+        try:
+            return recommend_settings_for_model(self, model_info)
+        except Exception as e:
+            self.logger.exception(f"Error recommending settings for {model_info}: {e}")
+            return self.get_default_settings()
+
+    def _normalize_setting_value(self, key, value, default):
+        return normalize_setting_value(key, value, default)
+
+    # Legacy migration from global settings.json removed (no longer supported).
+
+    # ----------------- Service control internal helpers -----------------
+    def _start_service_windows(self):
+        """Attempt to start Ollama service on Windows using several strategies.
+        Returns (result_dict, methods_tried). result_dict is None if not successful yet.
+        """
+        import subprocess
+        methods_tried = []
+        if platform.system() != 'Windows':
+            return None, methods_tried
+        # Method 1: Windows service
+        try:
+            methods_tried.append('Windows service')
+            result = subprocess.run(['sc', 'start', 'Ollama'], capture_output=True, text=True, timeout=15, check=False)
+            if result.returncode == 0 or 'START_PENDING' in result.stdout:
+                time.sleep(5)
+                if self.get_service_status():
+                    return {"success": True, "message": "Ollama service started successfully via Windows service"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        # Method 2: direct execution if command exists
+        try:
+            methods_tried.append('direct execution')
+            check = subprocess.run(['where', 'ollama'], capture_output=True, text=True, timeout=5, check=False)
+            if check.returncode == 0:
+                try:
+                    subprocess.Popen(
+                        ['ollama', 'serve'],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                        close_fds=True
+                    )
+                except Exception:
+                    pass
+                time.sleep(5)
+                if self.get_service_status():
+                    return {"success": True, "message": "Ollama service started successfully via direct execution"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
+            pass
+        # Method 3: common installation paths
+        try:
+            methods_tried.append('installation path')
+            common_paths = [
+                r"C:\Program Files\Ollama\ollama.exe",
+                r"C:\Users\%USERNAME%\AppData\Local\Programs\Ollama\ollama.exe",
+                os.path.expanduser(r"~\AppData\Local\Programs\Ollama\ollama.exe")
+            ]
+            for path in common_paths:
+                expanded = os.path.expandvars(path)
+                if os.path.exists(expanded):
+                    try:
+                        process = subprocess.Popen(
+                            [expanded, 'serve'],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                            close_fds=True
+                        )
+                    except Exception:
+                        process = None
+                    time.sleep(5)
+                    if self.get_service_status():
+                        return {"success": True, "message": f"Ollama service started successfully from {expanded}"}, methods_tried
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return None, methods_tried
+
+    def _start_service_unix(self):
+        """Attempt to start Ollama service on Unix-like systems. Returns (result_dict, methods_tried)."""
+        import subprocess
+        methods_tried = []
+        if platform.system() == 'Windows':
+            return None, methods_tried
+        # systemctl
+        try:
+            methods_tried.append('systemctl')
+            result = subprocess.run(['systemctl', 'start', 'ollama'], capture_output=True, text=True, timeout=15, check=False)
+            if result.returncode == 0:
+                time.sleep(5)
+                if self.get_service_status():
+                    return {"success": True, "message": "Ollama service started successfully via systemctl"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        # service command
+        try:
+            methods_tried.append('service command')
+            result = subprocess.run(['service', 'ollama', 'start'], capture_output=True, text=True, timeout=15, check=False)
+            if result.returncode == 0:
+                time.sleep(5)
+                if self.get_service_status():
+                    return {"success": True, "message": "Ollama service started successfully via service command"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        # direct execution
+        try:
+            methods_tried.append('direct execution')
+            check = subprocess.run(['which', 'ollama'], capture_output=True, text=True, timeout=5, check=False)
+            if check.returncode == 0:
+                try:
+                    process = subprocess.Popen(
+                        ['ollama', 'serve'],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True
+                    )
+                except Exception:
+                    process = None
+                time.sleep(5)
+                if self.get_service_status():
+                    return {"success": True, "message": "Ollama service started successfully via direct execution"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
+            pass
+        return None, methods_tried
+
+    def _stop_service_windows(self):
+        """Attempt to stop service on Windows. Returns (result_dict, methods_tried)."""
+        import subprocess
+        methods_tried = []
+        if platform.system() != 'Windows':
+            return None, methods_tried
+        # Windows service stop
+        try:
+            methods_tried.append('Windows service')
+            result = subprocess.run(['sc', 'stop', 'Ollama'], capture_output=True, text=True, timeout=15)
+            if result.returncode == 0 or 'STOP_PENDING' in result.stdout:
+                time.sleep(5)
+                if not self.get_service_status():
+                    return {"success": True, "message": "Ollama service stopped successfully via Windows service"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        # Graceful termination
+        try:
+            methods_tried.append('process termination')
+            subprocess.run(['taskkill', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10)
+            time.sleep(3)
+            if not self.get_service_status():
+                return {"success": True, "message": "Ollama service stopped successfully via graceful termination"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        # Force kill
+        try:
+            methods_tried.append('force kill')
+            subprocess.run(['taskkill', '/F', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10)
+            time.sleep(3)
+            if not self.get_service_status():
+                return {"success": True, "message": "Ollama service stopped successfully via force kill"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        return None, methods_tried
+
+    def _stop_service_unix(self):
+        """Attempt to stop service on Unix-like systems. Returns (result_dict, methods_tried)."""
+        import subprocess
+        methods_tried = []
+        if platform.system() == 'Windows':
+            return None, methods_tried
+        # systemctl
+        try:
+            methods_tried.append('systemctl')
+            result = subprocess.run(['systemctl', 'stop', 'ollama'], capture_output=True, text=True, timeout=15)
+            if result.returncode == 0:
+                time.sleep(5)
+                if not self.get_service_status():
+                    return {"success": True, "message": "Ollama service stopped successfully via systemctl"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        # service command
+        try:
+            methods_tried.append('service command')
+            result = subprocess.run(['service', 'ollama', 'stop'], capture_output=True, text=True, timeout=15)
+            if result.returncode == 0:
+                time.sleep(5)
+                if not self.get_service_status():
+                    return {"success": True, "message": "Ollama service stopped successfully via service command"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        # pkill TERM
+        try:
+            methods_tried.append('pkill graceful')
+            subprocess.run(['pkill', '-TERM', '-f', 'ollama'], capture_output=True, text=True, timeout=10)
+            time.sleep(3)
+            if not self.get_service_status():
+                return {"success": True, "message": "Ollama service stopped successfully via graceful pkill"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        # pkill -9
+        try:
+            methods_tried.append('pkill force')
+            subprocess.run(['pkill', '-9', '-f', 'ollama'], capture_output=True, text=True, timeout=10)
+            time.sleep(3)
+            if not self.get_service_status():
+                return {"success": True, "message": "Ollama service stopped successfully via force pkill"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        # killall TERM
+        try:
+            methods_tried.append('killall')
+            subprocess.run(['killall', '-TERM', 'ollama'], capture_output=True, text=True, timeout=10)
+            time.sleep(3)
+            if not self.get_service_status():
+                return {"success": True, "message": "Ollama service stopped successfully via killall"}, methods_tried
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        return None, methods_tried
 
     def get_service_status(self):
         """Check if Ollama service is running"""
         try:
             import subprocess
-            import platform
-
             if platform.system() == "Windows":
                 # On Windows, check if ollama.exe process is running
                 try:
                     result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq ollama.exe', '/NH'],
-                                          capture_output=True, text=True, timeout=5)
+                        capture_output=True, text=True, timeout=5)
                     if result.returncode == 0:
                         return "ollama.exe" in result.stdout.lower()
                     return False
@@ -857,7 +941,7 @@ class OllamaService:
                     # Try alternative method - check for ollama serve process
                     try:
                         result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq ollama.exe'],
-                                              capture_output=True, text=True, timeout=5)
+                            capture_output=True, text=True, timeout=5)
                         return result.returncode == 0 and "ollama.exe" in result.stdout
                     except Exception:
                         return False
@@ -865,7 +949,7 @@ class OllamaService:
                 # On Unix-like systems, use pgrep or ps
                 try:
                     result = subprocess.run(['pgrep', '-f', 'ollama'],
-                                          capture_output=True, text=True, timeout=5)
+                        capture_output=True, text=True, timeout=5)
                     return result.returncode == 0
                 except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
                     # Fallback to ps command
@@ -876,17 +960,13 @@ class OllamaService:
                         return False
 
         except Exception as e:
-            print(f"Error checking service status: {str(e)}")
+            self.logger.exception(f"Error checking service status: {str(e)}")
             return False
 
     def start_service(self):
         """Start the Ollama service"""
         try:
             import subprocess
-            import platform
-            import time
-            import os
-
             # Check if already running
             if self.get_service_status():
                 return {"success": True, "message": "Ollama service is already running"}
@@ -899,7 +979,7 @@ class OllamaService:
                 try:
                     methods_tried.append("Windows service")
                     result = subprocess.run(['sc', 'start', 'Ollama'],
-                                          capture_output=True, text=True, timeout=15)
+                        capture_output=True, text=True, timeout=15)
                     if result.returncode == 0 or "START_PENDING" in result.stdout:
                         time.sleep(5)  # Wait longer for service
                         if self.get_service_status():
@@ -992,7 +1072,7 @@ class OllamaService:
                             ['ollama', 'serve'],
                             stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL,
-                            preexec_fn=os.setsid  # Create new process group
+                            preexec_fn=getattr(os, 'setsid', None)  # Create new process group if available
                         )
                         time.sleep(5)
                         if self.get_service_status():
@@ -1008,129 +1088,35 @@ class OllamaService:
             return {"success": False, "message": f"Unexpected error starting service: {str(e)}"}
 
     def stop_service(self):
-        """Stop the Ollama service"""
         try:
-            import subprocess
-            import platform
-            import time
-            import signal
-            import os
-
-            # Check if already stopped
             if not self.get_service_status():
                 return {"success": True, "message": "Ollama service is already stopped"}
-
-            if platform.system() == "Windows":
-                methods_tried = []
-
-                # Method 1: Try Windows service stop
-                try:
-                    methods_tried.append("Windows service")
-                    result = subprocess.run(['sc', 'stop', 'Ollama'],
-                                          capture_output=True, text=True, timeout=15)
-                    if result.returncode == 0 or "STOP_PENDING" in result.stdout:
-                        time.sleep(5)  # Wait for service to stop
-                        if not self.get_service_status():
-                            return {"success": True, "message": "Ollama service stopped successfully via Windows service"}
-                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
-                    pass
-
-                # Method 2: Try to kill processes gracefully first
-                try:
-                    methods_tried.append("process termination")
-                    # First try graceful termination
-                    result = subprocess.run(['taskkill', '/IM', 'ollama.exe'],
-                                          capture_output=True, text=True, timeout=10)
-                    time.sleep(3)
-                    if not self.get_service_status():
-                        return {"success": True, "message": "Ollama service stopped successfully via graceful termination"}
-                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
-                    pass
-
-                # Method 3: Force kill if graceful termination didn't work
-                try:
-                    methods_tried.append("force kill")
-                    result = subprocess.run(['taskkill', '/F', '/IM', 'ollama.exe'],
-                                          capture_output=True, text=True, timeout=10)
-                    time.sleep(3)
-                    if not self.get_service_status():
-                        return {"success": True, "message": "Ollama service stopped successfully via force kill"}
-                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
-                    pass
-
+            if platform.system() == 'Windows':
+                result, methods = stop_service_windows(self.get_service_status)
             else:
-                methods_tried = []
-
-                # Method 1: Try systemctl (systemd)
-                try:
-                    methods_tried.append("systemctl")
-                    result = subprocess.run(['systemctl', 'stop', 'ollama'],
-                                          capture_output=True, text=True, timeout=15)
-                    if result.returncode == 0:
-                        time.sleep(5)
-                        if not self.get_service_status():
-                            return {"success": True, "message": "Ollama service stopped successfully via systemctl"}
-                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
-                    pass
-
-                # Method 2: Try service command (init.d)
-                try:
-                    methods_tried.append("service command")
-                    result = subprocess.run(['service', 'ollama', 'stop'],
-                                          capture_output=True, text=True, timeout=15)
-                    if result.returncode == 0:
-                        time.sleep(5)
-                        if not self.get_service_status():
-                            return {"success": True, "message": "Ollama service stopped successfully via service command"}
-                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
-                    pass
-
-                # Method 3: Try pkill (graceful)
-                try:
-                    methods_tried.append("pkill graceful")
-                    result = subprocess.run(['pkill', '-TERM', '-f', 'ollama'],
-                                          capture_output=True, text=True, timeout=10)
-                    time.sleep(3)
-                    if not self.get_service_status():
-                        return {"success": True, "message": "Ollama service stopped successfully via graceful pkill"}
-                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
-                    pass
-
-                # Method 4: Try pkill (force)
-                try:
-                    methods_tried.append("pkill force")
-                    result = subprocess.run(['pkill', '-9', '-f', 'ollama'],
-                                          capture_output=True, text=True, timeout=10)
-                    time.sleep(3)
-                    if not self.get_service_status():
-                        return {"success": True, "message": "Ollama service stopped successfully via force pkill"}
-                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
-                    pass
-
-                # Method 5: Try killall as last resort
-                try:
-                    methods_tried.append("killall")
-                    result = subprocess.run(['killall', '-TERM', 'ollama'],
-                                          capture_output=True, text=True, timeout=10)
-                    time.sleep(3)
-                    if not self.get_service_status():
-                        return {"success": True, "message": "Ollama service stopped successfully via killall"}
-                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
-                    pass
-
-            # If we get here, all methods failed
-            methods_str = ", ".join(methods_tried) if methods_tried else "no methods"
-            return {"success": False, "message": f"Failed to stop Ollama service. Tried: {methods_str}. The service may not be running or you may need administrative privileges."}
-
+                result, methods = stop_service_unix(self.get_service_status)
+            if result:
+                return result
+            methods_str = ", ".join(methods) if methods else "no methods"
+            return {"success": False, "message": f"Failed to stop Ollama service. Tried: {methods_str}."}
         except Exception as e:
             return {"success": False, "message": f"Unexpected error stopping service: {str(e)}"}
 
     def restart_service(self):
         """Restart the Ollama service"""
         try:
+            # Stop background updates temporarily to avoid race conditions during restart
+            try:
+                if self._background_stats and self._background_stats.is_alive():
+                    self._stop_background.set()
+                    self._background_stats.join(timeout=5)
+            except Exception:
+                pass
             stop_result = self.stop_service()
             if not stop_result["success"]:
-                return stop_result
+                # Attempt to proceed if service already stopped
+                if "already" not in stop_result.get("message", "").lower():
+                    return stop_result
 
             # Wait a moment before starting
             import time
@@ -1138,69 +1124,59 @@ class OllamaService:
 
             start_result = self.start_service()
             if start_result["success"]:
-                return {"success": True, "message": "Ollama service restarted successfully"}
+                # Flush caches and restart background thread
+                try:
+                    self.clear_all_caches()
+                except Exception:
+                    pass
+                try:
+                    self._stop_background.clear()
+                    self._start_background_updates()
+                except Exception:
+                    pass
+                return {"success": True, "message": "Ollama service restarted successfully (caches & background refreshed)"}
             else:
+                # Attempt to restart background updates even on failure to avoid stale thread state
+                try:
+                    self._stop_background.clear()
+                    self._start_background_updates()
+                except Exception:
+                    pass
                 return start_result
 
         except Exception as e:
             return {"success": False, "message": f"Unexpected error restarting service: {str(e)}"}
 
-    def get_models_memory_usage(self):
-        """Get memory usage information for running models"""
+    def full_restart(self):
+        """Comprehensive application restart: clear caches, reload model settings, restart background thread, return health. Does NOT restart Ollama service."""
         try:
-            # Get running models
-            running_models = self.get_running_models()
-
-            # Get system memory info
-            system_memory = psutil.virtual_memory()
-            system_vram = self._get_vram_info()
-
-            memory_usage = {
-                'system_ram': {
-                    'total': system_memory.total,
-                    'used': system_memory.used,
-                    'free': system_memory.available,
-                    'percent': system_memory.percent
-                },
-                'system_vram': system_vram,
-                'models': []
-            }
-
-            # For each running model, estimate memory usage
-            # Note: Ollama doesn't provide per-model memory usage directly,
-            # so we provide system-level memory info and model size as reference
-            for model in running_models:
-                model_info = {
-                    'name': model['name'],
-                    'size': model.get('size', 'Unknown'),
-                    'size_bytes': model.get('size_bytes', 0),
-                    'estimated_ram_usage': 'N/A',  # Ollama doesn't expose per-model RAM usage
-                    'estimated_vram_usage': 'N/A'   # Ollama doesn't expose per-model VRAM usage
-                }
-
-                # Try to get model size in bytes for estimation
-                try:
-                    if model.get('size'):
-                        # Parse size string like "4.1 GB" or "2.5 MB"
-                        size_str = model['size'].upper()
-                        if 'GB' in size_str:
-                            size_gb = float(size_str.replace('GB', '').strip())
-                            model_info['size_bytes'] = int(size_gb * 1024 * 1024 * 1024)
-                        elif 'MB' in size_str:
-                            size_mb = float(size_str.replace('MB', '').strip())
-                            model_info['size_bytes'] = int(size_mb * 1024 * 1024)
-                        elif 'KB' in size_str:
-                            size_kb = float(size_str.replace('KB', '').strip())
-                            model_info['size_bytes'] = int(size_kb * 1024)
-                except Exception:
-                    pass
-
-                memory_usage['models'].append(model_info)
-
-            return memory_usage
-
+            # Clear all caches
+            try:
+                self.clear_all_caches()
+            except Exception:
+                pass
+            # Reload model settings to pick up external changes
+            try:
+                self._model_settings = self.load_model_settings()
+            except Exception:
+                pass
+            # Ensure background thread running
+            try:
+                if not (self._background_stats and self._background_stats.is_alive()):
+                    self._stop_background.clear()
+                    self._start_background_updates()
+            except Exception:
+                pass
+            return {"success": True, "message": "Full application restart completed", "health": self.get_component_health()}
         except Exception as e:
-            print(f"Error getting models memory usage: {str(e)}")
+            return {"success": False, "message": f"Unexpected error performing full restart: {str(e)}"}
+
+    def get_models_memory_usage(self):
+        try:
+            running_models = self.get_running_models()
+            return models_memory_usage(running_models)
+        except Exception as e:
+            self.logger.exception(f"Error getting models memory usage: {str(e)}")
             return {
                 'system_ram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0},
                 'system_vram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0},
@@ -1211,395 +1187,44 @@ class OllamaService:
     # Duplicate legacy implementations of get_downloadable_models/pull_model removed.
     # Unified versions with category support are defined later in file.
 
-    def load_settings(self):
-        """Load settings from file."""
-        try:
-            if not self.app:
-                return self.get_default_settings()
-
-            settings_file = self.app.config.get('SETTINGS_FILE', 'settings.json')
-            if os.path.exists(settings_file):
-                with open(settings_file, 'r') as f:
-                    return json.load(f)
-            return self.get_default_settings()
-        except Exception as e:
-            print(f"Error loading settings: {e}")
-            return self.get_default_settings()
-
-    def save_settings(self, settings):
-        """Save settings to file."""
-        try:
-            if not self.app:
-                return False
-
-            settings_file = self.app.config.get('SETTINGS_FILE', 'settings.json')
-
-            # Validate settings
-            default_settings = self.get_default_settings()
-            clean_settings = {}
-
-            for key, default_value in default_settings.items():
-                if key in settings:
-                    # Basic type validation
-                    if isinstance(default_value, (int, float)) and isinstance(settings[key], (int, float, str)):
-                        try:
-                            if isinstance(default_value, int):
-                                clean_settings[key] = int(settings[key])
-                            else:
-                                clean_settings[key] = float(settings[key])
-                        except ValueError:
-                            clean_settings[key] = default_value
-                    else:
-                        clean_settings[key] = settings[key]
-                else:
-                    clean_settings[key] = default_value
-
-            with open(settings_file, 'w') as f:
-                json.dump(clean_settings, f, indent=2)
-            return True
-        except Exception as e:
-            print(f"Error saving settings: {e}")
-            return False
+    # Global settings file (settings.json) removed; defaults returned directly below.
 
     def get_default_settings(self):
-        """Get default model settings."""
+        """Return base default per-model generation settings (global settings deprecated)."""
         return {
             "temperature": 0.7,
             "top_k": 40,
             "top_p": 0.9,
             "num_ctx": 2048,
-            "seed": 0 # 0 means random
+            "seed": 0,
+            # Advanced sampling / prediction controls
+            "num_predict": 256,
+            "repeat_last_n": 64,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "frequency_penalty": 0.0,
+            "stop": [],
+            "min_p": 0.05,
+            "typical_p": 1.0,
+            "penalize_newline": False,
+            # Mirostat adaptive sampling disabled by default
+            "mirostat": 0,
+            "mirostat_tau": 5.0,
+            "mirostat_eta": 0.1
         }
 
+    # Delegated model catalog methods (moved to model_catalog.py)
     def get_best_models(self):
-        """Get a curated list of the best/most popular downloadable models."""
-        return [
-            {
-                "name": "llama3",
-                "description": "Meta's latest open LLM",
-                "parameter_size": "8B",
-                "size": "4.7GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "llama3.1",
-                "description": "Meta Llama 3.1 with tool calling",
-                "parameter_size": "8B",
-                "size": "4.7GB",
-                "has_vision": False,
-                "has_tools": True,
-                "has_reasoning": False
-            },
-            {
-                "name": "mistral",
-                "description": "Mistral AI's 7B model",
-                "parameter_size": "7B",
-                "size": "4.1GB",
-                "has_vision": False,
-                "has_tools": True,
-                "has_reasoning": False
-            },
-            {
-                "name": "gemma",
-                "description": "Google's open model",
-                "parameter_size": "7B",
-                "size": "5.0GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "phi3",
-                "description": "Microsoft's lightweight model",
-                "parameter_size": "3.8B",
-                "size": "2.3GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "neural-chat",
-                "description": "Fine-tuned model for chat",
-                "parameter_size": "7B",
-                "size": "4.1GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "starling-lm",
-                "description": "High quality RLHF model",
-                "parameter_size": "7B",
-                "size": "4.1GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "codellama",
-                "description": "Code specialized model",
-                "parameter_size": "7B",
-                "size": "3.8GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "llama2",
-                "description": "Meta's previous generation",
-                "parameter_size": "7B",
-                "size": "3.8GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "llava",
-                "description": "Multimodal (image + text)",
-                "parameter_size": "7B",
-                "size": "4.5GB",
-                "has_vision": True,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "qwen3-vl",
-                "description": "Alibaba multimodal + tool-capable model",
-                "parameter_size": "4B/8B",
-                "size": "3.0GB / 5.5GB",
-                "has_vision": True,
-                "has_tools": True,
-                "has_reasoning": False
-            },
-            {
-                "name": "deepseek-r1",
-                "description": "DeepSeek reasoning model (chain-of-thought)",
-                "parameter_size": "8B/32B",
-                "size": "4.7GB / 19GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": True
-            }
-        ]
+        from app.services.model_catalog import get_best_models as _get_best
+        return _get_best()
 
     def get_all_downloadable_models(self):
-        """Get extended list of all downloadable models."""
-        print("DEBUG: get_all_downloadable_models() called!")
-        best = self.get_best_models()
-        print(f"DEBUG: best models count = {len(best)}")
-        additional = [
-            {
-                "name": "qwen",
-                "description": "Alibaba's multilingual model",
-                "parameter_size": "7B",
-                "size": "4.5GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "qwen3-vl",
-                "description": "Alibaba's multimodal vision model",
-                "parameter_size": "4B/8B",
-                "size": "3.0GB / 5.5GB",
-                "has_vision": True,
-                "has_tools": True,
-                "has_reasoning": False
-            },
-            {
-                "name": "wizardlm",
-                "description": "Instruction-following model",
-                "parameter_size": "7B",
-                "size": "3.8GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "orca-mini",
-                "description": "Small but capable model",
-                "parameter_size": "3B",
-                "size": "1.9GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "vicuna",
-                "description": "Fine-tuned LLaMA model",
-                "parameter_size": "7B",
-                "size": "3.8GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "nous-hermes",
-                "description": "Long context model",
-                "parameter_size": "7B",
-                "size": "3.8GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "dolphin-mixtral",
-                "description": "Uncensored Mixtral variant",
-                "parameter_size": "8x7B",
-                "size": "26GB",
-                "has_vision": False,
-                "has_tools": True,
-                "has_reasoning": False
-            },
-            {
-                "name": "solar",
-                "description": "Upstage's SOLAR model",
-                "parameter_size": "10.7B",
-                "size": "6.1GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "deepseek-coder",
-                "description": "Code-focused model",
-                "parameter_size": "6.7B",
-                "size": "3.8GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "yi",
-                "description": "01.AI's bilingual model",
-                "parameter_size": "6B",
-                "size": "3.5GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "zephyr",
-                "description": "HuggingFace's fine-tuned Mistral",
-                "parameter_size": "7B",
-                "size": "4.1GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "openchat",
-                "description": "OpenChat 3.5 model",
-                "parameter_size": "7B",
-                "size": "4.1GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "stablelm",
-                "description": "Stability AI's language model",
-                "parameter_size": "3B",
-                "size": "1.6GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "falcon",
-                "description": "TII's open-source model",
-                "parameter_size": "7B",
-                "size": "3.8GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "mixtral",
-                "description": "Mistral's MoE model",
-                "parameter_size": "8x7B",
-                "size": "26GB",
-                "has_vision": False,
-                "has_tools": True,
-                "has_reasoning": False
-            },
-            {
-                "name": "command-r",
-                "description": "Cohere's command model",
-                "parameter_size": "35B",
-                "size": "20GB",
-                "has_vision": False,
-                "has_tools": True,
-                "has_reasoning": False
-            },
-            {
-                "name": "bakllava",
-                "description": "Multimodal LLaVA variant",
-                "parameter_size": "7B",
-                "size": "4.5GB",
-                "has_vision": True,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "llava-llama3",
-                "description": "LLaVA with Llama 3 base",
-                "parameter_size": "8B",
-                "size": "5.5GB",
-                "has_vision": True,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "llava-phi3",
-                "description": "LLaVA with Phi-3 base",
-                "parameter_size": "3.8B",
-                "size": "2.9GB",
-                "has_vision": True,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "moondream",
-                "description": "Tiny vision language model",
-                "parameter_size": "1.6B",
-                "size": "1.7GB",
-                "has_vision": True,
-                "has_tools": False,
-                "has_reasoning": False
-            },
-            {
-                "name": "deepseek-r1",
-                "description": "Advanced reasoning model with chain-of-thought",
-                "parameter_size": "8B/32B/671B",
-                "size": "4.7GB / 19GB / 400GB+",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": True
-            },
-            {
-                "name": "qwq",
-                "description": "Qwen with Questions - reasoning specialist",
-                "parameter_size": "32B",
-                "size": "19GB",
-                "has_vision": False,
-                "has_tools": False,
-                "has_reasoning": True
-            }
-        ]
-        return best + additional
+        from app.services.model_catalog import get_all_downloadable_models as _get_all
+        return _get_all()
 
     def get_downloadable_models(self, category='best'):
-        """Get downloadable models by category."""
-        print(f"DEBUG: get_downloadable_models called with category={category} [VERSION_MARKER_20251123_1440]")
-        if category == 'all':
-            result = self.get_all_downloadable_models()
-            print(f"DEBUG: Returning {len(result)} models")
-            return result
-        print(f"DEBUG: Returning best models")
-        return self.get_best_models()
+        from app.services.model_catalog import get_downloadable_models as _get_dl
+        return _get_dl(category)
 
     def pull_model(self, model_name):
         """Pull a model from the Ollama library."""

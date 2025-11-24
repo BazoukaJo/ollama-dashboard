@@ -14,7 +14,10 @@ class Config:
     OLLAMA_PORT = int(os.getenv('OLLAMA_PORT', '11434'))
     MAX_HISTORY = int(os.getenv('MAX_HISTORY', '50'))
     HISTORY_FILE = os.getenv('HISTORY_FILE', 'history.json')
-    SETTINGS_FILE = os.getenv('SETTINGS_FILE', 'settings.json')
+    # Global settings file deprecated; only per-model settings retained.
+    MODEL_SETTINGS_FILE = os.getenv('MODEL_SETTINGS_FILE', 'model_settings.json')
+    LOG_FILE = os.getenv('LOG_FILE', 'logs/ollama-dashboard.log')
+    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     STATIC_URL_PATH = ''
     STATIC_FOLDER = 'static'
     TEMPLATE_FOLDER = 'templates'
@@ -44,6 +47,21 @@ def create_app():
             "expose_headers": "*"
         }
     })
+
+    # Configure logging to file if requested
+    import logging
+    from logging.handlers import RotatingFileHandler
+    import os as _os
+    log_file = app.config.get('LOG_FILE')
+    log_level = app.config.get('LOG_LEVEL', 'INFO')
+    if log_file:
+        os_dir = _os.path.dirname(log_file)
+        if os_dir and not _os.path.exists(os_dir):
+            _os.makedirs(os_dir, exist_ok=True)
+        handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)
+        handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+        handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
+        logging.getLogger().addHandler(handler)
 
     # Register template filters
     _register_template_filters(app)

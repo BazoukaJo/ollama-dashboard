@@ -1,0 +1,1 @@
+Global settings.json removed. If present locally it is ignored. Safe to delete. Per-model settings only in model_settings.json.

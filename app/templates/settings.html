@@ -66,9 +66,18 @@
                                 <div class="form-text text-muted">Random seed. Set to 0 for random.</div>
                             </div>
 
+                            <div class="mb-4 form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="modelSettingsAutoSave">
+                                <label class="form-check-label" for="modelSettingsAutoSave">Auto-save recommended per-model defaults</label>
+                                <div class="form-text text-muted">If enabled, recommended defaults will be auto-saved when new models are detected (by the background agent)</div>
+                            </div>
+
                             <div class="d-flex justify-content-between mt-5">
                                 <a href="/" class="btn btn-outline-secondary">
                                     <i class="fas fa-arrow-left me-2"></i>Back
+                                </a>
+                                <a href="/admin/model-defaults" class="btn btn-outline-secondary">
+                                    <i class="fas fa-tools me-2"></i>Admin Model Defaults
                                 </a>
                                 <button type="submit" class="btn btn-primary">
                                     <i class="fas fa-save me-2"></i>Save Changes
@@ -104,6 +113,10 @@
                     document.getElementById('numCtxValue').textContent = settings.num_ctx;
 
                     document.getElementById('seed').value = settings.seed;
+                    // Model settings autosave toggle
+                    const autoSave = settings.model_settings_auto_save !== undefined ? settings.model_settings_auto_save : true;
+                    const checkbox = document.getElementById('modelSettingsAutoSave');
+                    checkbox.checked = autoSave;
                 }
             } catch (error) {
                 console.error('Error loading settings:', error);
@@ -140,6 +153,7 @@
                 num_ctx: parseInt(document.getElementById('num_ctx').value),
                 seed: parseInt(document.getElementById('seed').value)
             };
+            settings.model_settings_auto_save = document.getElementById('modelSettingsAutoSave').checked;
 
             try {
                 const response = await fetch('/api/settings', {

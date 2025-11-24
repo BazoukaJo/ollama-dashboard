@@ -9,13 +9,15 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v={{ timestamp }}">
 </head>
 <body>
+    <!-- Reload button (top-left) -->
+    <button id="reloadBtn" class="compact-toggle-btn reload-btn-position" title="Reload application" aria-label="Reload application" onclick="reloadApplication()">
+        <i class="fas fa-sync-alt"></i>
+    </button>
     <!-- Compact Mode Toggle Button -->
     <button id="compactToggle" class="compact-toggle-btn" title="Toggle Compact Mode">
         <i class="fas fa-compress"></i>
     </button>
-    <button id="settingsBtn" class="compact-toggle-btn settings-btn-position" title="Settings" onclick="window.location.href='/settings'">
-        <i class="fas fa-cog"></i>
-    </button>
+    <!-- Settings button removed (deprecated global settings page) -->
 
     <div class="container py-3">
         <div class="title-container text-center mb-1">
@@ -35,11 +37,41 @@
             <span>Last updated: <span id="lastUpdate"></span> • Next refresh in <span id="nextRefresh">30</span>s</span>
         </div>
 
-        <!-- Health Status Indicator -->
-        <div class="d-flex justify-content-center mb-2">
+        <!-- Restart confirmation modal -->
+        <div class="modal fade" id="restartConfirmModal" tabindex="-1" aria-labelledby="restartConfirmModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content bg-dark text-light">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="restartConfirmModalLabel">Confirm Restart</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Restarting the Ollama service will stop and start background processes. This may interrupt running models and ongoing requests. Are you sure you want to proceed?</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button id="confirmRestartBtn" type="button" class="btn btn-warning">Restart Ollama</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Health Status Indicator and Service Controls -->
+        <div class="d-flex justify-content-center mb-2 align-items-center gap-2">
             <div id="healthStatus" class="badge bg-secondary health-status-badge">
                 <i class="fas fa-heartbeat me-2"></i>
                 <span id="healthText">Checking health...</span>
+            </div>
+            <div class="service-controls d-flex gap-2 align-items-center">
+                <button id="startServiceBtn" class="btn btn-sm btn-success" title="Start Ollama service" onclick="startOllamaService()">
+                    <i class="fas fa-play"></i>
+                </button>
+                <button id="stopServiceBtn" class="btn btn-sm btn-secondary" title="Stop Ollama service" onclick="stopOllamaService()">
+                    <i class="fas fa-stop"></i>
+                </button>
+                <button id="restartServiceBtn" class="btn btn-sm btn-warning" title="Restart Ollama service" onclick="showRestartConfirm()">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
             </div>
         </div>
 
@@ -89,7 +121,7 @@
                                     <i class="fas fa-palette resource-icon resource-icon-gpu"></i>
                                     <span class="metric-label-compact">VRAM</span>
                                 </div>
-                                <span class="metric-value-compact" id="vramPercent">{{ system_stats.vram.percent|round(1) if system_stats.vram.total > 0 else '--' }}%</span>
+                                <span class="metric-value-compact" id="vramPercent">{{ system_stats.vram.percent|round(1) if system_stats.vram is defined and system_stats.vram.total is defined and system_stats.vram.total > 0 else '--' }}%</span>
                             </div>
                             <canvas class="timeline-canvas" id="vramTimeline" width="200" height="20"></canvas>
                         </div>
@@ -117,10 +149,10 @@
                             <i class="fas fa-play-circle text-success section-icon"></i>
                             <span class="fw-semibold text-light section-title-text">Running Models ({{ models|length }})</span>
                         </div>
-                        <div class="row g-3">
+                        <div class="row g-3" id="runningModelsContainer">
                             {% for model in models %}
                             <div class="col-md-6 col-lg-4">
-                                <div class="model-card h-100">
+                                <div class="model-card h-100" data-model-name="{{ model.name|e }}">
                                     <div class="model-header">
                                         <div class="model-icon-wrapper">
                                             <i class="fas fa-brain model-icon-main"></i>
@@ -131,7 +163,11 @@
                                             </span>
                                         </div>
                                     </div>
-                                    <div class="model-title">{{ model.name }}</div>
+                                    <div class="model-title">{{ model.name }}
+                                        {% if model.has_custom_settings %}
+                                        <span class="badge bg-info text-dark ms-2" title="Custom settings configured">⚙️</span>
+                                        {% endif %}
+                                    </div>
                                     <div class="model-capabilities">
                                         <span class="capability-icon {{ 'enabled' if model.has_reasoning else 'disabled' }}" title="Reasoning: {{ 'Available' if model.has_reasoning else 'Not available' }}">
                                             <i class="fas fa-brain"></i>
@@ -151,7 +187,7 @@
                                                 </div>
                                                 <div class="spec-content">
                                                     <div class="spec-label">Family</div>
-                                                    <div class="spec-value">{{ model.families_str|default('Unknown') }}</div>
+                                                    <div class="spec-value">{{ model.details.family if model.details is defined and model.details.family is defined else 'Unknown' }}</div>
                                                 </div>
                                             </div>
                                             <div class="spec-item">
@@ -198,10 +234,13 @@
                                     </div>
                                     <div class="model-actions">
                                         <div class="btn-group w-100">
-                                            <button class="btn btn-info" onclick="showModelInfo('{{ model.name }}')" title="View model information">
+                                            <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information">
                                                 <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
                                             </button>
-                                            <button class="btn btn-warning" onclick="stopModel('{{ model.name }}')" title="Stop model">
+                                            <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings">
+                                                <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
+                                            </button>
+                                            <button class="btn btn-warning" onclick="stopModel(this.closest('.model-card').dataset.modelName)" title="Stop model">
                                                 <i class="fas fa-stop"></i> <span class="d-none d-sm-inline">Stop</span>
                                             </button>
                                         </div>
@@ -224,10 +263,10 @@
                             </div>
                             <small class="text-muted">{{ available_models|length }} model{{ available_models|length != 1 and 's' or '' }} ready to deploy</small>
                         </div>
-                        <div class="row g-3">
+                        <div class="row g-3" id="availableModelsContainer">
                             {% for model in available_models %}
                             <div class="col-md-6 col-lg-4">
-                                <div class="model-card h-100">
+                                <div class="model-card h-100" data-model-name="{{ model.name|e }}">
                                     <div class="model-header">
                                         <div class="model-icon-wrapper">
                                             <i class="fas fa-box model-icon-main"></i>
@@ -238,7 +277,11 @@
                                             </span>
                                         </div>
                                     </div>
-                                    <div class="model-title">{{ model.name }}</div>
+                                    <div class="model-title">{{ model.name }}
+                                        {% if model.has_custom_settings %}
+                                        <span class="badge bg-info text-dark ms-2" title="Custom settings configured">⚙️</span>
+                                        {% endif %}
+                                    </div>
                                     <div class="model-capabilities">
                                         <span class="capability-icon {{ 'enabled' if model.has_reasoning else 'disabled' }}" title="Reasoning: {{ 'Available' if model.has_reasoning else 'Not available' }}">
                                             <i class="fas fa-brain"></i>
@@ -267,7 +310,7 @@
                                                 </div>
                                                 <div class="spec-content">
                                                     <div class="spec-label">Parameters</div>
-                                                    <div class="spec-value">{{ model.details.parameter_size|default('Unknown') }}</div>
+                                                    <div class="spec-value">{{ model.details.parameter_size if model.details is defined and model.details.parameter_size is defined else 'Unknown' }}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -305,13 +348,16 @@
                                         </div>
                                     </div>
                                     <div class="model-actions">
-                                        <button class="btn btn-success me-2" onclick="startModel('{{ model.name }}')" title="Start model" aria-label="Start model">
+                                        <button class="btn btn-success me-2" onclick="startModel(this.closest('.model-card').dataset.modelName)" title="Start model" aria-label="Start model">
                                             <i class="fas fa-play"></i> <span class="d-none d-sm-inline">Start</span>
                                         </button>
-                                        <button class="btn btn-info me-2" onclick="showModelInfo('{{ model.name }}')" title="View model information" aria-label="View model information">
+                                        <button class="btn btn-info me-2" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information" aria-label="View model information">
                                             <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
                                         </button>
-                                        <button class="btn btn-danger" onclick="deleteModel('{{ model.name }}')" title="Delete model" aria-label="Delete model">
+                                        <button class="btn btn-secondary me-2" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings" aria-label="Settings">
+                                            <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
+                                        </button>
+                                        <button class="btn btn-danger" onclick="deleteModel(this.closest('.model-card').dataset.modelName)" title="Delete model" aria-label="Delete model">
                                             <i class="fas fa-trash"></i> <span class="d-none d-sm-inline">Delete</span>
                                         </button>
                                     </div>
@@ -370,7 +416,12 @@
     </div>
     {% endif %}
 
+    <script src="{{ url_for('static', filename='js/modules/utils.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/modelCards.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/serviceControl.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/settings.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/bootstrap.js') }}?v={{ timestamp }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

@@ -8,11 +8,11 @@ A lightweight, personal dashboard for monitoring your locally running Ollama mod
 
 Ollama Dashboard provides a clean, minimal web interface to:
 
- - View all your running Ollama models in one place
- - Monitor model details like family, parameters, and quantization
- - Track model sizes and expiration times
- - View historical model usage
- - Auto-refresh every 30 seconds to keep information current
+- View all your running Ollama models in one place
+- Monitor model details like family, parameters, and quantization
+- Track model sizes and expiration times
+- View historical model usage
+- Auto-refresh every 30 seconds to keep information current
 
 ## Features
 
@@ -28,6 +28,8 @@ Ollama Dashboard provides a clean, minimal web interface to:
 - 🔧 Service management controls
 - 🧠 Dynamic capability icons (vision detection)
 - 🚀 Warm start endpoint to pre-load models and avoid first-call socket errors
+- 🔁 Top-left "Reload" button to fully reload the dashboard (cache-busted)
+- ✅ Safer UI model management using `data-model-name` attributes for reliable DOM mapping
 
 ### Dashboard Features
 
@@ -49,6 +51,20 @@ Ollama Dashboard provides a clean, minimal web interface to:
 - Model compatibility checking
 - Real-time loading status
 
+### New UI & Developer Notes
+
+The dashboard has received several UX and developer-focused updates:
+
+- The dashboard now includes a top-left Reload button (a rotating arrow) which performs a full page reload and ensures a fresh, cache-busted page.
+- Model cards now include a `data-model-name` attribute and front-end code uses this attribute to locate cards when updating DOM state instead of relying on array indices.
+- Inline markup that previously passed raw model names to `onclick` handlers now uses a dataset lookup: `this.closest('.model-card').dataset.modelName` which avoids quoting/escaping issues.
+- `app/static/js/main.js` includes a small set of helpers used in the client code:
+
+  - `escapeHtml()` — escape arbitrary strings when inserting into JS-generated HTML templates.
+  - `cssEscape()` — wrapper around `CSS.escape()` (with a fallback) used for DOM query selectors containing arbitrary characters.
+
+These changes improve robustness for unusual model names and remove a common source of bugs when the DOM reorders or when model names contain special characters.
+
 ### System Monitoring
 
 - CPU, memory, and VRAM usage
@@ -64,13 +80,15 @@ Some larger or multimodal models can trigger a "forcibly closed" socket error th
 3. The start endpoint retries transient connection reset / forcibly closed / timeout errors up to 3 times.
 
 Vision capability is detected if:
-* Model name matches one of: `llava`, `bakllava`, `llava-llama3`, `llava-phi3`, `moondream`
-* Backend metadata sets `has_vision: true`
-* Families include projector / clip related indicators
+
+- Model name matches one of: `llava`, `bakllava`, `llava-llama3`, `llava-phi3`, `moondream`
+- Backend metadata sets `has_vision: true`
+- Families include projector / clip related indicators
 
 The frontend renders capability icons dynamically (implemented in `app/static/js/main.js`). Reasoning and tool usage icons are placeholders for future expansion.
 
 Manual warm start example:
+
 ```bash
 curl -X POST http://127.0.0.1:5000/api/models/start/llava
 ```
@@ -101,8 +119,11 @@ pip install -r requirements.txt
 3. Run the dashboard:
 
 ```bash
-python wsgi.py
+python OllamaDashboard.py
 ```
+
+> **Note:**
+> For legacy compatibility (e.g., some deployment platforms or scripts), a minimal `wsgi.py` wrapper is included. It simply imports and runs the app from `OllamaDashboard.py`. For all new usage, prefer running `OllamaDashboard.py` directly.
 
 ### Option 2: Docker Installation (Recommended)
 
@@ -124,6 +145,7 @@ cd ollama-dashboard
 For automatic management of the dashboard based on Ollama status:
 
 #### Service Installation (Recommended)
+
 ```powershell
 # Install as a Windows service (requires Administrator)
 .\scripts\ollama-dashboard-monitor.ps1 -Install
@@ -145,18 +167,19 @@ The dashboard will be available at http://127.0.0.1:5000
 
 ## Configuration
 
-The dashboard can be configured using environment variables:
+Environment variables:
 
-- `OLLAMA_HOST`: Ollama server host (default: localhost)
-- `OLLAMA_PORT`: Ollama server port (default: 11434)
-- `MAX_HISTORY`: Maximum number of history entries to keep (default: 50)
-- `HISTORY_FILE`: Path to history file (default: history.json)
+- `OLLAMA_HOST` (default: localhost)
+- `OLLAMA_PORT` (default: 11434)
+- `MAX_HISTORY` (default: 50)
+- `HISTORY_FILE` (default: history.json)
+- `MODEL_SETTINGS_FILE` (default: model_settings.json) – stores per‑model generation defaults.
 
-When running with Docker, these are pre-configured in the `docker-compose.yml` file.
+Legacy global settings file removed; only per-model settings persist in `model_settings.json`. When running with Docker these values are set in `docker-compose.yml`.
 
 ## Troubleshooting
 
-### Common Issues
+├── model_settings.json        # Per-model persisted generation settings
 
 1. **403 Forbidden Error**
    - Ensure Ollama is running on your host machine
@@ -200,12 +223,36 @@ python -m pytest --cov=app --cov-report=html
 ### Test Files
 
 - `tests/test_ollama_service.py` - Core Ollama service functionality
-- `test_api.py` - API endpoint testing
-- `test_chat_models.py` - Chat model integration tests
-- `test_disk.py` - Disk usage and storage tests
-- `test_models.py` - Model management tests
+- `tests/test_api.py` - API endpoint testing
+- `tests/test_chat_models.py` - Chat model integration tests
+- `tests/test_disk.py` - Disk usage and storage tests
+- `tests/test_models.py` - Model management tests
 - `tests/test_start_model_pytest.py` - Warm start endpoint tests
 - `tests/test_capabilities_pytest.py` - Capability detection & metadata tests
+
+### UI & Integration tests
+
+- A skippable Selenium-based UI test exists that checks UI handlers and robustness against special-character model names (it will be skipped if Selenium is not installed).
+- For CI-friendly browser tests we recommend Playwright.
+
+### Running Playwright UI tests locally
+
+Playwright tests are included under `tests/` and can be executed locally with the following steps:
+
+```bash
+# install dev dependencies (from repository root)
+pip install -r requirements-dev.txt
+# install browsers used by Playwright
+python -m playwright install --with-deps
+# run the tests (ensure Flask server isn't already running on 5000)
+pytest -q
+```
+
+If you prefer to run a single Playwright test interactively, use:
+
+```bash
+pytest tests/test_ui_playwright.py -q
+```
 
 ## Project Structure
 
@@ -219,8 +266,9 @@ ollama-dashboard/
 ├── docker/                       # Docker configuration
 ├── scripts/                      # Auto-start and utility scripts
 ├── tests/                        # Test suite
+├── DEVELOPER_NOTES.md            # Frontend developer guidance
 ├── requirements.txt              # Python dependencies
-├── wsgi.py                       # Application entry point
+├── OllamaDashboard.py             # Main application entry point
 └── README.md                     # This file
 ```
 

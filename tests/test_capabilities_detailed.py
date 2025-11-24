@@ -2,6 +2,7 @@
 Test script to verify capabilities detection is working correctly
 """
 import requests
+import pytest
 import json
 
 BASE_URL = "http://127.0.0.1:5000"
@@ -11,7 +12,7 @@ def test_downloadable_models_best():
     print("\n1. Testing /api/models/downloadable?category=best")
     print("-" * 50)
 
-    response = requests.get(f"{BASE_URL}/api/models/downloadable?category=best")
+    response = requests.get(f"{BASE_URL}/api/models/downloadable?category=best", timeout=5)
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
     data = response.json()
@@ -24,19 +25,19 @@ def test_downloadable_models_best():
     assert llava is not None, "Llava model not found"
     assert llava.get('has_vision') == True, f"Llava should have vision capability, got: {llava.get('has_vision')}"
 
-    print(f"✓ Llava model found with has_vision=True")
+    print("✓ Llava model found with has_vision=True")
     print(f"  - has_vision: {llava.get('has_vision')}")
     print(f"  - has_tools: {llava.get('has_tools')}")
     print(f"  - has_reasoning: {llava.get('has_reasoning')}")
 
-    return True
+    # Test assertions above will raise on failure; no return value needed
 
 def test_downloadable_models_all():
     """Test extended downloadable models have capabilities"""
     print("\n2. Testing /api/models/downloadable?category=all")
     print("-" * 50)
 
-    response = requests.get(f"{BASE_URL}/api/models/downloadable?category=all")
+    response = requests.get(f"{BASE_URL}/api/models/downloadable?category=all", timeout=5)
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
     data = response.json()
@@ -58,22 +59,21 @@ def test_downloadable_models_all():
 
     assert len(vision_models) >= 6, f"Expected at least 6 vision models, got {len(vision_models)}"
 
-    return True
+    # Test assertions above will raise on failure; no return value needed
 
 def test_available_models():
     """Test available models endpoint adds capabilities"""
     print("\n3. Testing /api/models/available")
     print("-" * 50)
 
-    response = requests.get(f"{BASE_URL}/api/models/available")
+    response = requests.get(f"{BASE_URL}/api/models/available", timeout=5)
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
     data = response.json()
     models = data.get('models', [])
 
     if len(models) == 0:
-        print("⚠ No available models found (no models downloaded yet)")
-        return True
+        pytest.skip("No available models found (no models downloaded yet)")
 
     print(f"✓ Found {len(models)} available models")
 
@@ -92,14 +92,14 @@ def test_available_models():
             for model in potential_vision:
                 print(f"    - {model['name']}: has_vision={model.get('has_vision')}")
 
-    return True
+    # Test assertions above will raise on failure; no return value needed
 
 def test_running_models():
     """Test running models endpoint adds capabilities"""
     print("\n4. Testing /api/models/running")
     print("-" * 50)
 
-    response = requests.get(f"{BASE_URL}/api/models/running")
+    response = requests.get(f"{BASE_URL}/api/models/running", timeout=5)
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
     data = response.json()
@@ -112,8 +112,7 @@ def test_running_models():
         models = []
 
     if len(models) == 0:
-        print("⚠ No running models (this is normal if no models are loaded)")
-        return True
+        pytest.skip("No running models (this is normal if no models are loaded)")
 
     print(f"✓ Found {len(models)} running models")
 
@@ -124,7 +123,7 @@ def test_running_models():
         print(f"    has_tools: {model.get('has_tools', False)}")
         print(f"    has_reasoning: {model.get('has_reasoning', False)}")
 
-    return True
+    # Test assertions above will raise on failure; no return value needed
 
 def main():
     print("=" * 50)
@@ -153,8 +152,9 @@ def main():
     except AssertionError as e:
         print(f"\n✗ TEST FAILED: {e}")
         return False
-    except Exception as e:
-        print(f"\n✗ ERROR: {e}")
+    except (requests.exceptions.RequestException, requests.exceptions.Timeout,
+            requests.exceptions.ConnectionError, json.JSONDecodeError) as e:
+        print(f"\n✗ NETWORK/API ERROR: {e}")
         return False
 
     return True

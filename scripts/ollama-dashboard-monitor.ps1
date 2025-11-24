@@ -34,7 +34,7 @@ function Test-OllamaRunning {
 function Test-DashboardRunning {
     try {
         $pythonProcesses = Get-Process -Name "python" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -like "*wsgi.py*" }
+            Where-Object { $_.CommandLine -like "*OllamaDashboard.py*" }
         return $pythonProcesses.Count -gt 0
     }
     catch {
@@ -47,7 +47,7 @@ function Start-Dashboard {
         $dashboardDir = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
         Push-Location $dashboardDir
 
-        $process = Start-Process -FilePath "python" -ArgumentList "wsgi.py" -WorkingDirectory $dashboardDir -NoNewWindow -PassThru
+        $process = Start-Process -FilePath "python" -ArgumentList "OllamaDashboard.py" -WorkingDirectory $dashboardDir -NoNewWindow -PassThru
         Write-Log "Dashboard started (PID: $($process.Id))"
         return $true
     }
@@ -63,7 +63,7 @@ function Start-Dashboard {
 function Stop-Dashboard {
     try {
         $pythonProcesses = Get-Process -Name "python" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -like "*wsgi.py*" }
+            Where-Object { $_.CommandLine -like "*OllamaDashboard.py*" }
 
         $stopped = 0
         foreach ($process in $pythonProcesses) {

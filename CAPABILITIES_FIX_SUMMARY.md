@@ -189,9 +189,9 @@ The following models now correctly show the image capability icon as enabled:
 3. `app/templates/index.html` - Changed to dynamic capability rendering
 
 ### Test Files Created
-1. `test_capabilities.ps1` - PowerShell API testing script
-2. `test_capabilities_detailed.py` - Python comprehensive test suite
-3. `test_capabilities_ui.html` - HTML/JavaScript UI testing page
+1. `tests/test_capabilities.ps1` - PowerShell API testing script
+2. `tests/test_capabilities_detailed.py` - Python comprehensive test suite
+3. `tests/test_capabilities_ui.html` - HTML/JavaScript UI testing page
 
 ## Verification Steps
 

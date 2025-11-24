@@ -27,7 +27,7 @@ function Start-Dashboard {
 
     try {
         Push-Location $DASHBOARD_DIR
-        $process = Start-Process -FilePath "python" -ArgumentList "wsgi.py" -WorkingDirectory $DASHBOARD_DIR -NoNewWindow -PassThru
+        $process = Start-Process -FilePath "python" -ArgumentList "OllamaDashboard.py" -WorkingDirectory $DASHBOARD_DIR -NoNewWindow -PassThru
         Write-Host "Dashboard started successfully (PID: $($process.Id))" -ForegroundColor Green
         return $process
     }
@@ -43,7 +43,7 @@ function Start-Dashboard {
 function Stop-Dashboard {
     try {
         $pythonProcesses = Get-Process -Name "python" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -like "*wsgi.py*" }
+            Where-Object { $_.CommandLine -like "*OllamaDashboard.py*" }
         foreach ($process in $pythonProcesses) {
             Write-Host "Stopping dashboard process (PID: $($process.Id))..." -ForegroundColor Yellow
             Stop-Process -Id $process.Id -Force

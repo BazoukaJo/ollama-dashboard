@@ -1,4 +1,5 @@
-# Test capabilities implementation
+#!/usr/bin/env pwsh
+# Test capabilities implementation (moved under tests/)
 Write-Host "Testing Capabilities Implementation" -ForegroundColor Cyan
 Write-Host "=================================" -ForegroundColor Cyan
 

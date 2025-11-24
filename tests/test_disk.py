@@ -1,5 +1,4 @@
 import sys
-import os
 sys.path.append('.')
 
 from app import create_app

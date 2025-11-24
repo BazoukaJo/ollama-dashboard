@@ -51,7 +51,7 @@ def index():
         return render_template('index.html',
                              models=[],
                              available_models=[],
-                             system_stats={'cpu_percent': 0, 'memory': {'percent': 0}, 'vram': {'percent': 0}, 'disk': {'percent': 0}},
+                             system_stats={'cpu_percent': 0, 'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0}, 'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0}, 'disk': {'percent': 0, 'total': 0, 'used': 0, 'free': 0}},
                              error=str(e),
                              timezone=_get_timezone_name(),
                              ollama_version='Unknown',
@@ -244,13 +244,14 @@ def stop_model(model_name):
         force_killed = False
 
         try:
-            # Find Ollama processes
+            # Narrow process selection: exact name match or standalone 'ollama' token in cmdline
             ollama_processes = []
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 try:
-                    if proc.info['name'] and 'ollama' in proc.info['name'].lower():
-                        ollama_processes.append(proc)
-                    elif proc.info['cmdline'] and any('ollama' in str(cmd).lower() for cmd in proc.info['cmdline']):
+                    name = (proc.info.get('name') or '').lower()
+                    cmdline = proc.info.get('cmdline') or []
+                    cmd_tokens = [str(c).lower() for c in cmdline]
+                    if name == 'ollama' or any(t == 'ollama' or t.endswith(os.sep + 'ollama') or t.endswith('/ollama') for t in cmd_tokens):
                         ollama_processes.append(proc)
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
@@ -325,6 +326,9 @@ def get_available_models():
     """Get list of all available models."""
     try:
         models = ollama_service.get_available_models()
+        # Add has_custom_settings flag for each model (to be used in UI)
+        for m in models:
+            m['has_custom_settings'] = ollama_service._has_custom_settings(m.get('name'))
         return {"models": models}
     except Exception as e:
         return {"error": str(e), "models": []}, 500
@@ -338,6 +342,109 @@ def get_running_models():
         return models
     except Exception as e:
         return {"error": str(e), "models": []}, 500
+
+
+@bp.route('/api/models/settings/<model_name>')
+def api_get_model_settings(model_name):
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        data = ollama_service.get_model_settings_with_fallback(model_name)
+        if data is None:
+            return {"error": f"Settings not available for model {model_name}"}, 404
+        return data
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+
+@bp.route('/api/models/settings/recommended/<model_name>')
+def api_get_recommended_settings(model_name):
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        data = ollama_service.get_model_settings_with_fallback(model_name)
+        if data is None:
+            return {"error": f"Settings not available for model {model_name}"}, 404
+        # Return only recommended (no save)
+        return {"model": model_name, "settings": data.get('settings'), "source": data.get('source', 'recommended')}
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+
+@bp.route('/api/models/settings/<model_name>', methods=['POST'])
+def api_save_model_settings(model_name):
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        payload = request.get_json() or {}
+        success = ollama_service.save_model_settings(model_name, payload, source='user')
+        if success:
+            return _json_success(f"Settings for {model_name} saved.")
+        return _json_error(f"Failed to save settings for {model_name}", status=500)
+    except Exception as e:
+        return _json_error(f"Unexpected error saving model settings: {str(e)}")
+
+
+@bp.route('/api/models/settings/<model_name>', methods=['DELETE'])
+def api_delete_model_settings(model_name):
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        success = ollama_service.delete_model_settings(model_name)
+        if success:
+            return _json_success(f"Settings for {model_name} deleted.")
+        return _json_error(f"Settings for {model_name} not found.", status=404)
+    except Exception as e:
+        return _json_error(f"Unexpected error deleting model settings: {str(e)}")
+
+
+@bp.route('/api/models/settings/migrate', methods=['POST'])
+def api_migrate_model_settings():
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        return _json_error("Global settings migration no longer supported", status=410)
+    except Exception as e:
+        return _json_error(f"Migration error: {str(e)}")
+
+
+@bp.route('/api/models/settings/apply_all_recommended', methods=['POST'])
+def api_apply_all_recommended():
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        models = ollama_service.get_available_models()
+        applied = 0
+        errors = []
+        for m in models:
+            try:
+                name = m.get('name')
+                rec = ollama_service._recommend_settings_for_model(m)
+                if rec:
+                    success = ollama_service.save_model_settings(name, rec, source='recommended')
+                    if success:
+                        applied += 1
+            except Exception as e:
+                errors.append(str(e))
+        return _json_success(f"Applied recommended settings to {applied} models.", extra={'applied': applied, 'errors': errors})
+    except Exception as e:
+        return _json_error(f"Error applying all recommended settings: {str(e)}")
+
+
+@bp.route('/api/models/settings/<model_name>/reset', methods=['POST'])
+def api_reset_model_settings(model_name):
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        # Compute recommended settings
+        recommended = ollama_service._recommend_settings_for_model(ollama_service.get_model_info_cached(model_name) or {'name': model_name})
+        # Save as recommended (not user)
+        success = ollama_service.save_model_settings(model_name, recommended, source='recommended')
+        if success:
+            return _json_success(f"Settings for {model_name} reset to recommended defaults.")
+        return _json_error(f"Failed to reset settings for {model_name}", status=500)
+    except Exception as e:
+        return _json_error(f"Unexpected error resetting model settings: {str(e)}")
 
 
 @bp.route('/api/version')
@@ -406,15 +513,16 @@ def chat():
         if context:
             chat_data["context"] = context
 
-        # Load and apply settings
-        settings = ollama_service.load_settings()
-        options = {
-            "temperature": settings.get("temperature", 0.7),
-            "top_k": settings.get("top_k", 40),
-            "top_p": settings.get("top_p", 0.9),
-            "num_ctx": settings.get("num_ctx", 2048),
-            "seed": settings.get("seed", 0)
-        }
+        # Use service defaults then merge per-model recommended/ saved settings (global settings removed)
+        options = ollama_service.get_default_settings()
+        # Merge per-model settings (fallback recommended if no saved entry)
+        try:
+            model_settings_entry = ollama_service.get_model_settings_with_fallback(model_name)
+            if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
+                for k, v in model_settings_entry['settings'].items():
+                    options[k] = v
+        except Exception as e:
+            print(f"Failed to merge per-model settings for {model_name}: {e}")
         chat_data["options"] = options
 
         try:
@@ -546,6 +654,16 @@ def get_service_status():
     except Exception as e:
         return {"error": str(e), "status": "unknown", "running": False}, 500
 
+@bp.route('/api/health')
+def api_health():
+    """Component health: background thread, cache ages, failure counters."""
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        return ollama_service.get_component_health()
+    except Exception as e:
+        return {"error": str(e)}, 500
+
 
 @bp.route('/api/service/start', methods=['POST'])
 def start_service():
@@ -575,6 +693,15 @@ def restart_service():
         return (result, 200) if result["success"] else (result, 500)
     except Exception as e:
         return {"success": False, "message": f"Unexpected error restarting service: {str(e)}"}, 500
+
+@bp.route('/api/full/restart', methods=['POST'])
+def full_restart():
+    """Perform comprehensive application restart (caches + settings + background thread). Does NOT restart Ollama service."""
+    try:
+        result = ollama_service.full_restart()
+        return (result, 200) if result.get("success") else (result, 500)
+    except Exception as e:
+        return {"success": False, "message": f"Unexpected error performing full restart: {str(e)}"}, 500
 
 
 @bp.route('/api/models/memory/usage')
@@ -655,30 +782,20 @@ def test_models_debug():
     }
 
 
-@bp.route('/settings')
-def settings():
-    """Render the settings page."""
-    return render_template('settings.html')
+# Legacy global settings page removed.
 
 
-@bp.route('/api/settings', methods=['GET', 'POST'])
-def api_settings():
-    """Get or update settings."""
-    if request.method == 'POST':
-        try:
-            data = request.get_json()
-            if ollama_service.save_settings(data):
-                return {"success": True, "message": "Settings saved successfully"}
-            else:
-                return {"success": False, "message": "Failed to save settings"}, 500
-        except Exception as e:
-            return {"success": False, "message": f"Error saving settings: {str(e)}"}, 500
-    else:
-        try:
-            settings = ollama_service.load_settings()
-            return settings
-        except Exception as e:
-            return {"error": str(e)}, 500
+@bp.route('/admin/model-defaults')
+def admin_model_defaults():
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        return render_template('admin_model_defaults.html')
+    except Exception as e:
+        return render_template('admin_model_defaults.html')
+
+
+# Global /api/settings endpoint removed (legacy global settings deprecated).
 
 
 @bp.route('/api/health')
@@ -704,8 +821,9 @@ def get_health():
         # Check Ollama service status
         ollama_running = ollama_service.get_service_status()
 
+        status = "healthy" if ollama_running and system_stats else ("degraded" if ollama_running else "unhealthy")
         return {
-            "status": "healthy" if ollama_running else "degraded",
+            "status": status,
             "uptime_seconds": uptime_seconds,
             "ollama_service_running": ollama_running,
             "models": {
@@ -714,10 +832,10 @@ def get_health():
                 "per_model_metrics_available": False
             },
             "system": {
-                "cpu_percent": system_stats.get('cpu_percent', 0),
-                "memory_percent": system_stats.get('memory', {}).get('percent', 0),
-                "vram_percent": system_stats.get('vram', {}).get('percent', 0) if system_stats.get('vram', {}).get('total', 0) > 0 else None,
-                "disk_percent": system_stats.get('disk', {}).get('percent', 0)
+                "cpu_percent": system_stats.get('cpu_percent', 0) if system_stats else 0,
+                "memory_percent": system_stats.get('memory', {}).get('percent', 0) if system_stats else 0,
+                "vram_percent": system_stats.get('vram', {}).get('percent', 0) if system_stats and system_stats.get('vram', {}).get('total', 0) > 0 else None,
+                "disk_percent": system_stats.get('disk', {}).get('percent', 0) if system_stats else 0
             },
             "timestamp": datetime.utcnow().isoformat() + 'Z'
         }
@@ -732,5 +850,5 @@ def get_health():
 def init_app(app):
     """Initialize the blueprint with the app."""
     ollama_service.init_app(app)
-    app.template_filter('datetime')(ollama_service.format_datetime)
-    app.template_filter('time_ago')(ollama_service.format_time_ago)
+    # Template filters (`datetime` and `time_ago`) are registered in app factory via app.__init__.
+    # Avoid duplicate registration here to prevent platform-specific filter overrides.
