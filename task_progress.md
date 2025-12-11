@@ -1,3 +1,0 @@
-- [x] Examine model_settings_helpers.py to see available functions
-- [x] Fix the import statement in ollama.py to use correct function names
-- [ ] Verify the fix by checking for any other import-related errors

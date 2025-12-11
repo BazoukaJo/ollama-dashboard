@@ -417,10 +417,14 @@ def stop_model(model_name):
         import time
         import psutil
 
+        # Ensure service is initialized before using its config
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+
         # First try to unload the model gracefully using Ollama API
         try:
             unload_response = requests.post(
-                f"http://{ollama_service.app.config.get('OLLAMA_HOST')}:{ollama_service.app.config.get('OLLAMA_PORT')}/api/generate",
+                _get_ollama_url("generate"),
                 json={"model": model_name, "prompt": "", "stream": False, "keep_alive": "0s"},
                 timeout=5
             )
@@ -741,6 +745,9 @@ def chat():
 def delete_model(model_name):
     """Delete a model from the system."""
     try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+
         # Stop model if running
         running_models = ollama_service.get_running_models()
         if any(model['name'] == model_name for model in running_models):
@@ -766,9 +773,9 @@ def delete_model(model_name):
                 json={"name": model_name},
                 timeout=30
             )
-            return ({"success": True, "message": f"Model '{model_name}' deleted successfully."}
-                   if response.status_code == 200
-                   else {"success": False, "message": f"Failed to delete model: {response.text}"}, 500)
+            if response.status_code == 200:
+                return {"success": True, "message": f"Model '{model_name}' deleted successfully."}, 200
+            return {"success": False, "message": f"Failed to delete model: {response.text}"}, response.status_code or 500
         except requests.exceptions.Timeout:
             return {"success": False, "message": "Model deletion timed out."}, 408
 
@@ -839,7 +846,7 @@ def get_system_stats_history():
 def get_service_status():
     """Get Ollama service status."""
     try:
-        status = ollama_service.get_service_status()
+        status = ollama_service.get_service_status() or False
         return {"status": "running" if status else "stopped", "running": status}
     except Exception as e:
         return {"error": str(e), "status": "unknown", "running": False}, 500
@@ -859,8 +866,10 @@ def api_health():
 def start_service():
     """Start the Ollama service."""
     try:
-        result = ollama_service.start_service()
-        return (result, 200) if result["success"] else (result, 500)
+        result = ollama_service.start_service() or {}
+        if not result:
+            return {"success": False, "message": "Service start returned no result"}, 500
+        return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
     except Exception as e:
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
 
@@ -870,7 +879,7 @@ def stop_service():
     """Stop the Ollama service."""
     try:
         result = ollama_service.stop_service()
-        return (result, 200) if result["success"] else (result, 500)
+        return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
     except Exception as e:
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
 
@@ -880,7 +889,7 @@ def restart_service():
     """Restart the Ollama service."""
     try:
         result = ollama_service.restart_service()
-        return (result, 200) if result["success"] else (result, 500)
+        return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
     except Exception as e:
         return {"success": False, "message": f"Unexpected error restarting service: {str(e)}"}, 500
 
@@ -913,7 +922,9 @@ def pull_model(model_name):
     """Pull a model."""
     try:
         result = ollama_service.pull_model(model_name)
-        return (result, 200) if result["success"] else (result, 500)
+        if isinstance(result, dict) and result.get("success"):
+            return result, 200
+        return result if isinstance(result, dict) else {"success": False, "message": str(result)}, 500
     except Exception as e:
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
 
@@ -1009,7 +1020,7 @@ def get_health():
         system_stats = ollama_service.get_system_stats()
 
         # Check Ollama service status
-        ollama_running = ollama_service.get_service_status()
+        ollama_running = ollama_service.get_service_status() or False
 
         status = "healthy" if ollama_running and system_stats else ("degraded" if ollama_running else "unhealthy")
         return {

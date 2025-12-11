@@ -295,8 +295,8 @@ class OllamaServiceControl:
 
         return False, "API verification failed after retries"
 
-    def get_service_status(self):
-        """Check if Ollama service is running"""
+    def get_service_status(self) -> bool:
+        """Check if Ollama service is running."""
         try:
             if platform.system() == "Windows":
                 # On Windows, check if ollama.exe process is running
@@ -339,6 +339,9 @@ class OllamaServiceControl:
         except Exception as e:
             self.logger.exception("Error checking service status: %s", e)
             return False
+
+        # Fallback to False if no earlier branch returned
+        return False
 
     def start_service(self):
         """Start the Ollama service"""
