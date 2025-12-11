@@ -1,7 +1,7 @@
 """Model formatting helpers extracted from OllamaService."""
 from app.services.capabilities import ensure_capability_flags
 
-def normalize_available_model_entry(service, entry):
+def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflict=False):
     if not isinstance(entry, dict):
         return {'name': str(entry), 'has_vision': False, 'has_tools': False, 'has_reasoning': False}
     model = {
@@ -18,14 +18,14 @@ def normalize_available_model_entry(service, entry):
         except Exception:
             pass
     try:
-        model = ensure_capability_flags(model)
+        model = ensure_capability_flags(model, prefer_heuristics_on_conflict=prefer_heuristics_on_conflict)
     except (ValueError, KeyError, TypeError):
         model.setdefault('has_vision', False)
         model.setdefault('has_tools', False)
         model.setdefault('has_reasoning', False)
     return model
 
-def format_running_model_entry(service, model, include_has_custom_settings=False):
+def format_running_model_entry(service, model, include_has_custom_settings=False, prefer_heuristics_on_conflict=False):
     try:
         if isinstance(model, dict) and 'size' in model and 'formatted_size' not in model:
             size_val = model.get('size')
@@ -47,7 +47,7 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
             'tags': model.get('tags') if isinstance(model, dict) else None,
         }
         try:
-            entry = ensure_capability_flags(entry)
+            entry = ensure_capability_flags(entry, prefer_heuristics_on_conflict=prefer_heuristics_on_conflict)
         except Exception:
             entry.setdefault('has_vision', False)
             entry.setdefault('has_tools', False)

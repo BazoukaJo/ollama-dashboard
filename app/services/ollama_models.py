@@ -76,9 +76,13 @@ class OllamaServiceModels:
         """Set the logger instance."""
         self.__dict__['logger'] = value
 
-    def _normalize_available_model_entry(self, entry):
+    def _normalize_available_model_entry(self, entry, prefer_heuristics_on_conflict=False):
         """Normalize a model entry from the available models list."""
-        return normalize_available_model_entry(self, entry)
+        return normalize_available_model_entry(
+            self,
+            entry,
+            prefer_heuristics_on_conflict=prefer_heuristics_on_conflict,
+        )
 
     def _format_running_model_entry(self, model, **kwargs):
         """Format a running model entry."""

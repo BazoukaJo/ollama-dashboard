@@ -25,7 +25,8 @@ _TOOL_PATTERNS = [
     r'qwen2\.5', r'qwen3', r'qwen.*2\.5', r'qwen.*3',
     r'command.*r',
     r'firefunction', r'granite3', r'hermes3', r'nemotron',
-    r'aya', r'phi.*3\.5', r'phi.*4'
+    r'aya', r'phi.*3\.5', r'phi.*4',
+    r'devstral'
 ]
 
 # Exclusions for tool patterns (older / unsupported variants)
@@ -109,13 +110,25 @@ def detect_capabilities(model_name: str, families) -> dict:
     return capabilities
 
 
-def ensure_capability_flags(model: dict) -> dict:
-    """Normalize capability flags; re-detect if missing/non-bool.
-    Mirrors original _ensure_capability_flags logic.
+def ensure_capability_flags(model: dict, prefer_heuristics_on_conflict: bool = False) -> dict:
+    """Normalize capability flags; optionally favor heuristics even when flags are present.
+
+    When prefer_heuristics_on_conflict=True, always recompute flags via detect_capabilities
+    and overwrite existing booleans. Otherwise, only re-detect when flags are missing or non-bool.
+    Mirrors original _ensure_capability_flags logic with an opt-in override.
     """
     try:
-        if any(model.get(k) is None or not isinstance(model.get(k), bool) for k in ('has_vision','has_tools','has_reasoning')):
-            caps = detect_capabilities(model.get('name', ''), (model.get('details', {}) or {}).get('families', []))
+        name = model.get('name', '')
+        details = model.get('details', {}) or {}
+        families = details.get('families', []) or []
+
+        needs_redetect = any(
+            model.get(k) is None or not isinstance(model.get(k), bool)
+            for k in ('has_vision', 'has_tools', 'has_reasoning')
+        )
+
+        if prefer_heuristics_on_conflict or needs_redetect:
+            caps = detect_capabilities(name, families)
             model['has_vision'] = bool(caps.get('has_vision'))
             model['has_tools'] = bool(caps.get('has_tools'))
             model['has_reasoning'] = bool(caps.get('has_reasoning'))
