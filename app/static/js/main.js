@@ -67,20 +67,60 @@ document.addEventListener('DOMContentLoaded', function () {
     reloadBtn.onclick = async function () {
       reloadBtn.disabled = true;
       reloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reloading...';
+      const feedbackEl = document.getElementById('reloadAppFeedback');
       try {
         const response = await fetch('/api/reload_app', { method: 'POST' });
-        if (response.ok) {
-          document.getElementById('reloadAppFeedback').classList.remove('d-none');
-          document.getElementById('reloadAppFeedback').textContent = 'Reloading application...';
-          setTimeout(() => { window.location.reload(); }, 5000);
+        const data = await response.json().catch(() => ({}));
+        if (response.ok || response.status === 202) {
+          if (feedbackEl) {
+            feedbackEl.classList.remove('d-none');
+            feedbackEl.classList.remove('alert-danger');
+            feedbackEl.classList.add('alert-info');
+            feedbackEl.textContent = data.message || 'Application is restarting. Please wait a few seconds and refresh the page.';
+          }
+          // Close modal
+          const modalEl = document.getElementById('reloadAppConfirmModal');
+          if (modalEl) {
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+          }
+          // Poll for app to come back online, then reload
+          const startTime = Date.now();
+          const maxWait = 30000; // 30 seconds max
+          const poll = async () => {
+            if (Date.now() - startTime > maxWait) {
+              window.location.reload();
+              return;
+            }
+            try {
+              const healthCheck = await fetch('/api/health', { method: 'GET', signal: AbortSignal.timeout(2000) });
+              if (healthCheck.ok) {
+                window.location.reload();
+                return;
+              }
+            } catch (_) {
+              // App not ready yet, continue polling
+            }
+            setTimeout(poll, 2000);
+          };
+          setTimeout(poll, 3000); // Start polling after 3 seconds
         } else {
-          document.getElementById('reloadAppFeedback').classList.remove('d-none');
-          document.getElementById('reloadAppFeedback').textContent = 'Failed to reload application.';
+          if (feedbackEl) {
+            feedbackEl.classList.remove('d-none');
+            feedbackEl.classList.remove('alert-info');
+            feedbackEl.classList.add('alert-danger');
+            feedbackEl.textContent = data.message || 'Failed to reload application.';
+          }
+          reloadBtn.disabled = false;
+          reloadBtn.innerHTML = 'Reload Application';
         }
       } catch (err) {
-        document.getElementById('reloadAppFeedback').classList.remove('d-none');
-        document.getElementById('reloadAppFeedback').textContent = 'Error: ' + err.message;
-      } finally {
+        if (feedbackEl) {
+          feedbackEl.classList.remove('d-none');
+          feedbackEl.classList.remove('alert-info');
+          feedbackEl.classList.add('alert-danger');
+          feedbackEl.textContent = 'Error: ' + (err.message || 'Failed to reload application');
+        }
         reloadBtn.disabled = false;
         reloadBtn.innerHTML = 'Reload Application';
       }
@@ -136,7 +176,10 @@ async function startModel(modelName) {
     const result = await response.json();
     if (result.success) {
       showNotification(result.message, "success");
-      setTimeout(() => location.reload(), 2000);
+      if (typeof updateModelData === 'function') {
+        updateModelData();
+      }
+      setTimeout(() => location.reload(), 1500);
     } else {
       showNotification(result.message, "error");
     }
@@ -166,26 +209,44 @@ async function stopModel(modelName) {
         },
       }
     );
+
+    // Check if response is OK before parsing JSON
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      let errorMessage = `Failed to stop model: HTTP ${response.status}`;
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson.message) {
+          errorMessage = errorJson.message;
+        }
+      } catch {
+        if (errorText) {
+          errorMessage = errorText;
+        }
+      }
+      showNotification(errorMessage, "error");
+      if (stopButton && originalText !== null) {
+        stopButton.innerHTML = originalText;
+        stopButton.disabled = false;
+      }
+      return;
+    }
+
     const result = await response.json();
 
     if (result.success) {
-      let notificationType = "success";
-      let message = result.message;
-
-      if (result.force_killed) {
-        notificationType = "warning";
-        message +=
-          " ⚠️ Force kill was required - some data may have been lost.";
-      }
-
-      showNotification(message, notificationType);
-      setTimeout(() => location.reload(), 3000);
+      showNotification(result.message || `Model ${modelName} stopped successfully`, "success");
+      // Reload after a short delay to reflect the change
+      setTimeout(() => location.reload(), 2000);
     } else {
-      showNotification(result.message, "error");
+      showNotification(result.message || `Failed to stop model ${modelName}`, "error");
+      if (stopButton && originalText !== null) {
+        stopButton.innerHTML = originalText;
+        stopButton.disabled = false;
+      }
     }
   } catch (error) {
-    showNotification("Failed to stop model: " + error.message, "error");
-  } finally {
+    showNotification("Failed to stop model: " + (error.message || "Network error"), "error");
     if (stopButton && originalText !== null) {
       stopButton.innerHTML = originalText;
       stopButton.disabled = false;

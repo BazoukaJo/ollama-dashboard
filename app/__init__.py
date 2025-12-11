@@ -18,6 +18,7 @@ class Config:
     MODEL_SETTINGS_FILE = os.getenv('MODEL_SETTINGS_FILE', 'model_settings.json')
     LOG_FILE = os.getenv('LOG_FILE', 'logs/ollama-dashboard.log')
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    AUTO_START_OLLAMA = os.getenv('AUTO_START_OLLAMA', 'true').lower() in ('true', '1', 'yes', 'on')
     STATIC_URL_PATH = ''
     STATIC_FOLDER = 'static'
     TEMPLATE_FOLDER = 'templates'

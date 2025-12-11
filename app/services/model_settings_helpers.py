@@ -90,14 +90,8 @@ def ensure_model_settings_exists(service, model_info):
             if not service._model_settings:
                 service._model_settings = load_model_settings(service) or {}
             if model_name in service._model_settings:
-                return 'exists'
-        recommended = service._recommend_settings_for_model(model_info)
-        if model_name in service._model_settings:
-            return service._model_settings[model_name]
-        model_info = service.get_model_info_cached(model_name) or {'name': model_name}
-        recommended = service._recommend_settings_for_model(model_info)
-        if model_name in service._model_settings:
-            return service._model_settings[model_name]
+                return service._model_settings[model_name]
+
         model_info = service.get_model_info_cached(model_name) or {'name': model_name}
         recommended = service._recommend_settings_for_model(model_info)
         entry = {
@@ -105,6 +99,9 @@ def ensure_model_settings_exists(service, model_info):
             'source': 'recommended',
             'last_updated': datetime.now(timezone.utc).isoformat()
         }
+        with service._model_settings_lock:
+            service._model_settings[model_name] = entry
+            write_model_settings_file(service, service._model_settings)
         return entry
     except Exception as e:
         service.logger.exception(f"Error getting model settings for {model_name}: {e}")
@@ -117,13 +114,18 @@ def get_model_settings_with_fallback_entry(service, model_name):
                 service._model_settings = load_model_settings(service) or {}
             if model_name in service._model_settings:
                 return service._model_settings[model_name]
+
         model_info = service.get_model_info_cached(model_name) or {'name': model_name}
         recommended = service._recommend_settings_for_model(model_info)
-        return {
+        entry = {
             'settings': recommended,
             'source': 'recommended',
             'last_updated': datetime.now(timezone.utc).isoformat()
         }
+        with service._model_settings_lock:
+            service._model_settings[model_name] = entry
+            write_model_settings_file(service, service._model_settings)
+        return entry
     except Exception as e:
         service.logger.exception(f"Error getting model settings with fallback for {model_name}: {e}")
     return {

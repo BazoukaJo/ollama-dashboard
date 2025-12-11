@@ -7,6 +7,7 @@ try:
 except ImportError:
     GPUtil = None
 try:
+    # Try nvidia-ml-py (official replacement) which provides pynvml module
     import pynvml # pyright: ignore[reportMissingImports]
 except ImportError:
     pynvml = None

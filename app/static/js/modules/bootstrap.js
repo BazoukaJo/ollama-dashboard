@@ -8,7 +8,7 @@
     if(typeof loadDownloadableModels==='function') loadDownloadableModels();
     // Intervals
     if(typeof updateSystemStats==='function') setInterval(updateSystemStats,1000);
-    if(typeof updateModelData==='function') setInterval(updateModelData,10000);
+    if(typeof updateModelData==='function') setInterval(updateModelData,3000);
     // Health interval handled inside serviceControl.init()
   }
   document.addEventListener('DOMContentLoaded', init);

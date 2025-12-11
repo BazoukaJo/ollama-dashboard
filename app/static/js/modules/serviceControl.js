@@ -65,10 +65,26 @@
     if(btn){ btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>'; btn.disabled=true; }
     try {
       const resp = await fetch('/api/service/start',{method:'POST',headers:{'Content-Type':'application/json'}});
+      if(!resp.ok){
+        const errorText = await resp.text().catch(()=>'Unknown error');
+        window.showNotification('Failed to start service: '+errorText,'error');
+        if(btn) btn.disabled=false;
+        return;
+      }
       const data = await resp.json();
-      if(data.success){ window.showNotification(data.message,'success'); setTimeout(()=>location.reload(),3000); }
-      else { window.showNotification(data.message,'error'); if(btn) btn.disabled=false; }
-    } catch(e){ window.showNotification('Failed to start service: '+e.message,'error'); if(btn) btn.disabled=false; }
+      if(data.success){ 
+        window.showNotification(data.message,'success'); 
+        // Update health status and reload after delay
+        setTimeout(()=>{ updateHealthStatus(); setTimeout(()=>location.reload(),2000); },2000);
+      }
+      else { 
+        window.showNotification(data.message || 'Failed to start service','error'); 
+        if(btn) btn.disabled=false; 
+      }
+    } catch(e){ 
+      window.showNotification('Failed to start service: '+(e.message || 'Network error'),'error'); 
+      if(btn) btn.disabled=false; 
+    }
     finally { if(btn && original!==null) btn.innerHTML=original; }
   }
 
@@ -78,10 +94,25 @@
     if(btn){ btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>'; btn.disabled=true; }
     try {
       const resp = await fetch('/api/service/stop',{method:'POST',headers:{'Content-Type':'application/json'}});
+      if(!resp.ok){
+        const errorText = await resp.text().catch(()=>'Unknown error');
+        window.showNotification('Failed to stop service: '+errorText,'error');
+        if(btn) btn.disabled=false;
+        return;
+      }
       const data = await resp.json();
-      if(data.success){ window.showNotification(data.message,'success'); setTimeout(()=>location.reload(),3000); }
-      else { window.showNotification(data.message,'error'); if(btn) btn.disabled=false; }
-    } catch(e){ window.showNotification('Failed to stop service: '+e.message,'error'); if(btn) btn.disabled=false; }
+      if(data.success){ 
+        window.showNotification(data.message,'success'); 
+        setTimeout(()=>{ updateHealthStatus(); setTimeout(()=>location.reload(),2000); },2000);
+      }
+      else { 
+        window.showNotification(data.message || 'Failed to stop service','error'); 
+        if(btn) btn.disabled=false; 
+      }
+    } catch(e){ 
+      window.showNotification('Failed to stop service: '+(e.message || 'Network error'),'error'); 
+      if(btn) btn.disabled=false; 
+    }
     finally { if(btn && original!==null) btn.innerHTML=original; }
   }
 

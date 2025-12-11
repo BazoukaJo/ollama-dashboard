@@ -5,3 +5,7 @@ pytz==2023.3
 pytest==7.4.3
 requests==2.31.0
 psutil==5.9.6
+
+# Optional GPU monitoring (install one of these for VRAM stats):
+# nvidia-ml-py  # Official NVIDIA package (replaces deprecated pynvml)
+# GPUtil        # Alternative GPU utility library
