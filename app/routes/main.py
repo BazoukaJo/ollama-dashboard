@@ -1,3 +1,58 @@
+
+import os
+import time
+import psutil
+import signal
+import sys
+import subprocess
+import threading
+from flask import jsonify
+from app.routes import bp
+
+# Force kill the dashboard app and all children
+@bp.route('/api/force_kill', methods=['POST'])
+def force_kill_app():
+    current_pid = os.getpid()
+    parent = psutil.Process(current_pid)
+    killed_pids = []
+    for child in parent.children(recursive=True):
+        try:
+            child.kill()
+            killed_pids.append(child.pid)
+        except Exception:
+            pass
+    try:
+        parent.kill()
+        killed_pids.append(current_pid)
+    except Exception:
+        os.kill(current_pid, signal.SIGKILL)
+        killed_pids.append(current_pid)
+    time.sleep(1)
+    return jsonify({"success": True, "message": f"Force killed PIDs: {', '.join(map(str, killed_pids))}"})
+# Reload API: kills current process and starts a new one
+@bp.route('/api/reload_app', methods=['POST'])
+def reload_app():
+    def restart():
+        import signal
+        time.sleep(1)  # Let response finish
+        current_pid = os.getpid()
+        parent = psutil.Process(current_pid)
+        # Force kill all children
+        for child in parent.children(recursive=True):
+            try:
+                child.kill()
+            except Exception:
+                pass
+        # Force kill self
+        try:
+            parent.kill()
+        except Exception:
+            os.kill(current_pid, signal.SIGKILL)
+        # Relaunch the app (Windows: use python executable)
+        python = sys.executable
+        subprocess.Popen([python] + sys.argv)
+    threading.Thread(target=restart, daemon=True).start()
+    return jsonify({'status': 'restarting'}), 202
 """
 Main routes for Ollama Dashboard.
 """
@@ -9,6 +64,10 @@ from app.services.ollama import OllamaService
 from app.routes import bp
 from datetime import datetime
 import pytz
+import threading
+import sys
+import psutil
+import subprocess
 
 # Initialize service without app
 ollama_service = OllamaService()

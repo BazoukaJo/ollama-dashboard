@@ -10,6 +10,7 @@ Completely revised the model capability detection system (vision, reasoning, too
 ## Problem Statement
 
 The capability detection system was failing because:
+
 1. **Missing capability flags in running models** - Backend detected capabilities but didn't include them in returned data structure
 2. **Missing capability flags in background worker** - Auto-refresh couldn't update capability icons
 3. **Duplicate detection logic** - Frontend re-implemented backend logic, creating maintenance burden
@@ -21,6 +22,7 @@ The capability detection system was failing because:
 ### 1. Backend Service (`app/services/ollama.py`)
 
 #### Fixed Running Models Data Structure (Lines 595-602)
+
 **Before:**
 ```python
 current_models.append({
@@ -49,10 +51,13 @@ current_models.append({
 ```
 
 #### Fixed Background Worker Cache (Lines 117-125)
+
 Applied same fix to background data collection thread to ensure auto-refresh works.
 
 #### Updated Static Model Lists (Lines 1261-1450)
+
 Added explicit capability flags to all 29 downloadable models:
+
 - **Vision models (6):** llava, qwen3-vl, bakllava, llava-llama3, llava-phi3, moondream
 - **Tools models (5):** mistral, qwen3-vl, dolphin-mixtral, mixtral, command-r
 - **Reasoning models (0):** None in current static list (placeholder for future)
@@ -112,7 +117,8 @@ function getCapabilitiesHTML(model) {
 
 Created new test file with 21 tests covering:
 
-#### Test Categories:
+#### Test Categories
+
 1. **Capability Detection (12 tests)**
    - Vision detection by name (llava, qwen3-vl)
    - Vision detection by families (clip, projector)
@@ -143,21 +149,27 @@ Created new test file with 21 tests covering:
 ## Capability Detection Rules
 
 ### Vision Capability
+
 **Detected when:**
+
 - Model name contains: `llava`, `bakllava`, `moondream`, `qwen*-vl`, `llava-llama3`, `llava-phi3`, `cogvlm`, `yi-vl`
 - OR families contain: `clip`, `projector`
 
 **Examples:** llava:latest, qwen3-vl:8b, moondream:latest
 
 ### Tools Capability
+
 **Detected when:**
+
 - Model name contains: `llama3.1`, `llama3.2`, `llama3.3`, `mistral`, `mixtral`, `command-r`, `firefunction`, `qwen2.5`, `qwen3`, `granite3`, `hermes3`, `nemotron`
 - Excludes: `llama3:`, `llama3.0`, `qwen2:`, `qwen2.0`, `hermes2`
 
 **Examples:** llama3.1:8b, mistral:latest, qwen2.5:7b
 
 ### Reasoning Capability
+
 **Detected when:**
+
 - Model name contains: `deepseek-r1`, `qwq`, `marco-o1`, `k0-math`
 
 **Examples:** deepseek-r1:8b, qwq:32b, marco-o1:7b
@@ -170,7 +182,7 @@ Created new test file with 21 tests covering:
 0 failed
 ```
 
-### Test Breakdown:
+### Test Breakdown
 - `test_capabilities_complete.py`: 21 tests ✓
 - `test_capabilities_pytest.py`: 4 tests ✓
 - `test_ollama_service.py`: 6 tests ✓
@@ -191,6 +203,7 @@ Results:
 - ✓ Llava correctly flagged with vision capability
 
 ### Manual Testing Checklist
+
 1. ✓ Start Flask app: `python wsgi.py`
 2. ✓ API returns capability flags: `GET /api/models/downloadable?category=best`
 3. ✓ Running models include flags: `GET /api/models/running`
