@@ -254,6 +254,45 @@ async function stopModel(modelName) {
   }
 }
 
+async function restartModel(modelName) {
+  const card = document.querySelector(`.model-card[data-model-name="${cssEscape(modelName)}"]`);
+  const restartButton = card ? card.querySelector('button[title="Restart model"]') : null;
+  const originalText = restartButton ? restartButton.innerHTML : null;
+  if (restartButton) {
+    restartButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Restarting...';
+    restartButton.disabled = true;
+  }
+
+  try {
+    showNotification(`Restarting model ${modelName}...`, "info");
+
+    const response = await fetch(
+      `/api/models/restart/${encodeURIComponent(modelName)}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    const result = await response.json();
+
+    if (result.success) {
+      showNotification(result.message, "success");
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      showNotification(result.message, "error");
+    }
+  } catch (error) {
+    showNotification("Failed to restart model: " + error.message, "error");
+  } finally {
+    if (restartButton && originalText !== null) {
+      restartButton.innerHTML = originalText;
+      restartButton.disabled = false;
+    }
+  }
+}
+
 async function deleteModel(modelName) {
   if (
     !confirm(

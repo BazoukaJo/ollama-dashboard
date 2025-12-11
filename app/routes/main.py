@@ -411,82 +411,184 @@ def start_model(model_name):
 
 @bp.route('/api/models/stop/<model_name>', methods=['POST'])
 def stop_model(model_name):
-    try:
-        import subprocess
-        import signal
-        import time
-        import psutil
+    """Gracefully unload a model from memory using Ollama API.
 
+    Uses keep_alive=0s to signal Ollama to unload the model.
+    Does NOT kill processes (which would stop the entire Ollama service).
+    """
+    try:
         # Ensure service is initialized before using its config
         if not ollama_service.app:
             ollama_service.init_app(current_app)
 
-        # First try to unload the model gracefully using Ollama API
+        # Verify Ollama service is running
+        if not ollama_service.get_service_status():
+            return {"success": False, "message": "Ollama service is not running"}, 503
+
+        # Check if model is currently running
+        running_models = ollama_service.get_running_models()
+        if not any(m.get('name') == model_name for m in running_models):
+            return {"success": False, "message": f"Model {model_name} is not currently running"}, 400
+
+        # Gracefully unload the model using Ollama API
         try:
             unload_response = requests.post(
                 _get_ollama_url("generate"),
                 json={"model": model_name, "prompt": "", "stream": False, "keep_alive": "0s"},
-                timeout=5
+                timeout=30
             )
+
             if unload_response.status_code == 200:
-                return {"success": True, "message": f"Model {model_name} unloaded successfully"}
-        except Exception as e:
-            print(f"Graceful unload failed for {model_name}: {str(e)}")
-
-        # If graceful unload fails, try to find and kill Ollama processes
-        killed_processes = []
-        force_killed = False
-
-        try:
-            # Narrow process selection: exact name match or standalone 'ollama' token in cmdline
-            ollama_processes = []
-            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
-                try:
-                    name = (proc.info.get('name') or '').lower()
-                    cmdline = proc.info.get('cmdline') or []
-                    cmd_tokens = [str(c).lower() for c in cmdline]
-                    if name == 'ollama' or any(t == 'ollama' or t.endswith(os.sep + 'ollama') or t.endswith('/ollama') for t in cmd_tokens):
-                        ollama_processes.append(proc)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-
-            if ollama_processes:
-                # Try graceful termination first
-                for proc in ollama_processes:
-                    try:
-                        proc.terminate()
-                        killed_processes.append(proc.pid)
-                    except Exception as e:
-                        print(f"Failed to terminate process {proc.pid}: {str(e)}")
-
-                # Wait a bit for graceful termination
-                time.sleep(2)
-
-                # Force kill any remaining processes
-                for proc in ollama_processes:
-                    try:
-                        if proc.is_running():
-                            proc.kill()
-                            force_killed = True
-                            print(f"Force killed process {proc.pid}")
-                    except Exception as e:
-                        print(f"Failed to kill process {proc.pid}: {str(e)}")
-
-                if killed_processes:
-                    message = f"Stopped Ollama processes (PIDs: {', '.join(map(str, killed_processes))})"
-                    if force_killed:
-                        message += " - Force kill was required"
-                    return {"success": True, "message": message, "force_killed": force_killed}
-                else:
-                    return {"success": False, "message": "No Ollama processes found to stop"}
+                return {"success": True, "message": f"Model {model_name} stopped successfully"}
+            elif unload_response.status_code == 404:
+                return {"success": False, "message": f"Model {model_name} not found"}, 404
             else:
-                return {"success": False, "message": "No running Ollama processes found"}
+                error_msg = f"Failed to stop model: HTTP {unload_response.status_code}"
+                try:
+                    error_detail = unload_response.json().get('error', '')
+                    if error_detail:
+                        error_msg += f" - {error_detail}"
+                except:
+                    pass
+                return {"success": False, "message": error_msg}, unload_response.status_code
 
-        except Exception as e:
-            return {"success": False, "message": f"Failed to stop Ollama processes: {str(e)}"}
+        except requests.exceptions.Timeout:
+            return {"success": False, "message": f"Timeout while stopping model {model_name}. The model may still be unloading."}, 504
+        except requests.exceptions.RequestException as e:
+            return {"success": False, "message": f"Network error while stopping model: {str(e)}"}, 503
 
     except Exception as e:
+        current_app.logger.error(f"Unexpected error stopping model {model_name}: {str(e)}")
         return {"success": False, "message": f"Unexpected error stopping model: {str(e)}"}, 500
+
+
+@bp.route('/api/models/restart/<model_name>', methods=['POST'])
+def restart_model(model_name):
+    """Restart a model by stopping then starting it.
+
+    Atomically performs stop (if running) followed by warm start.
+    If stop fails, does not proceed with start.
+    """
+    try:
+        # Ensure service is initialized
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+
+        # Verify Ollama service is running
+        if not ollama_service.get_service_status():
+            return {"success": False, "message": "Ollama service is not running"}, 503
+
+        # Check if model is currently running
+        running_models = ollama_service.get_running_models()
+        is_running = any(m.get('name') == model_name for m in running_models)
+
+        # Step 1: Stop the model if it's running
+        if is_running:
+            try:
+                unload_response = requests.post(
+                    _get_ollama_url("generate"),
+                    json={"model": model_name, "prompt": "", "stream": False, "keep_alive": "0s"},
+                    timeout=30
+                )
+
+                if unload_response.status_code not in [200, 404]:
+                    error_msg = f"Failed to stop model during restart: HTTP {unload_response.status_code}"
+                    try:
+                        error_detail = unload_response.json().get('error', '')
+                        if error_detail:
+                            error_msg += f" - {error_detail}"
+                    except:
+                        pass
+                    return {"success": False, "message": error_msg}, unload_response.status_code
+
+            except requests.exceptions.Timeout:
+                return {"success": False, "message": f"Timeout while stopping model {model_name} during restart"}, 504
+            except requests.exceptions.RequestException as e:
+                return {"success": False, "message": f"Network error while stopping model: {str(e)}"}, 503
+
+            # Brief pause to ensure unload completes
+            import time
+            time.sleep(1)
+
+        # Step 2: Start the model (warm start with retry logic)
+        max_retries = 3
+        retry_delay = 1
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                # Warm start with extended keep_alive
+                start_response = requests.post(
+                    _get_ollama_url("generate"),
+                    json={
+                        "model": model_name,
+                        "prompt": "test",
+                        "stream": False,
+                        "keep_alive": "24h"
+                    },
+                    timeout=120
+                )
+
+                if start_response.status_code == 200:
+                    message = f"Model {model_name} restarted successfully"
+                    if attempt > 0:
+                        message += f" (after {attempt + 1} attempts)"
+                    return {"success": True, "message": message}
+                elif start_response.status_code == 404:
+                    # Model not found - if first attempt, try pulling it
+                    if attempt == 0:
+                        current_app.logger.info(f"Model {model_name} not found, attempting to pull")
+                        try:
+                            pull_response = requests.post(
+                                _get_ollama_url("pull"),
+                                json={"name": model_name},
+                                timeout=600
+                            )
+                            if pull_response.status_code == 200:
+                                continue  # Retry start after successful pull
+                        except Exception as pull_error:
+                            current_app.logger.error(f"Failed to pull model: {str(pull_error)}")
+                    return {"success": False, "message": f"Model {model_name} not found"}, 404
+                else:
+                    last_error = f"HTTP {start_response.status_code}"
+                    try:
+                        error_detail = start_response.json().get('error', '')
+                        if error_detail:
+                            last_error += f" - {error_detail}"
+                    except:
+                        pass
+
+                    # Check if this is a transient error worth retrying
+                    if start_response.status_code in [500, 502, 503, 504] and attempt < max_retries - 1:
+                        import time
+                        time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                        continue
+                    else:
+                        return {"success": False, "message": f"Failed to restart model: {last_error}"}, start_response.status_code
+
+            except requests.exceptions.Timeout:
+                last_error = "Timeout"
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(retry_delay * (2 ** attempt))
+                    continue
+                else:
+                    return {"success": False, "message": f"Timeout while restarting model {model_name}"}, 504
+            except requests.exceptions.RequestException as e:
+                last_error = str(e)
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(retry_delay * (2 ** attempt))
+                    continue
+                else:
+                    return {"success": False, "message": f"Network error while restarting model: {str(e)}"}, 503
+
+        return {"success": False, "message": f"Failed to restart model after {max_retries} attempts: {last_error}"}, 500
+
+    except Exception as e:
+        current_app.logger.error(f"Unexpected error restarting model {model_name}: {str(e)}")
+        return {"success": False, "message": f"Unexpected error restarting model: {str(e)}"}, 500
+
 
 @bp.route('/api/models/info/<model_name>')
 def get_model_info(model_name):
@@ -934,15 +1036,10 @@ def api_get_downloadable_models():
     """Get list of downloadable models."""
     try:
         category = request.args.get('category', 'best')
-        print(f"DEBUG ROUTE: category parameter = '{category}'")
         models = ollama_service.get_downloadable_models(category)
-        print(f"DEBUG ROUTE: got {len(models)} models")
         return {"models": models}
     except Exception as e:
-        return {"error": str(e), "models": []}, 500
-
-
-def _json_error(message, status=500):
+        current_app.logger.error(f"Error in downloadable models endpoint: {str(e)}", exc_info=True)
     return jsonify({"success": False, "message": message}), status
 
 def _json_success(message, extra=None, status=200):
