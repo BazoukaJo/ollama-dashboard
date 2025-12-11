@@ -48,6 +48,9 @@ venv.bak/
 
 # Local development
 *.log
+*.log.*
+logs/
+logs_backup/
 .env.local
 .env.development.local
 .env.test.local
