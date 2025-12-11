@@ -29,16 +29,24 @@ if (!window.getCapabilitiesHTML) {
                         <i class="fas fa-cloud model-icon-main"></i>
                     </div>
                     <div class="model-meta">
-                        <span class="status-indicator" style="color: #0dcaf0;">
+                        <span class="status-indicator downloadable">
                             <i class="fas fa-circle"></i>Downloadable
                         </span>
                     </div>
                 </div>
                 <div class="model-title">${escapeHtml(model.name) || 'Unknown'}</div>
                 <div class="model-capabilities">${getCapabilitiesHTML(model)}</div>
-                <div class="model-description text-muted small" style="height: 28px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;">${escapeHtml(model.description) || 'No description available'}</div>
                 <div class="model-specs">
                   <div class="spec-row compact-hide">
+                        <div class="spec-item">
+                            <div class="spec-icon">
+                                <i class="fas fa-cogs"></i>
+                            </div>
+                            <div class="spec-content">
+                                <div class="spec-label">Family</div>
+                                <div class="spec-value">${model.family || 'Unknown'}</div>
+                            </div>
+                        </div>
                         <div class="spec-item">
                             <div class="spec-icon">
                                 <i class="fas fa-weight"></i>
@@ -48,6 +56,8 @@ if (!window.getCapabilitiesHTML) {
                                 <div class="spec-value">${model.parameter_size || 'Unknown'}</div>
                             </div>
                         </div>
+                    </div>
+                  <div class="spec-row compact-hide">
                         <div class="spec-item">
                             <div class="spec-icon">
                                 <i class="fas fa-hdd"></i>
@@ -61,7 +71,7 @@ if (!window.getCapabilitiesHTML) {
                 </div>
                 <div class="model-actions">
                     <button class="btn btn-primary w-100" onclick="pullModel(this.closest('.model-card').dataset.modelName)" title="Download model">
-                        <i class="fas fa-download"></i> Download
+                        <i class="fas fa-download"></i> <span class="d-none d-sm-inline">Download</span>
                     </button>
                 </div>
             </div>

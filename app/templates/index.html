@@ -258,20 +258,18 @@
                                         </div>
                                     </div>
                                     <div class="model-actions">
-                                        <div class="btn-group w-100">
-                                            <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information">
-                                                <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
-                                            </button>
-                                            <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings">
-                                                <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
-                                            </button>
-                                            <button class="btn btn-primary" onclick="restartModel(this.closest('.model-card').dataset.modelName)" title="Restart model">
-                                                <i class="fas fa-redo"></i> <span class="d-none d-sm-inline">Restart</span>
-                                            </button>
-                                            <button class="btn btn-warning" onclick="stopModel(this.closest('.model-card').dataset.modelName)" title="Stop model">
-                                                <i class="fas fa-stop"></i> <span class="d-none d-sm-inline">Stop</span>
-                                            </button>
-                                        </div>
+                                        <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information">
+                                            <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
+                                        </button>
+                                        <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings">
+                                            <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
+                                        </button>
+                                        <button class="btn btn-primary" onclick="restartModel(this.closest('.model-card').dataset.modelName)" title="Restart model">
+                                            <i class="fas fa-redo"></i> <span class="d-none d-sm-inline">Restart</span>
+                                        </button>
+                                        <button class="btn btn-warning" onclick="stopModel(this.closest('.model-card').dataset.modelName)" title="Stop model">
+                                            <i class="fas fa-stop"></i> <span class="d-none d-sm-inline">Stop</span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -376,16 +374,16 @@
                                         </div>
                                     </div>
                                     <div class="model-actions">
-                                        <button class="btn btn-success me-2" onclick="startModel(this.closest('.model-card').dataset.modelName)" title="Start model" aria-label="Start model">
+                                        <button class="btn btn-success" onclick="startModel(this.closest('.model-card').dataset.modelName)" title="Start model" aria-label="Start model">
                                             <i class="fas fa-play"></i> <span class="d-none d-sm-inline">Start</span>
                                         </button>
-                                        <button class="btn btn-primary me-2" onclick="restartModel(this.closest('.model-card').dataset.modelName)" title="Restart model" aria-label="Restart model">
+                                        <button class="btn btn-primary" onclick="restartModel(this.closest('.model-card').dataset.modelName)" title="Restart model" aria-label="Restart model">
                                             <i class="fas fa-redo"></i> <span class="d-none d-sm-inline">Restart</span>
                                         </button>
-                                        <button class="btn btn-info me-2" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information" aria-label="View model information">
+                                        <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information" aria-label="View model information">
                                             <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
                                         </button>
-                                        <button class="btn btn-secondary me-2" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings" aria-label="Settings">
+                                        <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings" aria-label="Settings">
                                             <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
                                         </button>
                                         <button class="btn btn-danger" onclick="deleteModel(this.closest('.model-card').dataset.modelName)" title="Delete model" aria-label="Delete model">
