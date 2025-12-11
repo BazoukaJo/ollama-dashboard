@@ -9,10 +9,16 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v={{ timestamp }}">
 </head>
 <body>
+    <!-- The reload button now triggers a confirmation modal and backend restart via API. See main.js for logic. -->
     <!-- Reload button (top-left) -->
-    <button id="reloadBtn" class="compact-toggle-btn reload-btn-position" title="Reload application" aria-label="Reload application" onclick="reloadApplication()">
-        <i class="fas fa-sync-alt"></i>
-    </button>
+    <div class="top-left-controls">
+        <button id="reloadBtn" class="compact-toggle-btn reload-btn-position" title="Reload application" aria-label="Reload application" onclick="showReloadAppConfirm()">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+        <button id="stopServiceBtnTop" class="compact-toggle-btn" title="Stop Ollama service" aria-label="Stop Ollama service" onclick="showStopServiceConfirm()">
+            <i class="fas fa-power-off"></i>
+        </button>
+    </div>
     <!-- Compact Mode Toggle Button -->
     <button id="compactToggle" class="compact-toggle-btn" title="Toggle Compact Mode">
         <i class="fas fa-compress"></i>
@@ -32,6 +38,7 @@
             </div>
         </div>
 
+        <div id="reloadAppFeedback" class="alert alert-info d-none" role="alert"></div>
         <div class="refresh-indicator mb-2 {% if error %}error{% endif %}" data-timezone="{{ timezone }}">
             <div class="dot"></div>
             <span>Last updated: <span id="lastUpdate"></span> • Next refresh in <span id="nextRefresh">30</span>s</span>
@@ -39,6 +46,24 @@
 
         <!-- Restart confirmation modal -->
         <div class="modal fade" id="restartConfirmModal" tabindex="-1" aria-labelledby="restartConfirmModalLabel" aria-hidden="true">
+                    <!-- Reload Application Confirmation Modal -->
+                    <div class="modal fade" id="reloadAppConfirmModal" tabindex="-1" aria-labelledby="reloadAppConfirmModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content bg-dark text-light">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="reloadAppConfirmModalLabel">Confirm Application Reload</h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p>Reloading the application will restart the backend server. This will interrupt all ongoing requests and sessions. Are you sure you want to proceed?</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button id="confirmReloadAppBtn" type="button" class="btn btn-danger">Reload Application</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content bg-dark text-light">
                     <div class="modal-header">

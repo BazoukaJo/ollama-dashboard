@@ -1,3 +1,92 @@
+// Stop Service logic
+function showStopServiceConfirm() {
+  let modal = document.getElementById('stopServiceConfirmModal');
+  if (!modal) {
+    // Create modal if not present
+    modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.id = 'stopServiceConfirmModal';
+    modal.tabIndex = -1;
+    modal.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-light">
+          <div class="modal-header">
+            <h5 class="modal-title">Confirm Stop Service</h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p>Stopping the Ollama service will terminate all backend processes. Are you sure you want to proceed?</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button id="confirmStopServiceBtn" type="button" class="btn btn-danger">Stop Service</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+  setTimeout(() => {
+    const stopBtn = document.getElementById('confirmStopServiceBtn');
+    if (stopBtn) {
+      stopBtn.onclick = async function () {
+        stopBtn.disabled = true;
+        stopBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
+        try {
+          const response = await fetch('/api/service/stop', { method: 'POST' });
+          if (response.ok) {
+            document.getElementById('reloadAppFeedback').classList.remove('d-none');
+            document.getElementById('reloadAppFeedback').textContent = 'Service stopped.';
+            setTimeout(() => { window.location.reload(); }, 3000);
+          } else {
+            document.getElementById('reloadAppFeedback').classList.remove('d-none');
+            document.getElementById('reloadAppFeedback').textContent = 'Failed to stop service.';
+          }
+        } catch (err) {
+          document.getElementById('reloadAppFeedback').classList.remove('d-none');
+          document.getElementById('reloadAppFeedback').textContent = 'Error: ' + err.message;
+        } finally {
+          stopBtn.disabled = false;
+          stopBtn.innerHTML = 'Stop Service';
+        }
+      };
+    }
+  }, 500);
+}
+// Reload Application logic
+function showReloadAppConfirm() {
+  const modal = new bootstrap.Modal(document.getElementById('reloadAppConfirmModal'));
+  modal.show();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const reloadBtn = document.getElementById('confirmReloadAppBtn');
+  if (reloadBtn) {
+    reloadBtn.onclick = async function () {
+      reloadBtn.disabled = true;
+      reloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reloading...';
+      try {
+        const response = await fetch('/api/reload_app', { method: 'POST' });
+        if (response.ok) {
+          document.getElementById('reloadAppFeedback').classList.remove('d-none');
+          document.getElementById('reloadAppFeedback').textContent = 'Reloading application...';
+          setTimeout(() => { window.location.reload(); }, 5000);
+        } else {
+          document.getElementById('reloadAppFeedback').classList.remove('d-none');
+          document.getElementById('reloadAppFeedback').textContent = 'Failed to reload application.';
+        }
+      } catch (err) {
+        document.getElementById('reloadAppFeedback').classList.remove('d-none');
+        document.getElementById('reloadAppFeedback').textContent = 'Error: ' + err.message;
+      } finally {
+        reloadBtn.disabled = false;
+        reloadBtn.innerHTML = 'Reload Application';
+      }
+    };
+  }
+});
 /**
  * Main JavaScript functionality for Ollama Dashboard
  */
