@@ -1,11 +1,13 @@
 """
 Flask application factory for Ollama Dashboard.
 """
+import logging
 import os
-from datetime import datetime
+from logging.handlers import RotatingFileHandler
+from datetime import datetime, timezone
+
 from flask import Flask, jsonify
 from flask_cors import CORS
-import pytz
 
 
 class Config:
@@ -38,7 +40,7 @@ def create_app():
 
     # Load configuration
     app.config.from_object(Config)
-    app.config['START_TIME'] = datetime.utcnow()
+    app.config['START_TIME'] = datetime.now(timezone.utc)
 
     # Configure CORS
     CORS(app, resources={
@@ -50,15 +52,12 @@ def create_app():
     })
 
     # Configure logging to file if requested
-    import logging
-    from logging.handlers import RotatingFileHandler
-    import os as _os
     log_file = app.config.get('LOG_FILE')
     log_level = app.config.get('LOG_LEVEL', 'INFO')
     if log_file:
-        os_dir = _os.path.dirname(log_file)
-        if os_dir and not _os.path.exists(os_dir):
-            _os.makedirs(os_dir, exist_ok=True)
+        os_dir = os.path.dirname(log_file)
+        if os_dir and not os.path.exists(os_dir):
+            os.makedirs(os_dir, exist_ok=True)
         handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)
         handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
         handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
@@ -103,9 +102,12 @@ def _register_template_filters(app):
             except ValueError:
                 return value
 
-        now = datetime.now(pytz.UTC)
+        now = datetime.now(timezone.utc)
         if isinstance(value, datetime):
-            value = value.replace(tzinfo=pytz.UTC)
+            if value.tzinfo:
+                value = value.astimezone(timezone.utc)
+            else:
+                value = value.replace(tzinfo=timezone.utc)
 
         diff = now - value
         seconds = diff.total_seconds()
@@ -125,8 +127,9 @@ def _register_template_filters(app):
 
 def _register_blueprints(app):
     """Register Flask blueprints."""
-    from app.routes import bp as main_bp
-    from app.routes.main import init_app as init_main_bp
+    # Import inside to avoid circular import at module load time
+    from app.routes import bp as main_bp  # pylint: disable=import-outside-toplevel
+    from app.routes.main import init_app as init_main_bp  # pylint: disable=import-outside-toplevel
 
     app.register_blueprint(main_bp)
     init_main_bp(app)

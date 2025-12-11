@@ -1,11 +1,15 @@
-"""Core functionality for OllamaService: initialization, background updates, caching, and health monitoring."""
+"""Core functionality for OllamaService.
+
+Handles initialization, background updates, caching, and health monitoring.
+"""
+# pylint: disable=line-too-long,unnecessary-ellipsis,broad-exception-caught
 import os
 import atexit
 import logging
 import threading
 import time
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict
 
 import requests
@@ -358,7 +362,7 @@ class OllamaServiceCore:
                 port = 11434
 
             # Validate port range
-            if not (1 <= port <= 65535):
+            if not 1 <= port <= 65535:
                 logger.warning("Invalid port %s, using default 11434", port)
                 port = 11434
 
@@ -422,6 +426,18 @@ class OllamaServiceCore:
         # Sanitize error message for user-friendly display (errors are already sanitized when stored, but double-check)
         error_message = self._sanitize_error_message(self._last_background_error) if self._last_background_error else None
 
+        uptime_seconds = 0
+        if self.app:
+            start_time = self.app.config.get('START_TIME')
+            now_utc = datetime.now(timezone.utc)
+            if start_time is None:
+                start_time = now_utc
+            elif start_time.tzinfo:
+                start_time = start_time.astimezone(timezone.utc)
+            else:
+                start_time = start_time.replace(tzinfo=timezone.utc)
+            uptime_seconds = int((now_utc - start_time).total_seconds())
+
         return {
             'status': status,
             'background_thread_alive': thread_alive,
@@ -433,7 +449,7 @@ class OllamaServiceCore:
                 'running_count': len(running_models),
                 'available_count': len(available_models)
             },
-            'uptime_seconds': int((datetime.now() - self.app.config.get('START_TIME', datetime.now())).total_seconds()) if self.app else 0,
+            'uptime_seconds': uptime_seconds,
             'error': error_message  # User-friendly error message
         }
 

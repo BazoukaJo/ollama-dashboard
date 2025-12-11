@@ -1,21 +1,26 @@
 """
 Main routes for Ollama Dashboard.
+
+This module is large and handles many endpoint variations; we relax a few
+lint rules to keep the legacy surface area stable while improving readability.
 """
+# pylint: disable=too-many-lines,line-too-long,broad-exception-caught,missing-function-docstring
+from datetime import datetime
 import json
 import os
-import time
-import signal
-import sys
-import subprocess
-import threading
 import platform
-import requests
+import signal
+import subprocess
+import sys
+import threading
+import time
+
 import psutil
-from flask import render_template, current_app, request, jsonify, Response, stream_with_context
-from app.services.ollama import OllamaService
+import requests
+from flask import Response, current_app, jsonify, render_template, request, stream_with_context
+
 from app.routes import bp
-from datetime import datetime
-import pytz
+from app.services.ollama import OllamaService
 
 # Initialize service without app
 ollama_service = OllamaService()
@@ -23,9 +28,7 @@ ollama_service = OllamaService()
 def _get_timezone_name():
     """Get the local timezone name in a reliable way."""
     try:
-        # Try to get timezone from pytz
-        local_tz = datetime.now(pytz.timezone('UTC')).astimezone()
-        return local_tz.tzname()
+        return datetime.now().astimezone().tzname()
     except Exception:
         try:
             # Fallback to time module
@@ -45,23 +48,33 @@ def index():
         available_models = ollama_service.get_available_models()
         version = ollama_service.get_ollama_version()
         system_stats = ollama_service.get_system_stats()
-        return render_template('index.html',
-                             models=running_models,
-                             available_models=available_models,
-                             system_stats=system_stats,
-                             error=None,
-                             timezone=_get_timezone_name(),
-                             ollama_version=version,
-                             timestamp=int(time.time()))
+        return render_template(
+            'index.html',
+            models=running_models,
+            available_models=available_models,
+            system_stats=system_stats,
+            error=None,
+            timezone=_get_timezone_name(),
+            ollama_version=version,
+            timestamp=int(time.time()),
+        )
     except Exception as e:
-        return render_template('index.html',
-                             models=[],
-                             available_models=[],
-                             system_stats={'cpu_percent': 0, 'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0}, 'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0}, 'disk': {'percent': 0, 'total': 0, 'used': 0, 'free': 0}},
-                             error=str(e),
-                             timezone=_get_timezone_name(),
-                             ollama_version='Unknown',
-                             timestamp=int(time.time()))
+        empty_stats = {
+            'cpu_percent': 0,
+            'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0},
+            'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0},
+            'disk': {'percent': 0, 'total': 0, 'used': 0, 'free': 0},
+        }
+        return render_template(
+            'index.html',
+            models=[],
+            available_models=[],
+            system_stats=empty_stats,
+            error=str(e),
+            timezone=_get_timezone_name(),
+            ollama_version='Unknown',
+            timestamp=int(time.time()),
+        )
 
 @bp.route('/api/test')
 def test():
@@ -726,9 +739,9 @@ def api_apply_all_recommended():
         for m in models:
             try:
                 name = m.get('name')
-                rec = ollama_service._recommend_settings_for_model(m)
-                if rec:
-                    success = ollama_service.save_model_settings(name, rec, source='recommended')
+                settings_data = ollama_service.get_model_settings_with_fallback(name)
+                if settings_data and settings_data.get('settings'):
+                    success = ollama_service.save_model_settings(name, settings_data['settings'], source='recommended')
                     if success:
                         applied += 1
             except Exception as e:
@@ -743,10 +756,12 @@ def api_reset_model_settings(model_name):
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
-        # Compute recommended settings
-        recommended = ollama_service._recommend_settings_for_model(ollama_service.get_model_info_cached(model_name) or {'name': model_name})
+        # Get recommended settings via fallback
+        settings_data = ollama_service.get_model_settings_with_fallback(model_name)
+        if not settings_data or not settings_data.get('settings'):
+            return _json_error(f"Could not determine recommended settings for {model_name}", status=500)
         # Save as recommended (not user)
-        success = ollama_service.save_model_settings(model_name, recommended, source='recommended')
+        success = ollama_service.save_model_settings(model_name, settings_data['settings'], source='recommended')
         if success:
             return _json_success(f"Settings for {model_name} reset to recommended defaults.")
         return _json_error(f"Failed to reset settings for {model_name}", status=500)
@@ -1158,60 +1173,11 @@ def admin_model_defaults():
         if not ollama_service.app:
             ollama_service.init_app(current_app)
         return render_template('admin_model_defaults.html')
-    except Exception as e:
+    except Exception:
         return render_template('admin_model_defaults.html')
 
 
 # Global /api/settings endpoint removed (legacy global settings deprecated).
-
-
-@bp.route('/api/health')
-def get_health():
-    """Production health monitoring endpoint."""
-    try:
-        if not ollama_service.app:
-            ollama_service.init_app(current_app)
-
-        # Calculate uptime
-        start_time = current_app.config.get('START_TIME')
-        uptime_seconds = 0
-        if start_time:
-            uptime_seconds = int((datetime.utcnow() - start_time).total_seconds())
-
-        # Get model counts
-        running_models = ollama_service.get_running_models()
-        available_models = ollama_service.get_available_models()
-
-        # Get system stats
-        system_stats = ollama_service.get_system_stats()
-
-        # Check Ollama service status
-        ollama_running = ollama_service.get_service_status() or False
-
-        status = "healthy" if ollama_running and system_stats else ("degraded" if ollama_running else "unhealthy")
-        return {
-            "status": status,
-            "uptime_seconds": uptime_seconds,
-            "ollama_service_running": ollama_running,
-            "models": {
-                "running_count": len(running_models),
-                "available_count": len(available_models),
-                "per_model_metrics_available": False
-            },
-            "system": {
-                "cpu_percent": system_stats.get('cpu_percent', 0) if system_stats else 0,
-                "memory_percent": system_stats.get('memory', {}).get('percent', 0) if system_stats else 0,
-                "vram_percent": system_stats.get('vram', {}).get('percent', 0) if system_stats and system_stats.get('vram', {}).get('total', 0) > 0 else None,
-                "disk_percent": system_stats.get('disk', {}).get('percent', 0) if system_stats else 0
-            },
-            "timestamp": datetime.utcnow().isoformat() + 'Z'
-        }
-    except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat() + 'Z'
-        }, 503
 
 
 def init_app(app):
