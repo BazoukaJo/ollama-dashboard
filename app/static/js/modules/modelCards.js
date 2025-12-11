@@ -67,7 +67,34 @@ if (!window.getCapabilitiesHTML) {
                                 <div class="spec-value">${model.size || 'Unknown'}</div>
                             </div>
                         </div>
+                        <div class="spec-item">
+                            <div class="spec-icon">
+                                <i class="fas fa-memory"></i>
+                            </div>
+                            <div class="spec-content">
+                                <div class="spec-label">System RAM</div>
+                                <div class="spec-value" id="downloadable-ram-${escapeHtml(model.name).replace(/[^a-zA-Z0-9]/g, '-')}">Loading...</div>
+                            </div>
+                        </div>
                     </div>
+                    <!-- System VRAM capacity (hidden in compact mode) -->
+                    <div class="spec-row compact-hide" title="System-wide capacities (not per model)">
+                        <div class="spec-item">
+                            <div class="spec-icon">
+                                <i class="fas fa-palette"></i>
+                            </div>
+                            <div class="spec-content">
+                                <div class="spec-label">System VRAM</div>
+                                <div class="spec-value" id="downloadable-vram-${escapeHtml(model.name).replace(/[^a-zA-Z0-9]/g, '-')}">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="download-progress" style="display: none; margin-bottom: 0.5rem;">
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;"></div>
+                    </div>
+                    <small class="text-muted d-block text-center mt-1">0%</small>
                 </div>
                 <div class="model-actions">
                     <button class="btn btn-primary w-100" onclick="pullModel(this.closest('.model-card').dataset.modelName)" title="Download model">

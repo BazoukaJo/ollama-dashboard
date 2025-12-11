@@ -1,6 +1,7 @@
 """
 Main routes for Ollama Dashboard.
 """
+import json
 import os
 import time
 import signal
@@ -10,7 +11,7 @@ import threading
 import platform
 import requests
 import psutil
-from flask import render_template, current_app, request, jsonify
+from flask import render_template, current_app, request, jsonify, Response, stream_with_context
 from app.services.ollama import OllamaService
 from app.routes import bp
 from datetime import datetime
@@ -1087,20 +1088,6 @@ def get_models_memory_usage():
     except Exception as e:
         return {"error": str(e)}, 500
 
-
-
-@bp.route('/api/models/pull/<model_name>', methods=['POST'])
-def pull_model(model_name):
-    """Pull a model."""
-    try:
-        result = ollama_service.pull_model(model_name)
-        if isinstance(result, dict) and result.get("success"):
-            return result, 200
-        return result if isinstance(result, dict) else {"success": False, "message": str(result)}, 500
-    except Exception as e:
-        return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
-
-
 @bp.route('/api/models/downloadable')
 def api_get_downloadable_models():
     """Get list of downloadable models."""
@@ -1120,14 +1107,22 @@ def _json_success(message, extra=None, status=200):
 
 def _json_error(message, status=500):
     """Return a standardized JSON error response."""
-    return jsonify({"success": False, "error": message}), status
+    return jsonify({"success": False, "error": message, "message": message}), status
 
 @bp.route('/api/models/pull/<model_name>', methods=['POST'])
 def api_pull_model(model_name):
-    """Pull a model with standardized JSON response."""
+    """Pull a model with optional streaming progress updates."""
+    stream = request.args.get('stream', 'false').lower() == 'true'
     try:
+        if stream:
+            def generate():
+                for update in ollama_service.pull_model_stream(model_name):
+                    yield f"data: {json.dumps(update)}\n\n"
+
+            return Response(stream_with_context(generate()), mimetype='text/event-stream')
+
         result = ollama_service.pull_model(model_name)
-        if result.get("success"):
+        if isinstance(result, dict) and result.get("success"):
             return _json_success(result.get("message", f"Pulled {model_name}"))
         return _json_error(result.get("message", "Failed to pull model"))
     except Exception as e:

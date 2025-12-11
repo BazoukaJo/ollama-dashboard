@@ -466,3 +466,61 @@ class OllamaServiceUtilities:
 
         except Exception as e:
             return {"success": False, "message": str(e)}
+
+    def pull_model_stream(self, model_name):
+        """Stream pull status updates for a model as JSON-friendly events."""
+        try:
+            if self._session is None:
+                yield {"event": "error", "message": "Session not initialized"}
+                return
+
+            host, port = self._get_ollama_host_port()
+            pull_url = f"http://{host}:{port}/api/pull"
+
+            with self._session.post(
+                pull_url,
+                json={"name": model_name, "stream": True},
+                stream=True,
+                timeout=3700,
+            ) as response:
+                if response.status_code != 200:
+                    yield {"event": "error", "message": f"Failed to pull model: {response.text}"}
+                    return
+
+                for line in response.iter_lines():
+                    if not line:
+                        continue
+
+                    try:
+                        payload = json.loads(line.decode("utf-8"))
+                    except Exception:
+                        yield {"event": "status", "message": line.decode("utf-8", errors="ignore")}
+                        continue
+
+                    if payload.get("error"):
+                        yield {"event": "error", "message": payload.get("error")}
+                        return
+
+                    status_msg = payload.get("status") or payload.get("status_message")
+                    total = payload.get("total")
+                    completed = payload.get("completed")
+
+                    event_payload = {"event": "status"}
+                    if status_msg:
+                        event_payload["message"] = status_msg
+                    if total is not None and completed is not None:
+                        event_payload["total"] = total
+                        event_payload["completed"] = completed
+
+                    if len(event_payload) > 1:
+                        yield event_payload
+
+                    if payload.get("done") or status_msg == "success":
+                        yield {"event": "done", "success": True, "message": f"Model {model_name} pulled successfully"}
+                        return
+
+                # Fallback completion event when stream ends without explicit done
+                yield {"event": "done", "success": True, "message": f"Model {model_name} pulled successfully"}
+
+        except Exception as e:
+            yield {"event": "error", "message": str(e)}

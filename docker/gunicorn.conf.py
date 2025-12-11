@@ -5,6 +5,7 @@ worker_class = "sync"
 accesslog = "-"
 errorlog = "-"
 capture_output = True
+timeout = 3600
 
 # Security settings
 forwarded_allow_ips = "*"
@@ -32,4 +33,4 @@ logconfig_dict = {
         "level": "INFO",
         "handlers": ["console"]
     }
-} 
+}

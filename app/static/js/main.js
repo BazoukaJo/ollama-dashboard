@@ -1117,43 +1117,122 @@ function renderDownloadableModels(models) {
 async function pullModel(modelName) {
   const card = document.querySelector(`.model-card[data-model-name="${cssEscape(modelName)}"]`);
   const button = card ? card.querySelector('button[title="Download model"]') : null;
+  const progressContainer = card ? card.querySelector('.download-progress') : null;
+  const progressBar = progressContainer ? progressContainer.querySelector('.progress-bar') : null;
+  const progressText = progressContainer ? progressContainer.querySelector('small') : null;
   const originalText = button ? button.innerHTML : null;
+
   if (button) {
     button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Downloading...';
     button.disabled = true;
   }
 
+  if (progressContainer) {
+    progressContainer.style.display = 'block';
+  }
+
   showNotification(`Starting download for ${modelName}. This may take a while...`, "info");
 
   try {
-    // Step 1: Pull model
-    const pullResp = await fetch(`/api/models/pull/${encodeURIComponent(modelName)}`, { method: "POST" });
-    const pullResult = await pullResp.json();
-    if (!pullResult.success) {
-      showNotification(pullResult.message || "Pull failed", "error");
-      if (button && originalText !== null) { button.innerHTML = originalText; button.disabled = false; }
-      return;
+    // Step 1: Pull model with streaming status updates
+    const pullResp = await fetch(`/api/models/pull/${encodeURIComponent(modelName)}?stream=true`, { method: "POST" });
+    if (!pullResp.ok) {
+      throw new Error(`Failed to start download (${pullResp.status})`);
     }
-    showNotification(pullResult.message, "success");
 
-    // Step 2: Warm/load model
-    if (button) button.innerHTML = '<i class="fas fa-fire me-1"></i>Loading...';
-    showNotification(`Loading model ${modelName}...`, "info");
-    const startResp = await fetch(`/api/models/start/${encodeURIComponent(modelName)}`, { method: "POST" });
-    const startResult = await startResp.json();
-    if (startResult.success) {
-      showNotification(startResult.message, "success");
-      if (button) button.innerHTML = '<i class="fas fa-check me-1"></i>Ready';
-      setTimeout(() => {
-        updateModelData();
-        location.reload();
-      }, 1500);
+    let pullSucceeded = false;
+    let pullMessage = "Download finished";
+
+    if (pullResp.body) {
+      const reader = pullResp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      const handleEvents = (eventStrings) => {
+        for (const event of eventStrings) {
+          const dataLine = event.trim().replace(/^data:\s*/, "");
+          if (!dataLine) continue;
+
+          let payload;
+          try {
+            payload = JSON.parse(dataLine);
+          } catch (e) {
+            console.warn("Failed to parse pull event", e, dataLine);
+            continue;
+          }
+
+          if (payload.event === "status") {
+            const msg = payload.message || "Downloading...";
+            if (button) {
+              button.innerHTML = `<i class="fas fa-download me-1"></i>${msg}`;
+            }
+
+            // Update progress bar if total and completed are available
+            if (payload.total && payload.completed !== undefined) {
+              const percent = Math.round((payload.completed / payload.total) * 100);
+              if (progressBar) {
+                progressBar.style.width = `${percent}%`;
+                progressBar.setAttribute('aria-valuenow', percent);
+              }
+              if (progressText) {
+                progressText.textContent = `${percent}%`;
+              }
+            }
+          } else if (payload.event === "error") {
+            throw new Error(payload.message || "Pull failed");
+          } else if (payload.event === "done") {
+            pullSucceeded = payload.success !== false;
+            pullMessage = payload.message || pullMessage;
+            // Set progress to 100% on completion
+            if (progressBar) {
+              progressBar.style.width = '100%';
+              progressBar.setAttribute('aria-valuenow', 100);
+            }
+            if (progressText) {
+              progressText.textContent = '100%';
+            }
+          }
+        }
+      };
+
+      // Process Server-Sent Events from the streaming pull endpoint
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop();
+        handleEvents(events);
+      }
+
+      if (buffer.trim()) {
+        handleEvents([buffer]);
+      }
     } else {
-      showNotification(startResult.message || "Model load failed", "error");
-      if (button && originalText !== null) { button.innerHTML = originalText; button.disabled = false; }
+      // Fallback for environments without streaming support
+      const fallback = await fetch(`/api/models/pull/${encodeURIComponent(modelName)}`, { method: "POST" });
+      const fallbackResult = await fallback.json();
+      pullSucceeded = !!fallbackResult.success;
+      pullMessage = fallbackResult.message || pullMessage;
     }
+
+    if (!pullSucceeded) {
+      throw new Error(pullMessage || "Pull failed");
+    }
+
+    showNotification(pullMessage, "success");
+
+    // Download complete - update UI and refresh models list
+    if (button) button.innerHTML = '<i class="fas fa-check me-1"></i>Downloaded';
+    setTimeout(() => {
+      updateModelData();
+      location.reload();
+    }, 1500);
   } catch (err) {
-    showNotification(`Download or load failed: ${err.message}`, "error");
+    showNotification(`Download failed: ${err.message}`, "error");
     if (button && originalText !== null) { button.innerHTML = originalText; button.disabled = false; }
+    if (progressContainer) { progressContainer.style.display = 'none'; }
+    if (progressBar) { progressBar.style.width = '0%'; }
+    if (progressText) { progressText.textContent = '0%'; }
   }
 }
