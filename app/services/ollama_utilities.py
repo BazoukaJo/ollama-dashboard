@@ -344,15 +344,14 @@ class OllamaServiceUtilities:
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
 
-        lock = getattr(self, '_model_settings_lock', None)
-        if lock is None:
-            self._model_settings = getattr(self, '_model_settings', {})
-            self._model_settings[model_name] = entry
-            return self._write_model_settings_file(self._model_settings)
+        self._model_settings = getattr(self, '_model_settings', {})
+        self._model_settings[model_name] = entry
 
-        with lock:
-            self._model_settings = getattr(self, '_model_settings', {})
-            self._model_settings[model_name] = entry
+        lock = getattr(self, '_model_settings_lock', None)
+        if lock is not None:
+            with lock:
+                return self._write_model_settings_file(self._model_settings)
+        else:
             return self._write_model_settings_file(self._model_settings)
 
     def delete_model_settings(self, model_name):
@@ -366,6 +365,14 @@ class OllamaServiceUtilities:
     def _recommend_settings_for_model(self, _model_info):
         """Recommend default settings for a model based on its characteristics."""
         info = _model_info or {}
+
+        def recommend_settings_for_model(self, model_info):
+            """Public method to recommend default settings for a model based on its characteristics."""
+            return self._recommend_settings_for_model(model_info)
+
+        def _recommend_settings_for_model(self, _model_info):
+            """Recommend default settings for a model based on its characteristics (internal)."""
+            info = _model_info or {}
         details = info.get('details', {}) if isinstance(info, dict) else {}
         families = [f.lower() for f in details.get('families', []) or []]
         name = (info.get('name') or '') if isinstance(info, dict) else str(info)

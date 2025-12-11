@@ -445,6 +445,13 @@ class OllamaServiceCore:
         self._last_background_error = None
         self._consecutive_ps_failures = 0
 
+    def clear_cache(self, key):
+        """Clear a specific cache entry and its timestamp."""
+        if key in self._cache:
+            del self._cache[key]
+        if key in self._cache_timestamps:
+            del self._cache_timestamps[key]
+
     def _cleanup(self):
         """Cleanup resources on process exit."""
         try:

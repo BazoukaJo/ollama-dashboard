@@ -25,12 +25,11 @@ def _get_timezone_name():
         # Try to get timezone from pytz
         local_tz = datetime.now(pytz.timezone('UTC')).astimezone()
         return local_tz.tzname()
-    except:
+    except Exception:
         try:
             # Fallback to time module
-            import time
             return time.tzname[0] if time.tzname and len(time.tzname) > 0 else 'UTC'
-        except:
+        except Exception:
             # Last resort
             return 'UTC'
 
@@ -295,8 +294,6 @@ def start_model(model_name):
     tries to pull the model from the registry before loading.
     Retries up to 3 times for transient connection errors (forcibly closed).
     """
-    import time
-
     try:
         # Check if model is already running
         running_models = ollama_service.get_running_models()
@@ -337,7 +334,7 @@ def start_model(model_name):
                     error_json = response.json()
                     if 'error' in error_json:
                         error_text = error_text + " " + str(error_json['error'])
-                except:
+                except Exception:
                     pass
 
                 # Log the error for debugging
@@ -401,7 +398,7 @@ def start_model(model_name):
             return {"success": False, "message": "Model loading timed out after retries. Try a smaller model or check system resources."}, 408
         except requests.exceptions.ConnectionError as e:
             if _is_transient_error(str(e)):
-                return {"success": False, "message": f"Model loading failed after 3 retries due to connection issues. This can happen with large models on first load. Please try again."}, 503
+                return {"success": False, "message": "Model loading failed after 3 retries due to connection issues. This can happen with large models on first load. Please try again."}, 503
             return {"success": False, "message": "Cannot connect to Ollama server. Please ensure Ollama is running."}, 503
 
     except Exception as e:
@@ -431,14 +428,24 @@ def stop_model(model_name):
             return {"success": False, "message": f"Model {model_name} is not currently running"}, 400
 
         # Gracefully unload the model using Ollama API
+        # According to Ollama API, sending a request with keep_alive=0s unloads the model
+        # We use a minimal prompt to ensure the request completes
         try:
             unload_response = requests.post(
                 _get_ollama_url("generate"),
-                json={"model": model_name, "prompt": "", "stream": False, "keep_alive": "0s"},
+                json={
+                    "model": model_name,
+                    "prompt": " ",  # Single space instead of empty to ensure valid request
+                    "stream": False,
+                    "keep_alive": "0s"
+                },
                 timeout=30
             )
 
             if unload_response.status_code == 200:
+                # Clear the cache for running models to force a refresh
+                # This ensures the UI shows the model as unloaded immediately
+                ollama_service.clear_cache('running_models')
                 return {"success": True, "message": f"Model {model_name} stopped successfully"}
             elif unload_response.status_code == 404:
                 return {"success": False, "message": f"Model {model_name} not found"}, 404
@@ -448,7 +455,7 @@ def stop_model(model_name):
                     error_detail = unload_response.json().get('error', '')
                     if error_detail:
                         error_msg += f" - {error_detail}"
-                except:
+                except Exception:
                     pass
                 return {"success": False, "message": error_msg}, unload_response.status_code
 
@@ -487,7 +494,12 @@ def restart_model(model_name):
             try:
                 unload_response = requests.post(
                     _get_ollama_url("generate"),
-                    json={"model": model_name, "prompt": "", "stream": False, "keep_alive": "0s"},
+                    json={
+                        "model": model_name,
+                        "prompt": " ",  # Single space instead of empty to ensure valid request
+                        "stream": False,
+                        "keep_alive": "0s"
+                    },
                     timeout=30
                 )
 
@@ -497,7 +509,7 @@ def restart_model(model_name):
                         error_detail = unload_response.json().get('error', '')
                         if error_detail:
                             error_msg += f" - {error_detail}"
-                    except:
+                    except Exception:
                         pass
                     return {"success": False, "message": error_msg}, unload_response.status_code
 
@@ -507,8 +519,9 @@ def restart_model(model_name):
                 return {"success": False, "message": f"Network error while stopping model: {str(e)}"}, 503
 
             # Brief pause to ensure unload completes
-            import time
             time.sleep(1)
+            # Clear the cache to force a refresh of running models
+            ollama_service.clear_cache('running_models')
 
         # Step 2: Start the model (warm start with retry logic)
         max_retries = 3
@@ -555,12 +568,11 @@ def restart_model(model_name):
                         error_detail = start_response.json().get('error', '')
                         if error_detail:
                             last_error += f" - {error_detail}"
-                    except:
+                    except Exception:
                         pass
 
                     # Check if this is a transient error worth retrying
                     if start_response.status_code in [500, 502, 503, 504] and attempt < max_retries - 1:
-                        import time
                         time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
                         continue
                     else:
@@ -569,7 +581,6 @@ def restart_model(model_name):
             except requests.exceptions.Timeout:
                 last_error = "Timeout"
                 if attempt < max_retries - 1:
-                    import time
                     time.sleep(retry_delay * (2 ** attempt))
                     continue
                 else:
@@ -577,7 +588,6 @@ def restart_model(model_name):
             except requests.exceptions.RequestException as e:
                 last_error = str(e)
                 if attempt < max_retries - 1:
-                    import time
                     time.sleep(retry_delay * (2 ** attempt))
                     continue
                 else:
@@ -624,7 +634,7 @@ def get_available_models():
         models = ollama_service.get_available_models()
         # Add has_custom_settings flag for each model (to be used in UI)
         for m in models:
-            m['has_custom_settings'] = ollama_service._has_custom_settings(m.get('name'))
+            m['has_custom_settings'] = ollama_service.has_custom_model_settings(m.get('name'))
         return {"models": models}
     except Exception as e:
         return {"error": str(e), "models": []}, 500
@@ -845,43 +855,103 @@ def chat():
 
 @bp.route('/api/models/delete/<model_name>', methods=['DELETE'])
 def delete_model(model_name):
-    """Delete a model from the system."""
+    """Delete a model from the system.
+
+    Process:
+    1. Stop the model if it's currently running (unload from memory)
+    2. Delete the model from Ollama
+    3. Clear caches to reflect changes in the UI
+    """
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
 
-        # Stop model if running
+        # Step 1: Stop model if running (unload from memory first)
         running_models = ollama_service.get_running_models()
-        if any(model['name'] == model_name for model in running_models):
-            try:
-                requests.post(
-                    _get_ollama_url("generate"),
-                    json={"model": model_name, "prompt": "", "stream": False, "keep_alive": "0s"},
-                    timeout=10
-                )
-                time.sleep(2)  # Wait for unload
-            except Exception:
-                return {"success": False, "message": f"Failed to stop running model '{model_name}' before deletion."}, 400
+        is_running = any(model['name'] == model_name for model in running_models)
 
-        # Check if model exists
+        if is_running:
+            try:
+                # Use improved unload mechanism with single space prompt
+                unload_response = requests.post(
+                    _get_ollama_url("generate"),
+                    json={
+                        "model": model_name,
+                        "prompt": " ",  # Single space instead of empty to ensure valid request
+                        "stream": False,
+                        "keep_alive": "0s"
+                    },
+                    timeout=30
+                )
+
+                if unload_response.status_code not in [200, 404]:
+                    current_app.logger.warning(
+                        f"Warning: Failed to unload model '{model_name}' before deletion. "
+                        f"Status: {unload_response.status_code}. Proceeding with deletion anyway."
+                    )
+
+                # Wait for unload to complete
+                time.sleep(1)
+
+                # Clear the cache to reflect model is no longer running
+                ollama_service.clear_cache('running_models')
+
+            except requests.exceptions.Timeout:
+                current_app.logger.warning(
+                    f"Warning: Timeout unloading model '{model_name}' before deletion. "
+                    f"Proceeding with deletion anyway."
+                )
+            except Exception as e:
+                current_app.logger.warning(
+                    f"Warning: Error unloading model '{model_name}' before deletion: {str(e)}. "
+                    f"Proceeding with deletion anyway."
+                )
+
+        # Step 2: Check if model exists
         available_models = ollama_service.get_available_models()
         if not any(model['name'] == model_name for model in available_models):
             return {"success": False, "message": f"Model '{model_name}' not found in available models."}, 404
 
-        # Delete the model
+        # Step 3: Delete the model from Ollama
         try:
-            response = requests.delete(
+            delete_response = requests.delete(
                 _get_ollama_url("delete"),
                 json={"name": model_name},
-                timeout=30
+                timeout=60  # Increased timeout for deletion
             )
-            if response.status_code == 200:
-                return {"success": True, "message": f"Model '{model_name}' deleted successfully."}, 200
-            return {"success": False, "message": f"Failed to delete model: {response.text}"}, response.status_code or 500
+
+            if delete_response.status_code == 200:
+                # Clear caches after successful deletion
+                ollama_service.clear_cache('available_models')
+                ollama_service.clear_cache('running_models')
+
+                return {
+                    "success": True,
+                    "message": f"Model '{model_name}' deleted successfully (unloaded from memory and removed from disk)."
+                }, 200
+            else:
+                error_msg = f"Failed to delete model: HTTP {delete_response.status_code}"
+                try:
+                    error_detail = delete_response.json().get('error', '')
+                    if error_detail:
+                        error_msg += f" - {error_detail}"
+                except Exception:
+                    error_msg += f" - {delete_response.text[:100]}"
+                return {"success": False, "message": error_msg}, delete_response.status_code or 500
+
         except requests.exceptions.Timeout:
-            return {"success": False, "message": "Model deletion timed out."}, 408
+            return {
+                "success": False,
+                "message": "Model deletion timed out. The model may still be deleting."
+            }, 504
+        except requests.exceptions.RequestException as e:
+            return {
+                "success": False,
+                "message": f"Network error while deleting model: {str(e)}"
+            }, 503
 
     except Exception as e:
+        current_app.logger.error(f"Unexpected error deleting model {model_name}: {str(e)}")
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
 
 
@@ -1040,13 +1110,17 @@ def api_get_downloadable_models():
         return {"models": models}
     except Exception as e:
         current_app.logger.error(f"Error in downloadable models endpoint: {str(e)}", exc_info=True)
-    return jsonify({"success": False, "message": message}), status
+        return jsonify({"success": False, "message": str(e)}), 500
 
 def _json_success(message, extra=None, status=200):
     payload = {"success": True, "message": message}
     if extra:
         payload.update(extra)
     return jsonify(payload), status
+
+def _json_error(message, status=500):
+    """Return a standardized JSON error response."""
+    return jsonify({"success": False, "error": message}), status
 
 @bp.route('/api/models/pull/<model_name>', methods=['POST'])
 def api_pull_model(model_name):

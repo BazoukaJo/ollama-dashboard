@@ -273,6 +273,10 @@ class OllamaServiceModels:
         except Exception:
             return False
 
+    def has_custom_model_settings(self, model_name):
+        """Public method to check if a model has custom settings (user-defined)."""
+        return self._has_custom_settings(model_name)
+
     def get_models_memory_usage(self):
         """Get memory usage information for running models."""
         try:
