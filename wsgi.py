@@ -1,4 +1,4 @@
-from ollama_dashboard import app
+from app import create_app
 
 # WSGI entry point for the ollama-dashboard application.
 #
@@ -13,6 +13,8 @@ from ollama_dashboard import app
 #     To deploy with Gunicorn:
 #         gunicorn wsgi:app
 #
+
+app = create_app()
 
 if __name__ == '__main__':
     # Run development server as a convenience wrapper

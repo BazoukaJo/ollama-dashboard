@@ -1,4 +1,3 @@
-
 """
 Main routes for Ollama Dashboard.
 """
@@ -9,14 +8,79 @@ import sys
 import subprocess
 import threading
 import platform
-from datetime import datetime
-import psutil
 import requests
-import pytz
+import psutil
 from flask import render_template, current_app, request, jsonify
 from app.services.ollama import OllamaService
-from app.services.ollama_models import OllamaConnectionError
-from app.routes import bpled_pids = []
+from app.routes import bp
+from datetime import datetime
+import pytz
+
+# Initialize service without app
+ollama_service = OllamaService()
+
+def _get_timezone_name():
+    """Get the local timezone name in a reliable way."""
+    try:
+        # Try to get timezone from pytz
+        local_tz = datetime.now(pytz.timezone('UTC')).astimezone()
+        return local_tz.tzname()
+    except:
+        try:
+            # Fallback to time module
+            import time
+            return time.tzname[0] if time.tzname and len(time.tzname) > 0 else 'UTC'
+        except:
+            # Last resort
+            return 'UTC'
+
+
+@bp.route('/')
+def index():
+    try:
+        # Get the current app context
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        running_models = ollama_service.get_running_models()
+        available_models = ollama_service.get_available_models()
+        version = ollama_service.get_ollama_version()
+        system_stats = ollama_service.get_system_stats()
+        return render_template('index.html',
+                             models=running_models,
+                             available_models=available_models,
+                             system_stats=system_stats,
+                             error=None,
+                             timezone=_get_timezone_name(),
+                             ollama_version=version,
+                             timestamp=int(time.time()))
+    except Exception as e:
+        return render_template('index.html',
+                             models=[],
+                             available_models=[],
+                             system_stats={'cpu_percent': 0, 'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0}, 'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0}, 'disk': {'percent': 0, 'total': 0, 'used': 0, 'free': 0}},
+                             error=str(e),
+                             timezone=_get_timezone_name(),
+                             ollama_version='Unknown',
+                             timestamp=int(time.time()))
+
+@bp.route('/api/test')
+def test():
+    return {"message": "API is working"}
+
+def _get_ollama_url(endpoint=""):
+    """Generate Ollama API URL."""
+    host = ollama_service.app.config.get('OLLAMA_HOST')
+    port = ollama_service.app.config.get('OLLAMA_PORT')
+    return f"http://{host}:{port}/api/{endpoint}"
+
+
+# Force kill the dashboard app and all children
+@bp.route('/api/force_kill', methods=['POST'])
+def force_kill_app():
+    """Force kill the dashboard app and all its child processes."""
+    current_pid = os.getpid()
+    parent = psutil.Process(current_pid)
+    killed_pids = []
     for child in parent.children(recursive=True):
         try:
             child.kill()
@@ -29,8 +93,7 @@ from app.routes import bpled_pids = []
     except (psutil.NoSuchProcess, psutil.AccessDenied):
         try:
             if platform.system() != "Windows":
-                # SIGKILL may not exist on all platforms, use getattr with fallback
-                kill_signal = getattr(signal, 'SIGKILL', signal.SIGTERM)  # type: ignore[attr-defined]
+                kill_signal = getattr(signal, 'SIGKILL', signal.SIGTERM)
             else:
                 kill_signal = signal.SIGTERM
             os.kill(current_pid, kill_signal)
@@ -39,37 +102,33 @@ from app.routes import bpled_pids = []
             pass
     time.sleep(1)
     return jsonify({"success": True, "message": f"Force killed PIDs: {', '.join(map(str, killed_pids))}"})
+
+
 # Reload API: kills current process and starts a new one
 @bp.route('/api/reload_app', methods=['POST'])
 def reload_app():
     """Reload the application by stopping current instance and starting a new one."""
     try:
-        # Validate we can actually restart (check if we're in a proper environment)
         if not sys.executable or not os.path.exists(sys.executable):
             return jsonify({
                 'status': 'error',
                 'message': 'Cannot determine Python executable path. Reload not available.'
             }), 500
 
-        # Clear all caches and reset error states before restart
         if ollama_service.app:
             try:
-                ollama_service.clear_all_caches()  # This also resets _last_background_error and _consecutive_ps_failures
-                # Note: Background thread cleanup not needed here as the process will be terminated
+                ollama_service.clear_all_caches()
             except Exception as e:
                 current_app.logger.warning(f"Error clearing caches before reload: {e}")
 
         def restart():
             """Restart the application in a daemon thread."""
             try:
-                time.sleep(1)  # Let response finish
-
-                # Determine which script to restart
+                time.sleep(1)
                 script_path = None
                 try:
                     if len(sys.argv) > 0:
                         script_arg = sys.argv[0]
-                        # Check if it's a valid path
                         if os.path.exists(script_arg):
                             script_path = os.path.abspath(script_arg)
                         elif os.path.exists(os.path.join(os.getcwd(), script_arg)):
@@ -77,25 +136,21 @@ def reload_app():
                 except Exception as e:
                     current_app.logger.warning(f"Error detecting script from sys.argv: {e}")
 
-                # Fallback: try to detect from common entry points
                 if not script_path or not os.path.exists(script_path):
                     try:
                         current_file = os.path.abspath(__file__)
                         current_dir = os.path.dirname(current_file)
                         parent_dir = os.path.dirname(current_dir)
-                        # Try ollama_dashboard.py first (main entry point)
                         potential_path = os.path.join(parent_dir, 'ollama_dashboard.py')
                         if os.path.exists(potential_path):
                             script_path = potential_path
                         else:
-                            # Try wsgi.py as fallback
                             potential_path = os.path.join(parent_dir, 'wsgi.py')
                             if os.path.exists(potential_path):
                                 script_path = potential_path
                     except Exception as e:
                         current_app.logger.warning(f"Error detecting script from file paths: {e}")
 
-                # If still no script found, use default
                 if not script_path or not os.path.exists(script_path):
                     script_path = 'ollama_dashboard.py'
                     current_app.logger.warning(f"Could not detect script path, using default: {script_path}")
@@ -105,7 +160,6 @@ def reload_app():
                     current_app.logger.error("Python executable not found, cannot restart")
                     return
 
-                # Get working directory
                 try:
                     if os.path.exists(script_path):
                         current_dir = os.path.dirname(os.path.abspath(script_path))
@@ -121,7 +175,6 @@ def reload_app():
                     current_app.logger.error(f"Cannot get process info: {e}")
                     return
 
-                # Force kill all children first
                 try:
                     for child in parent.children(recursive=True):
                         try:
@@ -133,15 +186,10 @@ def reload_app():
                 except Exception as e:
                     current_app.logger.warning(f"Error killing child processes: {e}")
 
-                # Small delay to let children terminate
                 time.sleep(0.5)
-
-                # Create restart command
                 restart_cmd = [python, script_path]
                 try:
                     if platform.system() == "Windows":
-                        # On Windows, use DETACHED_PROCESS for background
-                        # Note: CREATE_NEW_PROCESS_GROUP may not be available on all Windows versions
                         try:
                             subprocess.Popen(
                                 restart_cmd,
@@ -152,7 +200,6 @@ def reload_app():
                                 stderr=subprocess.DEVNULL
                             )
                         except (AttributeError, ValueError, TypeError):
-                            # Fallback for older Windows or if flags not available
                             subprocess.Popen(
                                 restart_cmd,
                                 cwd=current_dir,
@@ -162,7 +209,6 @@ def reload_app():
                                 stderr=subprocess.DEVNULL
                             )
                     else:
-                        # On Unix-like systems
                         subprocess.Popen(
                             restart_cmd,
                             cwd=current_dir,
@@ -172,17 +218,13 @@ def reload_app():
                         )
                 except Exception as e:
                     current_app.logger.error(f"Failed to start new process: {e}")
-                    # Try simpler approach as last resort
                     try:
                         subprocess.Popen(restart_cmd, cwd=current_dir)
                     except Exception as e2:
                         current_app.logger.error(f"Fallback restart also failed: {e2}")
                         return
 
-                # Small delay before killing self to let new process start
                 time.sleep(0.5)
-
-                # Force kill self
                 try:
                     parent.kill()
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -190,15 +232,13 @@ def reload_app():
                 except Exception:
                     try:
                         if platform.system() != "Windows":
-                            # SIGKILL may not exist on all platforms, use getattr with fallback
-                            kill_signal = getattr(signal, 'SIGKILL', signal.SIGTERM)  # type: ignore[attr-defined]
+                            kill_signal = getattr(signal, 'SIGKILL', signal.SIGTERM)
                         else:
                             kill_signal = signal.SIGTERM
                         os.kill(current_pid, kill_signal)
                     except (ProcessLookupError, PermissionError, OSError):
                         pass
             except Exception as e:
-                # Log error but don't raise - we're in a daemon thread
                 try:
                     current_app.logger.exception(f"Critical error during restart: {e}")
                 except Exception:
@@ -216,64 +256,6 @@ def reload_app():
             'status': 'error',
             'message': f'Failed to reload application: {str(e)}'
         }), 500
-
-# Initialize service without app
-ollama_service = OllamaService()
-
-def _get_timezone_name():
-    """Get the local timezone name in a reliable way."""
-    try:
-        # Try to get timezone from pytz
-        local_tz = datetime.now(pytz.timezone('UTC')).astimezone()
-        return local_tz.tzname()
-    except Exception:
-        try:
-            # Fallback to time module
-            return time.tzname[0] if time.tzname and len(time.tzname) > 0 else 'UTC'
-        except Exception:
-            # Last resort
-            return 'UTC'
-
-
-@bp.route('/')
-def index():
-    """Render the main dashboard page with model and system information."""
-    try:
-        # Get the current app context
-        if not ollama_service.app:
-            ollama_service.init_app(current_app)
-        running_models = ollama_service.get_running_models()
-        available_models = ollama_service.get_available_models()
-        version = ollama_service.get_ollama_version()
-        system_stats = ollama_service.get_system_stats()
-        return render_template('index.html',
-                             models=running_models,
-                             available_models=available_models,
-                             system_stats=system_stats,
-                             error=None,
-                             timezone=_get_timezone_name(),
-                             ollama_version=version,
-                             timestamp=int(time.time()))
-    except (OllamaConnectionError, requests.exceptions.ConnectionError, requests.exceptions.RequestException, OSError, ValueError, AttributeError, RuntimeError) as e:
-        return render_template('index.html',
-                             models=[],
-                             available_models=[],
-                             system_stats={'cpu_percent': 0, 'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0}, 'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0}, 'disk': {'percent': 0, 'total': 0, 'used': 0, 'free': 0}},
-                             error=str(e),
-                             timezone=_get_timezone_name(),
-                             ollama_version='Unknown',
-                             timestamp=int(time.time()))
-
-@bp.route('/api/test')
-def test():
-    """Test endpoint to verify API functionality."""
-    return {"message": "API is working"}
-
-def _get_ollama_url(endpoint=""):
-    """Generate Ollama API URL."""
-    host = ollama_service.app.config.get('OLLAMA_HOST')
-    port = ollama_service.app.config.get('OLLAMA_PORT')
-    return f"http://{host}:{port}/api/{endpoint}"
 
 
 def _handle_model_error(response, model_name, operation="operation"):
@@ -313,14 +295,9 @@ def start_model(model_name):
     tries to pull the model from the registry before loading.
     Retries up to 3 times for transient connection errors (forcibly closed).
     """
-    try:
-        def _clear_model_caches():
-            """Reset caches so running model state updates immediately."""
-            try:
-                ollama_service.clear_all_caches()
-            except Exception as cache_err:
-                current_app.logger.debug("Cache clear after start failed: %s", cache_err)
+    import time
 
+    try:
         # Check if model is already running
         running_models = ollama_service.get_running_models()
         if any(model['name'] == model_name for model in running_models):
@@ -360,18 +337,17 @@ def start_model(model_name):
                     error_json = response.json()
                     if 'error' in error_json:
                         error_text = error_text + " " + str(error_json['error'])
-                except Exception:
+                except:
                     pass
 
                 # Log the error for debugging
-                current_app.logger.debug(
-                    f"Attempt {retry_num + 1}/{max_retries + 1}: Response status {response.status_code}, "
-                    f"Error: {error_text[:200]}, Is transient: {_is_transient_error(error_text)}"
-                )
+                print(f"[DEBUG] Attempt {retry_num + 1}/{max_retries + 1}: Response status {response.status_code}")
+                print(f"[DEBUG] Error text: {error_text[:200]}")  # First 200 chars
+                print(f"[DEBUG] Is transient: {_is_transient_error(error_text)}")
 
                 if _is_transient_error(error_text) and retry_num < max_retries:
                     wait_time = 2 ** retry_num  # Exponential backoff: 1s, 2s, 4s
-                    current_app.logger.debug(f"Retrying in {wait_time}s...")
+                    print(f"[DEBUG] Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                     return _attempt_generate(retry_num + 1, max_retries, timeout + 30)  # Increase timeout on retry
 
@@ -393,7 +369,6 @@ def start_model(model_name):
             result = _attempt_generate()
 
             if result["success"]:
-                _clear_model_caches()
                 return {"success": True, "message": f"Model {model_name} started successfully"}
 
             # Handle specific errors
@@ -412,7 +387,6 @@ def start_model(model_name):
                         result = _attempt_generate()
 
                         if result["success"]:
-                            _clear_model_caches()
                             return {"success": True, "message": f"Model {model_name} downloaded and started successfully"}
 
                         error_result, status_code = _handle_model_error(result["response"], model_name, "start after download")
@@ -427,7 +401,7 @@ def start_model(model_name):
             return {"success": False, "message": "Model loading timed out after retries. Try a smaller model or check system resources."}, 408
         except requests.exceptions.ConnectionError as e:
             if _is_transient_error(str(e)):
-                return {"success": False, "message": "Model loading failed after 3 retries due to connection issues. This can happen with large models on first load. Please try again."}, 503
+                return {"success": False, "message": f"Model loading failed after 3 retries due to connection issues. This can happen with large models on first load. Please try again."}, 503
             return {"success": False, "message": "Cannot connect to Ollama server. Please ensure Ollama is running."}, 503
 
     except Exception as e:
@@ -437,106 +411,78 @@ def start_model(model_name):
 
 @bp.route('/api/models/stop/<model_name>', methods=['POST'])
 def stop_model(model_name):
-    """
-    Stop a running model by unloading it from memory.
-
-    Uses Ollama API to gracefully unload the model by calling /api/generate
-    with keep_alive set to "0s", which tells Ollama to unload the model
-    after the request completes.
-    """
     try:
-        # Check if model is actually running before attempting to stop
-        try:
-            running_models = ollama_service.get_running_models()
-            model_is_running = any(model.get('name') == model_name for model in running_models)
-        except Exception as e:
-            current_app.logger.warning(f"Error checking running models: {e}")
-            model_is_running = True  # Assume running if check fails, try to unload anyway
+        import subprocess
+        import signal
+        import time
+        import psutil
 
-        # Unload the model gracefully using Ollama API
-        # The keep_alive: "0s" parameter tells Ollama to unload the model after this request
+        # First try to unload the model gracefully using Ollama API
         try:
             unload_response = requests.post(
-                _get_ollama_url("generate"),
-                json={
-                    "model": model_name,
-                    "prompt": "",  # Empty prompt since we just want to unload
-                    "stream": False,
-                    "keep_alive": "0s"  # This unloads the model
-                },
-                timeout=10
+                f"http://{ollama_service.app.config.get('OLLAMA_HOST')}:{ollama_service.app.config.get('OLLAMA_PORT')}/api/generate",
+                json={"model": model_name, "prompt": "", "stream": False, "keep_alive": "0s"},
+                timeout=5
             )
-
             if unload_response.status_code == 200:
-                # Model unloaded successfully
-                # Clear caches to reflect the change
+                return {"success": True, "message": f"Model {model_name} unloaded successfully"}
+        except Exception as e:
+            print(f"Graceful unload failed for {model_name}: {str(e)}")
+
+        # If graceful unload fails, try to find and kill Ollama processes
+        killed_processes = []
+        force_killed = False
+
+        try:
+            # Narrow process selection: exact name match or standalone 'ollama' token in cmdline
+            ollama_processes = []
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 try:
-                    ollama_service.clear_all_caches()
-                except Exception as e:
-                    current_app.logger.warning(f"Error clearing caches after model unload: {e}")
+                    name = (proc.info.get('name') or '').lower()
+                    cmdline = proc.info.get('cmdline') or []
+                    cmd_tokens = [str(c).lower() for c in cmdline]
+                    if name == 'ollama' or any(t == 'ollama' or t.endswith(os.sep + 'ollama') or t.endswith('/ollama') for t in cmd_tokens):
+                        ollama_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
 
-                # Give Ollama a moment to actually unload the model
-                time.sleep(1)
+            if ollama_processes:
+                # Try graceful termination first
+                for proc in ollama_processes:
+                    try:
+                        proc.terminate()
+                        killed_processes.append(proc.pid)
+                    except Exception as e:
+                        print(f"Failed to terminate process {proc.pid}: {str(e)}")
 
-                return jsonify({
-                    "success": True,
-                    "message": f"Model '{model_name}' unloaded successfully"
-                }), 200
+                # Wait a bit for graceful termination
+                time.sleep(2)
+
+                # Force kill any remaining processes
+                for proc in ollama_processes:
+                    try:
+                        if proc.is_running():
+                            proc.kill()
+                            force_killed = True
+                            print(f"Force killed process {proc.pid}")
+                    except Exception as e:
+                        print(f"Failed to kill process {proc.pid}: {str(e)}")
+
+                if killed_processes:
+                    message = f"Stopped Ollama processes (PIDs: {', '.join(map(str, killed_processes))})"
+                    if force_killed:
+                        message += " - Force kill was required"
+                    return {"success": True, "message": message, "force_killed": force_killed}
+                else:
+                    return {"success": False, "message": "No Ollama processes found to stop"}
             else:
-                # API returned an error
-                error_text = unload_response.text
-                try:
-                    error_json = unload_response.json()
-                    if 'error' in error_json:
-                        error_text = error_json['error']
-                except Exception:
-                    pass
-
-                current_app.logger.warning(f"Failed to unload model {model_name}: HTTP {unload_response.status_code} - {error_text}")
-
-                # If model wasn't running, that's actually success
-                if not model_is_running:
-                    return jsonify({
-                        "success": True,
-                        "message": f"Model '{model_name}' was not running"
-                    }), 200
-
-                return jsonify({
-                    "success": False,
-                    "message": f"Failed to unload model '{model_name}': {error_text}"
-                }), unload_response.status_code
-
-        except requests.exceptions.ConnectionError:
-            error_msg = "Cannot connect to Ollama server. Please ensure Ollama is running."
-            current_app.logger.error(f"Connection error while stopping model {model_name}: {error_msg}")
-            return jsonify({
-                "success": False,
-                "message": error_msg
-            }), 503
-
-        except requests.exceptions.Timeout:
-            error_msg = f"Request timed out while trying to unload model '{model_name}'"
-            current_app.logger.error(error_msg)
-            return jsonify({
-                "success": False,
-                "message": error_msg
-            }), 408
+                return {"success": False, "message": "No running Ollama processes found"}
 
         except Exception as e:
-            error_msg = f"Error unloading model '{model_name}': {str(e)}"
-            current_app.logger.exception(error_msg)
-            return jsonify({
-                "success": False,
-                "message": error_msg
-            }), 500
+            return {"success": False, "message": f"Failed to stop Ollama processes: {str(e)}"}
 
     except Exception as e:
-        error_msg = f"Unexpected error stopping model '{model_name}': {str(e)}"
-        current_app.logger.exception(error_msg)
-        return jsonify({
-            "success": False,
-            "message": error_msg
-        }), 500
+        return {"success": False, "message": f"Unexpected error stopping model: {str(e)}"}, 500
 
 @bp.route('/api/models/info/<model_name>')
 def get_model_info(model_name):
@@ -572,7 +518,7 @@ def get_available_models():
         models = ollama_service.get_available_models()
         # Add has_custom_settings flag for each model (to be used in UI)
         for m in models:
-            m['has_custom_settings'] = False
+            m['has_custom_settings'] = ollama_service._has_custom_settings(m.get('name'))
         return {"models": models}
     except Exception as e:
         return {"error": str(e), "models": []}, 500
@@ -590,7 +536,6 @@ def get_running_models():
 
 @bp.route('/api/models/settings/<model_name>')
 def api_get_model_settings(model_name):
-    """Get settings for a specific model with fallback to recommended defaults."""
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
@@ -604,7 +549,6 @@ def api_get_model_settings(model_name):
 
 @bp.route('/api/models/settings/recommended/<model_name>')
 def api_get_recommended_settings(model_name):
-    """Get recommended settings for a specific model without saving."""
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
@@ -619,23 +563,20 @@ def api_get_recommended_settings(model_name):
 
 @bp.route('/api/models/settings/<model_name>', methods=['POST'])
 def api_save_model_settings(model_name):
-    """Save custom settings for a specific model."""
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
         payload = request.get_json() or {}
-        try:
-            ollama_service.save_model_settings(model_name, payload, source='user')
+        success = ollama_service.save_model_settings(model_name, payload, source='user')
+        if success:
             return _json_success(f"Settings for {model_name} saved.")
-        except Exception as e:
-            return _json_error(f"Failed to save settings for {model_name}: {str(e)}", status=500)
+        return _json_error(f"Failed to save settings for {model_name}", status=500)
     except Exception as e:
         return _json_error(f"Unexpected error saving model settings: {str(e)}")
 
 
 @bp.route('/api/models/settings/<model_name>', methods=['DELETE'])
 def api_delete_model_settings(model_name):
-    """Delete custom settings for a specific model."""
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
@@ -649,7 +590,6 @@ def api_delete_model_settings(model_name):
 
 @bp.route('/api/models/settings/migrate', methods=['POST'])
 def api_migrate_model_settings():
-    """Migrate global settings (deprecated endpoint - no longer supported)."""
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
@@ -660,7 +600,6 @@ def api_migrate_model_settings():
 
 @bp.route('/api/models/settings/apply_all_recommended', methods=['POST'])
 def api_apply_all_recommended():
-    """Apply recommended settings to all available models."""
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
@@ -670,10 +609,11 @@ def api_apply_all_recommended():
         for m in models:
             try:
                 name = m.get('name')
-                settings_entry = ollama_service.get_model_settings_with_fallback(name)
-                if settings_entry and settings_entry.get('settings'):
-                    ollama_service.save_model_settings(name, settings_entry['settings'], source='recommended')
-                    applied += 1
+                rec = ollama_service._recommend_settings_for_model(m)
+                if rec:
+                    success = ollama_service.save_model_settings(name, rec, source='recommended')
+                    if success:
+                        applied += 1
             except Exception as e:
                 errors.append(str(e))
         return _json_success(f"Applied recommended settings to {applied} models.", extra={'applied': applied, 'errors': errors})
@@ -683,17 +623,16 @@ def api_apply_all_recommended():
 
 @bp.route('/api/models/settings/<model_name>/reset', methods=['POST'])
 def api_reset_model_settings(model_name):
-    """Reset model settings to recommended defaults."""
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
-        # Get recommended settings via public API
-        settings_entry = ollama_service.get_model_settings_with_fallback(model_name)
-        if settings_entry and settings_entry.get('settings'):
-            # Save as recommended (not user)
-            ollama_service.save_model_settings(model_name, settings_entry['settings'], source='recommended')
+        # Compute recommended settings
+        recommended = ollama_service._recommend_settings_for_model(ollama_service.get_model_info_cached(model_name) or {'name': model_name})
+        # Save as recommended (not user)
+        success = ollama_service.save_model_settings(model_name, recommended, source='recommended')
+        if success:
             return _json_success(f"Settings for {model_name} reset to recommended defaults.")
-        return _json_error(f"Could not determine recommended settings for {model_name}.", status=404)
+        return _json_error(f"Failed to reset settings for {model_name}", status=500)
     except Exception as e:
         return _json_error(f"Unexpected error resetting model settings: {str(e)}")
 
@@ -773,7 +712,7 @@ def chat():
                 for k, v in model_settings_entry['settings'].items():
                     options[k] = v
         except Exception as e:
-            current_app.logger.warning(f"Failed to merge per-model settings for {model_name}: {e}")
+            print(f"Failed to merge per-model settings for {model_name}: {e}")
         chat_data["options"] = options
 
         try:
@@ -900,45 +839,37 @@ def get_system_stats_history():
 def get_service_status():
     """Get Ollama service status."""
     try:
-        ollama_service.get_service_status()
-        # If no exception, service is running
-        return {"status": "running", "running": True}
+        status = ollama_service.get_service_status()
+        return {"status": "running" if status else "stopped", "running": status}
     except Exception as e:
-        return {"error": str(e), "status": "stopped", "running": False}
+        return {"error": str(e), "status": "unknown", "running": False}, 500
+
+@bp.route('/api/health')
+def api_health():
+    """Component health: background thread, cache ages, failure counters."""
+    try:
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        return ollama_service.get_component_health()
+    except Exception as e:
+        return {"error": str(e)}, 500
+
 
 @bp.route('/api/service/start', methods=['POST'])
 def start_service():
     """Start the Ollama service."""
     try:
-        if not ollama_service.app:
-            ollama_service.init_app(current_app)
-        try:
-            ollama_service.start_service()
-            return {"success": True, "message": "Service started."}, 200
-        except Exception:
-            ollama_service.clear_all_caches()  # Reset error states
-            try:
-                ollama_service.start_service()
-            except Exception as e2:
-                return {"success": False, "message": f"Failed to start service: {str(e2)}"}, 500
-            return {"success": True, "message": "Service started."}, 200
+        result = ollama_service.start_service()
+        return (result, 200) if result["success"] else (result, 500)
     except Exception as e:
-        return {"success": False, "message": f"Failed to start service: {str(e)}"}, 500
+        return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
 
 
 @bp.route('/api/service/stop', methods=['POST'])
 def stop_service():
     """Stop the Ollama service."""
     try:
-        if not ollama_service.app:
-            ollama_service.init_app(current_app)
         result = ollama_service.stop_service()
-        # Clear caches when service is stopped
-        if result.get("success"):
-            try:
-                ollama_service.clear_all_caches()
-            except Exception:
-                pass
         return (result, 200) if result["success"] else (result, 500)
     except Exception as e:
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
@@ -977,25 +908,33 @@ def get_models_memory_usage():
 
 
 
+@bp.route('/api/models/pull/<model_name>', methods=['POST'])
+def pull_model(model_name):
+    """Pull a model."""
+    try:
+        result = ollama_service.pull_model(model_name)
+        return (result, 200) if result["success"] else (result, 500)
+    except Exception as e:
+        return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
+
+
 @bp.route('/api/models/downloadable')
 def api_get_downloadable_models():
     """Get list of downloadable models."""
     try:
         category = request.args.get('category', 'best')
-        current_app.logger.debug(f"Downloadable models request - category: '{category}'")
+        print(f"DEBUG ROUTE: category parameter = '{category}'")
         models = ollama_service.get_downloadable_models(category)
-        current_app.logger.debug(f"Returning {len(models)} models for category '{category}'")
+        print(f"DEBUG ROUTE: got {len(models)} models")
         return {"models": models}
     except Exception as e:
         return {"error": str(e), "models": []}, 500
 
 
 def _json_error(message, status=500):
-    """Create a standardized JSON error response."""
     return jsonify({"success": False, "message": message}), status
 
 def _json_success(message, extra=None, status=200):
-    """Create a standardized JSON success response with optional extra data."""
     payload = {"success": True, "message": message}
     if extra:
         payload.update(extra)
@@ -1038,12 +977,11 @@ def test_models_debug():
 
 @bp.route('/admin/model-defaults')
 def admin_model_defaults():
-    """Render the admin page for managing model default settings."""
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
         return render_template('admin_model_defaults.html')
-    except Exception:
+    except Exception as e:
         return render_template('admin_model_defaults.html')
 
 
@@ -1057,37 +995,45 @@ def get_health():
         if not ollama_service.app:
             ollama_service.init_app(current_app)
 
-        # Use the service's get_component_health method which returns the expected structure
-        try:
-            return ollama_service.get_component_health()
-        except Exception as e:
-            # Fallback to basic health info if component health fails
-            current_app.logger.exception(f"Error getting component health: {e}")
-            return {
-                "status": "unhealthy",
-                "error": f"Health check error: {str(e)}",
-                "background_thread_alive": False,
-                "consecutive_ps_failures": 999,
-                "last_background_error": str(e),
-                "cache_age_seconds": {},
-                "stale_flags": {}
-            }, 503
-    except Exception as e:
-        # Handle any other unexpected errors
-        error_str = str(e).lower()
-        if 'connection' in error_str or 'refused' in error_str or '10061' in error_str:
-            user_friendly_error = "Cannot connect to Ollama server. Please ensure Ollama is running on localhost:11434."
-        else:
-            user_friendly_error = f"Health check error: {str(e)}"
+        # Calculate uptime
+        start_time = current_app.config.get('START_TIME')
+        uptime_seconds = 0
+        if start_time:
+            uptime_seconds = int((datetime.utcnow() - start_time).total_seconds())
 
+        # Get model counts
+        running_models = ollama_service.get_running_models()
+        available_models = ollama_service.get_available_models()
+
+        # Get system stats
+        system_stats = ollama_service.get_system_stats()
+
+        # Check Ollama service status
+        ollama_running = ollama_service.get_service_status()
+
+        status = "healthy" if ollama_running and system_stats else ("degraded" if ollama_running else "unhealthy")
+        return {
+            "status": status,
+            "uptime_seconds": uptime_seconds,
+            "ollama_service_running": ollama_running,
+            "models": {
+                "running_count": len(running_models),
+                "available_count": len(available_models),
+                "per_model_metrics_available": False
+            },
+            "system": {
+                "cpu_percent": system_stats.get('cpu_percent', 0) if system_stats else 0,
+                "memory_percent": system_stats.get('memory', {}).get('percent', 0) if system_stats else 0,
+                "vram_percent": system_stats.get('vram', {}).get('percent', 0) if system_stats and system_stats.get('vram', {}).get('total', 0) > 0 else None,
+                "disk_percent": system_stats.get('disk', {}).get('percent', 0) if system_stats else 0
+            },
+            "timestamp": datetime.utcnow().isoformat() + 'Z'
+        }
+    except Exception as e:
         return {
             "status": "unhealthy",
-            "error": user_friendly_error,
-            "background_thread_alive": False,
-            "consecutive_ps_failures": 999,
-            "last_background_error": user_friendly_error,
-            "cache_age_seconds": {},
-            "stale_flags": {}
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat() + 'Z'
         }, 503
 
 
