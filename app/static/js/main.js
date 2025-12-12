@@ -348,25 +348,138 @@ async function showModelInfo(modelName) {
     const info = await response.json();
 
     if (response.ok) {
+      // Fetch backend cards data to ensure capability flags match the main cards
+      let flagsFromCards = null;
+      const normalizeName = (n) => {
+        if (!n || typeof n !== 'string') return '';
+        return n.trim().toLowerCase();
+      };
+      const stripTag = (n) => n.replace(/:[^\s]+$/, '');
+      const baseSegment = (n) => {
+        // Take last path segment if name contains slashes
+        const parts = n.split('/');
+        return parts[parts.length - 1];
+      };
+      const equalsLoose = (a, b) => {
+        if (!a || !b) return false;
+        if (a === b) return true;
+        if (stripTag(a) === stripTag(b)) return true;
+        const ab = baseSegment(a), bb = baseSegment(b);
+        if (ab === bb) return true;
+        if (stripTag(ab) === stripTag(bb)) return true;
+        return false;
+      };
+      const targetRaw = modelName || info.model || info.name || '';
+      const target = normalizeName(targetRaw);
+      try {
+        const [availResp, runningResp] = await Promise.all([
+          fetch('/api/models/available'),
+          fetch('/api/models/running')
+        ]);
+        if (availResp.ok) {
+          const availJson = await availResp.json();
+          const list = Array.isArray(availJson.models) ? availJson.models : [];
+          const match = list.find(m => {
+            const mn = normalizeName(m?.name || m?.model || '');
+            return equalsLoose(mn, target);
+          });
+          if (match) flagsFromCards = getCapabilityFlags(match);
+        }
+        if (!flagsFromCards && runningResp.ok) {
+          const runningJson = await runningResp.json();
+          const rmatch = Array.isArray(runningJson) ? runningJson.find(m => {
+            const rn = normalizeName(m?.name || m?.model || '');
+            return equalsLoose(rn, target);
+          }) : null;
+          if (rmatch) flagsFromCards = getCapabilityFlags(rmatch);
+        }
+      } catch (e) {
+        // Non-fatal: fallback to info-derived flags below
+      }
+
+      const details = info.details || {};
+      const summaryHtml = buildModelSummary(info, details, modelName);
+      const capabilityBadges = flagsFromCards
+        ? renderCapabilityBadges(flagsFromCards)
+        : renderCapabilityBadges(info);
+      // flagsSourceLabel removed after verification
+      const modelfileBlock = info.modelfile
+        ? `<pre class="model-code-block">${escapeHtml(info.modelfile)}</pre>`
+        : "<span class=\"text-muted\">No modelfile provided</span>";
+      const parametersBlock = info.parameters
+        ? `<pre class="model-code-block">${escapeHtml(info.parameters)}</pre>`
+        : "<span class=\"text-muted\">No parameters provided</span>";
+      const rawJson = escapeHtml(JSON.stringify(info, null, 2));
+
       const modalHtml = `
-                <div class="modal fade" id="modelInfoModal" tabindex="-1">
-                    <div class="modal-dialog modal-xl">
-                        <div class="modal-content" style="background: linear-gradient(135deg, #1a1a1a 0%, #1e1e1e 100%); color: #cccccc; border: 1px solid #3e3e42;">
-                            <div class="modal-header" style="border-bottom: 1px solid #3e3e42;">
-                                <h5 class="modal-title">Model Information: ${modelName}</h5>
-                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                            </div>
-                            <div class="modal-body model-info-body">
-                                <div class="table-scroll-wrapper">
-                                    <div class="table-responsive">
-                                        ${jsonToTable(info)}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+        <div class="modal fade" id="modelInfoModal" tabindex="-1" aria-labelledby="modelInfoTitle">
+          <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content model-info-card">
+              <div class="modal-header model-info-header">
+                <div class="model-title-group">
+                  <h5 class="modal-title" id="modelInfoTitle">${modelName}</h5>
+                  <div class="model-info-subtitle">Detailed model information</div>
                 </div>
-            `;
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  ${capabilityBadges}
+                  <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+              </div>
+              <div class="modal-body model-info-body">
+                ${summaryHtml}
+
+                <section class="model-info-section">
+                  <div class="section-header">
+                    <div>
+                      <h6 class="section-title">Details</h6>
+                      <p class="section-hint">Core metadata reported by Ollama</p>
+                    </div>
+                  </div>
+                  <div class="table-responsive">
+                    ${jsonToTable(details)}
+                  </div>
+                </section>
+
+                <section class="model-info-section">
+                  <div class="section-header">
+                    <div>
+                      <h6 class="section-title">Parameters</h6>
+                      <p class="section-hint">Runtime overrides and defaults</p>
+                    </div>
+                  </div>
+                  <div class="model-code-wrapper">${parametersBlock}</div>
+                </section>
+
+                <section class="model-info-section">
+                  <div class="section-header">
+                    <div>
+                      <h6 class="section-title">Modelfile</h6>
+                      <p class="section-hint">Source definition used to build this model</p>
+                    </div>
+                  </div>
+                  <div class="model-code-wrapper">${modelfileBlock}</div>
+                </section>
+
+                <div class="accordion" id="modelRawJson">
+                  <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingRawJson">
+                      <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRawJson" aria-expanded="false" aria-controls="collapseRawJson">
+                        Raw JSON
+                      </button>
+                    </h2>
+                    <div id="collapseRawJson" class="accordion-collapse collapse" aria-labelledby="headingRawJson" data-bs-parent="#modelRawJson">
+                      <div class="accordion-body">
+                        <pre class="raw-json-block">${rawJson}</pre>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
       document.body.insertAdjacentHTML("beforeend", modalHtml);
       const modal = new bootstrap.Modal(
         document.getElementById("modelInfoModal")
@@ -384,6 +497,112 @@ async function showModelInfo(modelName) {
   } catch (error) {
     showNotification("Failed to get model info: " + error.message, "error");
   }
+}
+
+function buildModelSummary(info, details, modelName) {
+  const summaryItems = [];
+
+  const families = details.families || (details.family ? [details.family] : []);
+  if (families.length) {
+    summaryItems.push({ label: "Family", value: families.join(", ") });
+  }
+
+  if (details.parameter_size) {
+    summaryItems.push({ label: "Parameters", value: details.parameter_size });
+  }
+
+  if (details.quantization_level) {
+    summaryItems.push({ label: "Quantization", value: details.quantization_level });
+  }
+
+  if (details.format) {
+    summaryItems.push({ label: "Format", value: details.format });
+  }
+
+  if (typeof info.size === "number") {
+    const sizeLabel = formatBytes(info.size);
+    if (sizeLabel) {
+      summaryItems.push({ label: "Size", value: sizeLabel });
+    }
+  }
+
+  const updated = formatDate(info.modified_at || info.updated_at || info.created_at);
+  if (updated) {
+    summaryItems.push({ label: "Updated", value: updated });
+  }
+
+  if (!summaryItems.length) {
+    return "";
+  }
+
+  const summaryHtml = summaryItems
+    .map(
+      (item) => `
+        <div class="summary-item">
+          <div class="summary-label">${item.label}</div>
+          <div class="summary-value">${item.value}</div>
+        </div>
+      `
+    )
+    .join("");
+
+  return `
+    <section class="model-info-section">
+      <div class="section-header">
+        <div>
+          <h6 class="section-title">At a Glance</h6>
+          <p class="section-hint">Key properties for ${escapeHtml(info.model || info.name || modelName)}</p>
+        </div>
+      </div>
+      <div class="model-summary-grid">${summaryHtml}</div>
+    </section>
+  `;
+}
+
+function formatBytes(bytes) {
+  if (typeof bytes !== "number" || Number.isNaN(bytes)) {
+    return null;
+  }
+
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const precision = value >= 10 ? 0 : 1;
+  return `${value.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function formatDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString();
+}
+
+function renderCapabilityBadges(info) {
+  const { hasReasoning, hasVision, hasTools } = getCapabilityFlags(info);
+
+  const badges = [
+    { label: "Reasoning", icon: "fa-brain", enabled: hasReasoning },
+    { label: "Vision", icon: "fa-eye", enabled: hasVision },
+    { label: "Tools", icon: "fa-wrench", enabled: hasTools },
+  ];
+
+  return badges
+    .map(
+      (badge) => `
+        <span class="capability-pill ${badge.enabled ? "enabled" : "disabled"}" title="${badge.label}: ${badge.enabled ? "Available" : "Not available"}">
+          <i class="fas ${badge.icon}"></i>
+          <span>${badge.label}</span>
+        </span>
+      `
+    )
+    .join("");
 }
 
 // Settings logic extracted to modules/settings.js; legacy global kept via window.openModelSettingsModal
@@ -436,6 +655,7 @@ function jsonToTable(json, level = 0) {
     }
 
     let html = '<div class="array-container">';
+    html += `<div class="array-meta">Array (${json.length})</div>`;
     json.forEach((item, index) => {
       html += `<div class="array-item">
                 <span class="array-index">[${index}]</span>
@@ -452,7 +672,7 @@ function jsonToTable(json, level = 0) {
       return '<span class="text-muted">{}</span>';
     }
 
-    let html = '<table class="table table-dark table-sm json-table">';
+    let html = `<table class="table table-sm json-table level-${level}">`;
     if (level === 0) {
       html += "<thead><tr><th>Property</th><th>Value</th></tr></thead>";
     }
@@ -548,10 +768,8 @@ function copyErrorToClipboard(button) {
 
 // Capability rendering using backend-provided flags
 function getCapabilitiesHTML(model) {
-  // Use backend-detected capability flags with fallback to false
-  const hasReasoning = model.has_reasoning || false;
-  const hasVision = model.has_vision || false;
-  const hasTools = model.has_tools || false;
+  // Use shared capability flag detection for consistency with modal
+  const { hasReasoning, hasVision, hasTools } = getCapabilityFlags(model);
 
   return `
     <span class="capability-icon ${hasReasoning ? 'enabled' : 'disabled'}" title="Reasoning: ${hasReasoning ? 'Available' : 'Not available'}">
@@ -564,6 +782,30 @@ function getCapabilitiesHTML(model) {
       <i class="fas fa-tools"></i>
     </span>
   `;
+}
+
+function getCapabilityFlags(source) {
+  if (!source || typeof source !== "object") {
+    return { hasReasoning: false, hasVision: false, hasTools: false };
+  }
+
+  const capsObj = source.capabilities || source.details?.capabilities || {};
+  const truthy = (v) => {
+    if (v === undefined || v === null) return false;
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'number') return v !== 0;
+    if (typeof v === 'string') return /^(true|yes|enabled|on|available)$/i.test(v.trim());
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === 'object') return Object.keys(v).length > 0;
+    return false;
+  };
+  const fromStrings = (obj, keys) => keys.some(k => truthy(obj?.[k]));
+
+  return {
+    hasReasoning: truthy(source.has_reasoning) || truthy(capsObj.reasoning) || fromStrings(source, ['reasoning','hasReasoning']) || fromStrings(capsObj, ['has_reasoning','hasReasoning']),
+    hasVision: truthy(source.has_vision) || truthy(capsObj.vision) || fromStrings(source, ['vision','hasVision','image']) || fromStrings(capsObj, ['has_vision','hasVision','vision']),
+    hasTools: truthy(source.has_tools) || truthy(capsObj.tools) || fromStrings(source, ['tools','hasTools']) || fromStrings(capsObj, ['has_tools','hasTools','tools']),
+  };
 }
 
 // Historical data storage for timelines
