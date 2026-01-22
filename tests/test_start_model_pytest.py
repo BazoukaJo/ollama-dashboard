@@ -25,7 +25,7 @@ def test_start_model_success(mock_status, mock_running, mock_requests_post, clie
 @patch('app.routes.main.requests.post')
 @patch('app.routes.main.ollama_service.get_running_models')
 @patch('app.routes.main.ollama_service.get_service_status')
-def test_start_model_service_down(mock_status, mock_running, mock_requests_post, client):
+def test_start_model_service_down(mock_status, mock_running, _, client):
     mock_status.return_value = False
     mock_running.return_value = []
     resp = client.post('/api/models/start/test-model')
@@ -37,7 +37,7 @@ def test_start_model_service_down(mock_status, mock_running, mock_requests_post,
 @patch('app.routes.main.requests.post')
 @patch('app.routes.main.ollama_service.get_running_models')
 @patch('app.routes.main.ollama_service.get_service_status')
-def test_start_model_already_running(mock_status, mock_running, mock_requests_post, client):
+def test_start_model_already_running(mock_status, mock_running, _, client):
     mock_status.return_value = True
     mock_running.return_value = [{'name': 'test-model'}]
     resp = client.post('/api/models/start/test-model')

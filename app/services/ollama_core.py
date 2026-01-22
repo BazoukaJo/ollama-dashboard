@@ -107,6 +107,14 @@ class OllamaServiceCore:
         self._consecutive_ps_failures = 0
         self._last_background_error = None
         self._model_update_counter = 0
+        # Retry metrics for monitoring
+        self._total_retry_attempts = 0
+        self._successful_retries = 0
+        self._failed_retries = 0
+        # Retry metrics for monitoring
+        self._total_retry_attempts = 0
+        self._successful_retries = 0
+        self._failed_retries = 0
         if app is not None:
             self.init_app(app)
         else:
@@ -117,10 +125,10 @@ class OllamaServiceCore:
         """Initialize the OllamaService with a Flask app."""
         self.app = app
         with self.app.app_context():
-            # Check if load_history is available (from OllamaServiceUtilities mixin)
-            if hasattr(self, 'load_history') and callable(getattr(self, 'load_history', None)):
+            # Load history from utilities mixin
+            if hasattr(self, 'load_history'):
                 try:
-                    loaded_history = getattr(self, 'load_history')() or deque(maxlen=50)  # Load history from file (defined in OllamaServiceUtilities)
+                    loaded_history = self.load_history() or deque(maxlen=50)
                     self.history = loaded_history
                 except (OSError, IOError) as e:
                     self.logger.warning("Failed to load history: %s", e)
@@ -130,9 +138,9 @@ class OllamaServiceCore:
                 self.history = deque(maxlen=50)
         self._start_background_updates()
         try:
-            # Check if load_model_settings is available (from OllamaServiceUtilities mixin)
-            if hasattr(self, 'load_model_settings') and callable(getattr(self, 'load_model_settings', None)):
-                self._model_settings = getattr(self, 'load_model_settings')() or {}  # Defined in OllamaServiceUtilities
+            # Load model settings from utilities mixin
+            if hasattr(self, 'load_model_settings'):
+                self._model_settings = self.load_model_settings() or {}
             else:
                 self.logger.warning("load_model_settings not available, using empty settings")
                 self._model_settings = {}
@@ -169,16 +177,11 @@ class OllamaServiceCore:
     def _auto_start_ollama(self):
         """Attempt to auto-start Ollama service if not running."""
         try:
-            # Safely check service status
-            try:
-                # Check if get_service_status is available (from OllamaServiceControl mixin)
-                if hasattr(self, 'get_service_status') and callable(getattr(self, 'get_service_status', None)):
-                    is_running = getattr(self, 'get_service_status')() or False  # Defined in OllamaServiceControl
-                else:
-                    self.logger.warning("get_service_status not available, assuming not running")
-                    is_running = False
-            except Exception as e:
-                self.logger.warning("Could not check Ollama service status: %s. Attempting auto-start anyway.", e)
+            # Check service status using control mixin
+            if hasattr(self, 'get_service_status'):
+                is_running = self.get_service_status() or False
+            else:
+                self.logger.warning("get_service_status not available, assuming not running")
                 is_running = False
 
             if is_running:
@@ -187,14 +190,13 @@ class OllamaServiceCore:
 
             self.logger.info("Ollama service not running, attempting auto-start...")
             try:
-                # Check if start_service is available (from OllamaServiceControl mixin)
-                if hasattr(self, 'start_service') and callable(getattr(self, 'start_service', None)):
-                    result = getattr(self, 'start_service')() or {}  # Defined in OllamaServiceControl
+                # Start service using control mixin
+                if hasattr(self, 'start_service'):
+                    result = self.start_service() or {}
                 else:
                     self.logger.warning("start_service not available, cannot auto-start")
                     return
             except Exception as e:
-
                 self.logger.warning("Error calling start_service during auto-start: %s", e)
                 return
 
@@ -203,9 +205,9 @@ class OllamaServiceCore:
                 # Verify API is accessible with a short delay
                 time.sleep(2)
                 try:
-                    # Check if _verify_ollama_api is available (from OllamaServiceControl mixin)
-                    if hasattr(self, '_verify_ollama_api') and callable(getattr(self, '_verify_ollama_api', None)):
-                        verify_result = getattr(self, '_verify_ollama_api')() or (False, "No result")  # Defined in OllamaServiceControl
+                    # Verify API using control mixin
+                    if hasattr(self, '_verify_ollama_api'):
+                        verify_result = self._verify_ollama_api() or (False, "No result")
                         if isinstance(verify_result, tuple) and len(verify_result) >= 2:
                             api_ok, api_msg = verify_result[0], verify_result[1]
                             if api_ok:
@@ -443,6 +445,16 @@ class OllamaServiceCore:
             'background_thread_alive': thread_alive,
             'consecutive_ps_failures': self._consecutive_ps_failures,
             'last_background_error': self._last_background_error,  # Keep raw for debugging
+            'retry_metrics': {
+                'total_attempts': self._total_retry_attempts,
+                'successful': self._successful_retries,
+                'failed': self._failed_retries,
+            },
+            'retry_metrics': {
+                'total_attempts': self._total_retry_attempts,
+                'successful': self._successful_retries,
+                'failed': self._failed_retries,
+            },
             'cache_age_seconds': age_info,
             'stale_flags': stale,
             'models': {

@@ -1,11 +1,11 @@
 // Stop Service logic
 function showStopServiceConfirm() {
-  let modal = document.getElementById('stopServiceConfirmModal');
+  let modal = document.getElementById("stopServiceConfirmModal");
   if (!modal) {
     // Create modal if not present
-    modal = document.createElement('div');
-    modal.className = 'modal fade';
-    modal.id = 'stopServiceConfirmModal';
+    modal = document.createElement("div");
+    modal.className = "modal fade";
+    modal.id = "stopServiceConfirmModal";
     modal.tabIndex = -1;
     modal.innerHTML = `
       <div class="modal-dialog modal-dialog-centered">
@@ -29,27 +29,39 @@ function showStopServiceConfirm() {
   const bsModal = new bootstrap.Modal(modal);
   bsModal.show();
   setTimeout(() => {
-    const stopBtn = document.getElementById('confirmStopServiceBtn');
+    const stopBtn = document.getElementById("confirmStopServiceBtn");
     if (stopBtn) {
       stopBtn.onclick = async function () {
         stopBtn.disabled = true;
-        stopBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
+        stopBtn.innerHTML =
+          '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
         try {
-          const response = await fetch('/api/service/stop', { method: 'POST' });
+          const response = await fetch("/api/service/stop", { method: "POST" });
           if (response.ok) {
-            document.getElementById('reloadAppFeedback').classList.remove('d-none');
-            document.getElementById('reloadAppFeedback').textContent = 'Service stopped.';
-            setTimeout(() => { window.location.reload(); }, 3000);
+            document
+              .getElementById("reloadAppFeedback")
+              .classList.remove("d-none");
+            document.getElementById("reloadAppFeedback").textContent =
+              "Service stopped.";
+            setTimeout(() => {
+              window.location.reload();
+            }, 3000);
           } else {
-            document.getElementById('reloadAppFeedback').classList.remove('d-none');
-            document.getElementById('reloadAppFeedback').textContent = 'Failed to stop service.';
+            document
+              .getElementById("reloadAppFeedback")
+              .classList.remove("d-none");
+            document.getElementById("reloadAppFeedback").textContent =
+              "Failed to stop service.";
           }
         } catch (err) {
-          document.getElementById('reloadAppFeedback').classList.remove('d-none');
-          document.getElementById('reloadAppFeedback').textContent = 'Error: ' + err.message;
+          document
+            .getElementById("reloadAppFeedback")
+            .classList.remove("d-none");
+          document.getElementById("reloadAppFeedback").textContent =
+            "Error: " + err.message;
         } finally {
           stopBtn.disabled = false;
-          stopBtn.innerHTML = 'Stop Service';
+          stopBtn.innerHTML = "Stop Service";
         }
       };
     }
@@ -57,29 +69,34 @@ function showStopServiceConfirm() {
 }
 // Reload Application logic
 function showReloadAppConfirm() {
-  const modal = new bootstrap.Modal(document.getElementById('reloadAppConfirmModal'));
+  const modal = new bootstrap.Modal(
+    document.getElementById("reloadAppConfirmModal"),
+  );
   modal.show();
 }
 
-document.addEventListener('DOMContentLoaded', function () {
-  const reloadBtn = document.getElementById('confirmReloadAppBtn');
+document.addEventListener("DOMContentLoaded", function () {
+  const reloadBtn = document.getElementById("confirmReloadAppBtn");
   if (reloadBtn) {
     reloadBtn.onclick = async function () {
       reloadBtn.disabled = true;
-      reloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reloading...';
-      const feedbackEl = document.getElementById('reloadAppFeedback');
+      reloadBtn.innerHTML =
+        '<i class="fas fa-spinner fa-spin me-1"></i>Reloading...';
+      const feedbackEl = document.getElementById("reloadAppFeedback");
       try {
-        const response = await fetch('/api/reload_app', { method: 'POST' });
+        const response = await fetch("/api/reload_app", { method: "POST" });
         const data = await response.json().catch(() => ({}));
         if (response.ok || response.status === 202) {
           if (feedbackEl) {
-            feedbackEl.classList.remove('d-none');
-            feedbackEl.classList.remove('alert-danger');
-            feedbackEl.classList.add('alert-info');
-            feedbackEl.textContent = data.message || 'Application is restarting. Please wait a few seconds and refresh the page.';
+            feedbackEl.classList.remove("d-none");
+            feedbackEl.classList.remove("alert-danger");
+            feedbackEl.classList.add("alert-info");
+            feedbackEl.textContent =
+              data.message ||
+              "Application is restarting. Please wait a few seconds and refresh the page.";
           }
           // Close modal
-          const modalEl = document.getElementById('reloadAppConfirmModal');
+          const modalEl = document.getElementById("reloadAppConfirmModal");
           if (modalEl) {
             const modal = bootstrap.Modal.getInstance(modalEl);
             if (modal) modal.hide();
@@ -93,7 +110,10 @@ document.addEventListener('DOMContentLoaded', function () {
               return;
             }
             try {
-              const healthCheck = await fetch('/api/health', { method: 'GET', signal: AbortSignal.timeout(2000) });
+              const healthCheck = await fetch("/api/health", {
+                method: "GET",
+                signal: AbortSignal.timeout(2000),
+              });
               if (healthCheck.ok) {
                 window.location.reload();
                 return;
@@ -106,23 +126,25 @@ document.addEventListener('DOMContentLoaded', function () {
           setTimeout(poll, 3000); // Start polling after 3 seconds
         } else {
           if (feedbackEl) {
-            feedbackEl.classList.remove('d-none');
-            feedbackEl.classList.remove('alert-info');
-            feedbackEl.classList.add('alert-danger');
-            feedbackEl.textContent = data.message || 'Failed to reload application.';
+            feedbackEl.classList.remove("d-none");
+            feedbackEl.classList.remove("alert-info");
+            feedbackEl.classList.add("alert-danger");
+            feedbackEl.textContent =
+              data.message || "Failed to reload application.";
           }
           reloadBtn.disabled = false;
-          reloadBtn.innerHTML = 'Reload Application';
+          reloadBtn.innerHTML = "Reload Application";
         }
       } catch (err) {
         if (feedbackEl) {
-          feedbackEl.classList.remove('d-none');
-          feedbackEl.classList.remove('alert-info');
-          feedbackEl.classList.add('alert-danger');
-          feedbackEl.textContent = 'Error: ' + (err.message || 'Failed to reload application');
+          feedbackEl.classList.remove("d-none");
+          feedbackEl.classList.remove("alert-info");
+          feedbackEl.classList.add("alert-danger");
+          feedbackEl.textContent =
+            "Error: " + (err.message || "Failed to reload application");
         }
         reloadBtn.disabled = false;
-        reloadBtn.innerHTML = 'Reload Application';
+        reloadBtn.innerHTML = "Reload Application";
       }
     };
   }
@@ -171,12 +193,12 @@ async function startModel(modelName) {
         headers: {
           "Content-Type": "application/json",
         },
-      }
+      },
     );
     const result = await response.json();
     if (result.success) {
       showNotification(result.message, "success");
-      if (typeof updateModelData === 'function') {
+      if (typeof updateModelData === "function") {
         updateModelData();
       }
       setTimeout(() => location.reload(), 1500);
@@ -189,11 +211,16 @@ async function startModel(modelName) {
 }
 
 async function stopModel(modelName) {
-  const card = document.querySelector(`.model-card[data-model-name="${cssEscape(modelName)}"]`);
-  const stopButton = card ? card.querySelector('button[title="Stop model"]') : null;
+  const card = document.querySelector(
+    `.model-card[data-model-name="${cssEscape(modelName)}"]`,
+  );
+  const stopButton = card
+    ? card.querySelector('button[title="Stop model"]')
+    : null;
   const originalText = stopButton ? stopButton.innerHTML : null;
   if (stopButton) {
-    stopButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
+    stopButton.innerHTML =
+      '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
     stopButton.disabled = true;
   }
 
@@ -207,12 +234,12 @@ async function stopModel(modelName) {
         headers: {
           "Content-Type": "application/json",
         },
-      }
+      },
     );
 
     // Check if response is OK before parsing JSON
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
+      const errorText = await response.text().catch(() => "Unknown error");
       let errorMessage = `Failed to stop model: HTTP ${response.status}`;
       try {
         const errorJson = JSON.parse(errorText);
@@ -235,18 +262,27 @@ async function stopModel(modelName) {
     const result = await response.json();
 
     if (result.success) {
-      showNotification(result.message || `Model ${modelName} stopped successfully`, "success");
+      showNotification(
+        result.message || `Model ${modelName} stopped successfully`,
+        "success",
+      );
       // Reload after a short delay to reflect the change
       setTimeout(() => location.reload(), 2000);
     } else {
-      showNotification(result.message || `Failed to stop model ${modelName}`, "error");
+      showNotification(
+        result.message || `Failed to stop model ${modelName}`,
+        "error",
+      );
       if (stopButton && originalText !== null) {
         stopButton.innerHTML = originalText;
         stopButton.disabled = false;
       }
     }
   } catch (error) {
-    showNotification("Failed to stop model: " + (error.message || "Network error"), "error");
+    showNotification(
+      "Failed to stop model: " + (error.message || "Network error"),
+      "error",
+    );
     if (stopButton && originalText !== null) {
       stopButton.innerHTML = originalText;
       stopButton.disabled = false;
@@ -255,11 +291,16 @@ async function stopModel(modelName) {
 }
 
 async function restartModel(modelName) {
-  const card = document.querySelector(`.model-card[data-model-name="${cssEscape(modelName)}"]`);
-  const restartButton = card ? card.querySelector('button[title="Restart model"]') : null;
+  const card = document.querySelector(
+    `.model-card[data-model-name="${cssEscape(modelName)}"]`,
+  );
+  const restartButton = card
+    ? card.querySelector('button[title="Restart model"]')
+    : null;
   const originalText = restartButton ? restartButton.innerHTML : null;
   if (restartButton) {
-    restartButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Restarting...';
+    restartButton.innerHTML =
+      '<i class="fas fa-spinner fa-spin me-1"></i>Restarting...';
     restartButton.disabled = true;
   }
 
@@ -273,7 +314,7 @@ async function restartModel(modelName) {
         headers: {
           "Content-Type": "application/json",
         },
-      }
+      },
     );
     const result = await response.json();
 
@@ -296,17 +337,22 @@ async function restartModel(modelName) {
 async function deleteModel(modelName) {
   if (
     !confirm(
-      `Are you sure you want to delete the model "${modelName}"? This action cannot be undone.`
+      `Are you sure you want to delete the model "${modelName}"? This action cannot be undone.`,
     )
   ) {
     return;
   }
 
-  const card = document.querySelector(`.model-card[data-model-name="${cssEscape(modelName)}"]`);
-  const deleteButton = card ? card.querySelector('button[title="Delete model"]') : null;
+  const card = document.querySelector(
+    `.model-card[data-model-name="${cssEscape(modelName)}"]`,
+  );
+  const deleteButton = card
+    ? card.querySelector('button[title="Delete model"]')
+    : null;
   const originalText = deleteButton ? deleteButton.innerHTML : null;
   if (deleteButton) {
-    deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Deleting...';
+    deleteButton.innerHTML =
+      '<i class="fas fa-spinner fa-spin me-1"></i>Deleting...';
     deleteButton.disabled = true;
   }
 
@@ -320,18 +366,27 @@ async function deleteModel(modelName) {
         headers: {
           "Content-Type": "application/json",
         },
-      }
+      },
     );
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch (jsonErr) {
+      // Non-JSON response (likely error)
+      result = { success: false, message: await response.text() };
+    }
 
     if (result.success) {
       showNotification(result.message, "success");
       setTimeout(() => location.reload(), 2000);
     } else {
-      showNotification(result.message, "error");
+      showNotification(result.message || "Failed to delete model.", "error");
     }
   } catch (error) {
-    showNotification("Failed to delete model: " + error.message, "error");
+    showNotification(
+      "Failed to delete model: " + (error?.message || error),
+      "error",
+    );
   } finally {
     if (deleteButton && originalText !== null) {
       deleteButton.innerHTML = originalText;
@@ -343,7 +398,7 @@ async function deleteModel(modelName) {
 async function showModelInfo(modelName) {
   try {
     const response = await fetch(
-      `/api/models/info/${encodeURIComponent(modelName)}`
+      `/api/models/info/${encodeURIComponent(modelName)}`,
     );
     const info = await response.json();
 
@@ -351,46 +406,49 @@ async function showModelInfo(modelName) {
       // Fetch backend cards data to ensure capability flags match the main cards
       let flagsFromCards = null;
       const normalizeName = (n) => {
-        if (!n || typeof n !== 'string') return '';
+        if (!n || typeof n !== "string") return "";
         return n.trim().toLowerCase();
       };
-      const stripTag = (n) => n.replace(/:[^\s]+$/, '');
+      const stripTag = (n) => n.replace(/:[^\s]+$/, "");
       const baseSegment = (n) => {
         // Take last path segment if name contains slashes
-        const parts = n.split('/');
+        const parts = n.split("/");
         return parts[parts.length - 1];
       };
       const equalsLoose = (a, b) => {
         if (!a || !b) return false;
         if (a === b) return true;
         if (stripTag(a) === stripTag(b)) return true;
-        const ab = baseSegment(a), bb = baseSegment(b);
+        const ab = baseSegment(a),
+          bb = baseSegment(b);
         if (ab === bb) return true;
         if (stripTag(ab) === stripTag(bb)) return true;
         return false;
       };
-      const targetRaw = modelName || info.model || info.name || '';
+      const targetRaw = modelName || info.model || info.name || "";
       const target = normalizeName(targetRaw);
       try {
         const [availResp, runningResp] = await Promise.all([
-          fetch('/api/models/available'),
-          fetch('/api/models/running')
+          fetch("/api/models/available"),
+          fetch("/api/models/running"),
         ]);
         if (availResp.ok) {
           const availJson = await availResp.json();
           const list = Array.isArray(availJson.models) ? availJson.models : [];
-          const match = list.find(m => {
-            const mn = normalizeName(m?.name || m?.model || '');
+          const match = list.find((m) => {
+            const mn = normalizeName(m?.name || m?.model || "");
             return equalsLoose(mn, target);
           });
           if (match) flagsFromCards = getCapabilityFlags(match);
         }
         if (!flagsFromCards && runningResp.ok) {
           const runningJson = await runningResp.json();
-          const rmatch = Array.isArray(runningJson) ? runningJson.find(m => {
-            const rn = normalizeName(m?.name || m?.model || '');
-            return equalsLoose(rn, target);
-          }) : null;
+          const rmatch = Array.isArray(runningJson)
+            ? runningJson.find((m) => {
+                const rn = normalizeName(m?.name || m?.model || "");
+                return equalsLoose(rn, target);
+              })
+            : null;
           if (rmatch) flagsFromCards = getCapabilityFlags(rmatch);
         }
       } catch (e) {
@@ -405,10 +463,10 @@ async function showModelInfo(modelName) {
       // flagsSourceLabel removed after verification
       const modelfileBlock = info.modelfile
         ? `<pre class="model-code-block">${escapeHtml(info.modelfile)}</pre>`
-        : "<span class=\"text-muted\">No modelfile provided</span>";
+        : '<span class="text-muted">No modelfile provided</span>';
       const parametersBlock = info.parameters
         ? `<pre class="model-code-block">${escapeHtml(info.parameters)}</pre>`
-        : "<span class=\"text-muted\">No parameters provided</span>";
+        : '<span class="text-muted">No parameters provided</span>';
       const rawJson = escapeHtml(JSON.stringify(info, null, 2));
 
       const modalHtml = `
@@ -482,7 +540,7 @@ async function showModelInfo(modelName) {
 
       document.body.insertAdjacentHTML("beforeend", modalHtml);
       const modal = new bootstrap.Modal(
-        document.getElementById("modelInfoModal")
+        document.getElementById("modelInfoModal"),
       );
       modal.show();
 
@@ -512,7 +570,10 @@ function buildModelSummary(info, details, modelName) {
   }
 
   if (details.quantization_level) {
-    summaryItems.push({ label: "Quantization", value: details.quantization_level });
+    summaryItems.push({
+      label: "Quantization",
+      value: details.quantization_level,
+    });
   }
 
   if (details.format) {
@@ -526,7 +587,9 @@ function buildModelSummary(info, details, modelName) {
     }
   }
 
-  const updated = formatDate(info.modified_at || info.updated_at || info.created_at);
+  const updated = formatDate(
+    info.modified_at || info.updated_at || info.created_at,
+  );
   if (updated) {
     summaryItems.push({ label: "Updated", value: updated });
   }
@@ -542,7 +605,7 @@ function buildModelSummary(info, details, modelName) {
           <div class="summary-label">${item.label}</div>
           <div class="summary-value">${item.value}</div>
         </div>
-      `
+      `,
     )
     .join("");
 
@@ -600,7 +663,7 @@ function renderCapabilityBadges(info) {
           <i class="fas ${badge.icon}"></i>
           <span>${badge.label}</span>
         </span>
-      `
+      `,
     )
     .join("");
 }
@@ -634,7 +697,7 @@ function jsonToTable(json, level = 0) {
   if (typeof json === "string") {
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(json)) {
       return `<span class="text-info">${new Date(
-        json
+        json,
       ).toLocaleString()}</span>`;
     }
     const maxLength = 100;
@@ -719,16 +782,18 @@ function showNotification(message, type) {
     "top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 500px;";
 
   // Add copy button for error messages
-  const copyButton = isError ? `
+  const copyButton = isError
+    ? `
     <button type="button" class="btn btn-sm btn-outline-light" onclick="copyErrorToClipboard(this)"
             style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex-shrink: 0;" title="Copy error to clipboard">
       <i class="fas fa-copy"></i> Copy
     </button>
-  ` : '';
+  `
+    : "";
 
   notification.innerHTML = `
         <div style="display: flex; align-items: start; gap: 10px;">
-          <div style="flex: 1; min-width: 0;" data-error-message="${message.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}">${message}</div>
+          <div style="flex: 1; min-width: 0;" data-error-message="${message.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}">${message}</div>
           <div style="display: flex; gap: 5px; align-items: center; flex-shrink: 0;">
             ${copyButton}
             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
@@ -745,25 +810,30 @@ function showNotification(message, type) {
 }
 
 function copyErrorToClipboard(button) {
-  const errorDiv = button.closest('.alert').querySelector('[data-error-message]');
-  const errorMessage = errorDiv.getAttribute('data-error-message');
+  const errorDiv = button
+    .closest(".alert")
+    .querySelector("[data-error-message]");
+  const errorMessage = errorDiv.getAttribute("data-error-message");
 
-  navigator.clipboard.writeText(errorMessage).then(() => {
-    const originalContent = button.innerHTML;
-    button.innerHTML = '<i class="fas fa-check"></i> Copied!';
-    button.disabled = true;
+  navigator.clipboard
+    .writeText(errorMessage)
+    .then(() => {
+      const originalContent = button.innerHTML;
+      button.innerHTML = '<i class="fas fa-check"></i> Copied!';
+      button.disabled = true;
 
-    setTimeout(() => {
-      button.innerHTML = originalContent;
-      button.disabled = false;
-    }, 2000);
-  }).catch(err => {
-    console.error('Failed to copy error:', err);
-    button.innerHTML = '<i class="fas fa-times"></i> Failed';
-    setTimeout(() => {
-      button.innerHTML = '<i class="fas fa-copy"></i> Copy';
-    }, 2000);
-  });
+      setTimeout(() => {
+        button.innerHTML = originalContent;
+        button.disabled = false;
+      }, 2000);
+    })
+    .catch((err) => {
+      console.error("Failed to copy error:", err);
+      button.innerHTML = '<i class="fas fa-times"></i> Failed';
+      setTimeout(() => {
+        button.innerHTML = '<i class="fas fa-copy"></i> Copy';
+      }, 2000);
+    });
 }
 
 // Capability rendering using backend-provided flags
@@ -772,13 +842,13 @@ function getCapabilitiesHTML(model) {
   const { hasReasoning, hasVision, hasTools } = getCapabilityFlags(model);
 
   return `
-    <span class="capability-icon ${hasReasoning ? 'enabled' : 'disabled'}" title="Reasoning: ${hasReasoning ? 'Available' : 'Not available'}">
+    <span class="capability-icon ${hasReasoning ? "enabled" : "disabled"}" title="Reasoning: ${hasReasoning ? "Available" : "Not available"}">
       <i class="fas fa-brain"></i>
     </span>
-    <span class="capability-icon ${hasVision ? 'enabled' : 'disabled'}" title="Image Processing: ${hasVision ? 'Available' : 'Not available'}">
+    <span class="capability-icon ${hasVision ? "enabled" : "disabled"}" title="Image Processing: ${hasVision ? "Available" : "Not available"}">
       <i class="fas fa-image"></i>
     </span>
-    <span class="capability-icon ${hasTools ? 'enabled' : 'disabled'}" title="Tool Usage: ${hasTools ? 'Available' : 'Not available'}">
+    <span class="capability-icon ${hasTools ? "enabled" : "disabled"}" title="Tool Usage: ${hasTools ? "Available" : "Not available"}">
       <i class="fas fa-tools"></i>
     </span>
   `;
@@ -792,19 +862,32 @@ function getCapabilityFlags(source) {
   const capsObj = source.capabilities || source.details?.capabilities || {};
   const truthy = (v) => {
     if (v === undefined || v === null) return false;
-    if (typeof v === 'boolean') return v;
-    if (typeof v === 'number') return v !== 0;
-    if (typeof v === 'string') return /^(true|yes|enabled|on|available)$/i.test(v.trim());
+    if (typeof v === "boolean") return v;
+    if (typeof v === "number") return v !== 0;
+    if (typeof v === "string")
+      return /^(true|yes|enabled|on|available)$/i.test(v.trim());
     if (Array.isArray(v)) return v.length > 0;
-    if (typeof v === 'object') return Object.keys(v).length > 0;
+    if (typeof v === "object") return Object.keys(v).length > 0;
     return false;
   };
-  const fromStrings = (obj, keys) => keys.some(k => truthy(obj?.[k]));
+  const fromStrings = (obj, keys) => keys.some((k) => truthy(obj?.[k]));
 
   return {
-    hasReasoning: truthy(source.has_reasoning) || truthy(capsObj.reasoning) || fromStrings(source, ['reasoning','hasReasoning']) || fromStrings(capsObj, ['has_reasoning','hasReasoning']),
-    hasVision: truthy(source.has_vision) || truthy(capsObj.vision) || fromStrings(source, ['vision','hasVision','image']) || fromStrings(capsObj, ['has_vision','hasVision','vision']),
-    hasTools: truthy(source.has_tools) || truthy(capsObj.tools) || fromStrings(source, ['tools','hasTools']) || fromStrings(capsObj, ['has_tools','hasTools','tools']),
+    hasReasoning:
+      truthy(source.has_reasoning) ||
+      truthy(capsObj.reasoning) ||
+      fromStrings(source, ["reasoning", "hasReasoning"]) ||
+      fromStrings(capsObj, ["has_reasoning", "hasReasoning"]),
+    hasVision:
+      truthy(source.has_vision) ||
+      truthy(capsObj.vision) ||
+      fromStrings(source, ["vision", "hasVision", "image"]) ||
+      fromStrings(capsObj, ["has_vision", "hasVision", "vision"]),
+    hasTools:
+      truthy(source.has_tools) ||
+      truthy(capsObj.tools) ||
+      fromStrings(source, ["tools", "hasTools"]) ||
+      fromStrings(capsObj, ["has_tools", "hasTools", "tools"]),
   };
 }
 
@@ -914,7 +997,7 @@ async function updateSystemStats() {
       timelineData.cpu.push(stats.cpu_percent);
       timelineData.memory.push(stats.memory.percent);
       timelineData.vram.push(
-        stats.vram && stats.vram.total > 0 ? stats.vram.percent : 0
+        stats.vram && stats.vram.total > 0 ? stats.vram.percent : 0,
       );
       timelineData.disk.push(stats.disk.percent);
 
@@ -997,7 +1080,7 @@ async function updateModelData() {
 
 function updateRunningModelsDisplay(models) {
   const runningModelsContainer = document.getElementById(
-    "runningModelsContainer"
+    "runningModelsContainer",
   );
   if (!runningModelsContainer) return;
 
@@ -1013,12 +1096,17 @@ function updateRunningModelsDisplay(models) {
   // Update individual model cards with new data
   models.forEach((model) => {
     // Find model card by model data attribute for robust and reliable lookup
-    let modelCard = runningModelsContainer.querySelector(`.model-card[data-model-name="${cssEscape(model.name)}"]`);
+    let modelCard = runningModelsContainer.querySelector(
+      `.model-card[data-model-name="${cssEscape(model.name)}"]`,
+    );
     // Fallback: compare dataset values for safety
     if (!modelCard) {
-      const cards = runningModelsContainer.querySelectorAll('.model-card');
+      const cards = runningModelsContainer.querySelectorAll(".model-card");
       for (let i = 0; i < cards.length; i++) {
-        const dataName = cards[i].dataset && cards[i].dataset.modelName ? cards[i].dataset.modelName.trim() : '';
+        const dataName =
+          cards[i].dataset && cards[i].dataset.modelName
+            ? cards[i].dataset.modelName.trim()
+            : "";
         if (dataName === model.name) {
           modelCard = cards[i];
           break;
@@ -1041,39 +1129,43 @@ function updateRunningModelsDisplay(models) {
 
       // Update capability icons (reasoning, vision, tools)
       try {
-        const caps = modelCard.querySelectorAll('.capability-icon');
+        const caps = modelCard.querySelectorAll(".capability-icon");
         if (caps && caps.length >= 3) {
           const [reasoningEl, visionEl, toolsEl] = caps;
           if (model.has_reasoning) {
-            reasoningEl.classList.add('enabled');
-            reasoningEl.classList.remove('disabled');
-            reasoningEl.setAttribute('title', 'Reasoning: Available');
+            reasoningEl.classList.add("enabled");
+            reasoningEl.classList.remove("disabled");
+            reasoningEl.setAttribute("title", "Reasoning: Available");
           } else {
-            reasoningEl.classList.add('disabled');
-            reasoningEl.classList.remove('enabled');
-            reasoningEl.setAttribute('title', 'Reasoning: Not available');
+            reasoningEl.classList.add("disabled");
+            reasoningEl.classList.remove("enabled");
+            reasoningEl.setAttribute("title", "Reasoning: Not available");
           }
           if (model.has_vision) {
-            visionEl.classList.add('enabled');
-            visionEl.classList.remove('disabled');
-            visionEl.setAttribute('title', 'Image Processing: Available');
+            visionEl.classList.add("enabled");
+            visionEl.classList.remove("disabled");
+            visionEl.setAttribute("title", "Image Processing: Available");
           } else {
-            visionEl.classList.add('disabled');
-            visionEl.classList.remove('enabled');
-            visionEl.setAttribute('title', 'Image Processing: Not available');
+            visionEl.classList.add("disabled");
+            visionEl.classList.remove("enabled");
+            visionEl.setAttribute("title", "Image Processing: Not available");
           }
           if (model.has_tools) {
-            toolsEl.classList.add('enabled');
-            toolsEl.classList.remove('disabled');
-            toolsEl.setAttribute('title', 'Tool Usage: Available');
+            toolsEl.classList.add("enabled");
+            toolsEl.classList.remove("disabled");
+            toolsEl.setAttribute("title", "Tool Usage: Available");
           } else {
-            toolsEl.classList.add('disabled');
-            toolsEl.classList.remove('enabled');
-            toolsEl.setAttribute('title', 'Tool Usage: Not available');
+            toolsEl.classList.add("disabled");
+            toolsEl.classList.remove("enabled");
+            toolsEl.setAttribute("title", "Tool Usage: Not available");
           }
         }
       } catch (err) {
-        console.log('Failed to update capability icons for running model', model.name, err);
+        console.log(
+          "Failed to update capability icons for running model",
+          model.name,
+          err,
+        );
       }
     }
   });
@@ -1081,7 +1173,7 @@ function updateRunningModelsDisplay(models) {
 
 function updateAvailableModelsDisplay(models) {
   const availableModelsContainer = document.getElementById(
-    "availableModelsContainer"
+    "availableModelsContainer",
   );
   if (!availableModelsContainer) return;
 
@@ -1093,36 +1185,55 @@ function updateAvailableModelsDisplay(models) {
 
   // Update capability icons for available models in the DOM
   try {
-    const availableCards = document.querySelectorAll('#availableModelsContainer .model-card');
-    availableCards.forEach(card => {
-      const titleEl = card.querySelector('.model-title');
+    const availableCards = document.querySelectorAll(
+      "#availableModelsContainer .model-card",
+    );
+    availableCards.forEach((card) => {
+      const titleEl = card.querySelector(".model-title");
       // Prefer dataset attribute if present
-      const name = (card.dataset && card.dataset.modelName) ? card.dataset.modelName.trim() : (titleEl ? titleEl.textContent.trim() : null);
+      const name =
+        card.dataset && card.dataset.modelName
+          ? card.dataset.modelName.trim()
+          : titleEl
+            ? titleEl.textContent.trim()
+            : null;
       if (!name) return;
-      const matching = models.find(m => (m.name && m.name.trim() === name));
+      const matching = models.find((m) => m.name && m.name.trim() === name);
       if (!matching) return;
-      const caps = card.querySelectorAll('.capability-icon');
+      const caps = card.querySelectorAll(".capability-icon");
       if (caps && caps.length >= 3) {
         const [reasoningEl, visionEl, toolsEl] = caps;
         if (matching.has_reasoning) {
-          reasoningEl.classList.add('enabled'); reasoningEl.classList.remove('disabled'); reasoningEl.setAttribute('title', 'Reasoning: Available');
+          reasoningEl.classList.add("enabled");
+          reasoningEl.classList.remove("disabled");
+          reasoningEl.setAttribute("title", "Reasoning: Available");
         } else {
-          reasoningEl.classList.add('disabled'); reasoningEl.classList.remove('enabled'); reasoningEl.setAttribute('title', 'Reasoning: Not available');
+          reasoningEl.classList.add("disabled");
+          reasoningEl.classList.remove("enabled");
+          reasoningEl.setAttribute("title", "Reasoning: Not available");
         }
         if (matching.has_vision) {
-          visionEl.classList.add('enabled'); visionEl.classList.remove('disabled'); visionEl.setAttribute('title', 'Image Processing: Available');
+          visionEl.classList.add("enabled");
+          visionEl.classList.remove("disabled");
+          visionEl.setAttribute("title", "Image Processing: Available");
         } else {
-          visionEl.classList.add('disabled'); visionEl.classList.remove('enabled'); visionEl.setAttribute('title', 'Image Processing: Not available');
+          visionEl.classList.add("disabled");
+          visionEl.classList.remove("enabled");
+          visionEl.setAttribute("title", "Image Processing: Not available");
         }
         if (matching.has_tools) {
-          toolsEl.classList.add('enabled'); toolsEl.classList.remove('disabled'); toolsEl.setAttribute('title', 'Tool Usage: Available');
+          toolsEl.classList.add("enabled");
+          toolsEl.classList.remove("disabled");
+          toolsEl.setAttribute("title", "Tool Usage: Available");
         } else {
-          toolsEl.classList.add('disabled'); toolsEl.classList.remove('enabled'); toolsEl.setAttribute('title', 'Tool Usage: Not available');
+          toolsEl.classList.add("disabled");
+          toolsEl.classList.remove("enabled");
+          toolsEl.setAttribute("title", "Tool Usage: Not available");
         }
       }
     });
   } catch (err) {
-    console.log('Failed to update capability icons for available models', err);
+    console.log("Failed to update capability icons for available models", err);
   }
 }
 
@@ -1172,23 +1283,23 @@ function updateModelMemoryDisplay(memoryData) {
   if (systemRam && systemRam.total > 0) {
     const usedGB = (systemRam.used / 1024 ** 3).toFixed(1);
     const totalGB = (systemRam.total / 1024 ** 3).toFixed(1);
-    document.querySelectorAll('[id^="available-ram-"]').forEach(el => {
+    document.querySelectorAll('[id^="available-ram-"]').forEach((el) => {
       el.textContent = `${usedGB}GB / ${totalGB}GB`;
     });
   } else {
-    document.querySelectorAll('[id^="available-ram-"]').forEach(el => {
-      el.textContent = 'N/A';
+    document.querySelectorAll('[id^="available-ram-"]').forEach((el) => {
+      el.textContent = "N/A";
     });
   }
   if (systemVram && systemVram.total > 0) {
     const usedGB = (systemVram.used / 1024 ** 3).toFixed(1);
     const totalGB = (systemVram.total / 1024 ** 3).toFixed(1);
-    document.querySelectorAll('[id^="available-vram-"]').forEach(el => {
+    document.querySelectorAll('[id^="available-vram-"]').forEach((el) => {
       el.textContent = `${usedGB}GB / ${totalGB}GB`;
     });
   } else {
-    document.querySelectorAll('[id^="available-vram-"]').forEach(el => {
-      el.textContent = 'No GPU';
+    document.querySelectorAll('[id^="available-vram-"]').forEach((el) => {
+      el.textContent = "No GPU";
     });
   }
 }
@@ -1229,29 +1340,29 @@ function initializeCompactMode() {
 
 // Reload application UI / data
 async function reloadApplication() {
-  const btn = document.getElementById('reloadBtn');
+  const btn = document.getElementById("reloadBtn");
   if (!btn) return;
-  const icon = btn.querySelector('i');
-  const originalClass = icon ? icon.className : '';
+  const icon = btn.querySelector("i");
+  const originalClass = icon ? icon.className : "";
   try {
     // Show spinner
     if (icon) {
-      icon.classList.add('fa-spin');
-      icon.classList.add('spinning');
+      icon.classList.add("fa-spin");
+      icon.classList.add("spinning");
     }
     btn.disabled = true;
-    showNotification('Reloading application...', 'info');
+    showNotification("Reloading application...", "info");
 
     // Perform a full page reload (bypass partial refresh)
     // Use a small delay so the spinner is visible briefly for visual feedback
     setTimeout(() => {
       // Add a cache-busting timestamp query param to ensure fresh reload
       const url = new URL(window.location.href);
-      url.searchParams.set('r', Date.now());
+      url.searchParams.set("r", Date.now());
       window.location.href = url.toString();
     }, 200);
   } catch (err) {
-    showNotification('Failed to reload: ' + (err.message || err), 'error');
+    showNotification("Failed to reload: " + (err.message || err), "error");
   } finally {
     btn.disabled = false;
     if (icon) {
@@ -1276,22 +1387,29 @@ async function loadExtendedModels() {
       renderExtendedModels(data.models, container);
       extendedModelsLoaded = true;
     } else {
-      container.innerHTML = '<div class="col-12 text-center text-danger">Failed to load extended models</div>';
+      container.innerHTML =
+        '<div class="col-12 text-center text-danger">Failed to load extended models</div>';
     }
   } catch (error) {
     console.error("Error loading extended models:", error);
-    container.innerHTML = '<div class="col-12 text-center text-danger">Error loading models</div>';
+    container.innerHTML =
+      '<div class="col-12 text-center text-danger">Error loading models</div>';
   }
 }
 
 function renderExtendedModels(models, container) {
   if (!models || models.length === 0) {
-    container.innerHTML = '<div class="col-12 text-center text-muted">No models available</div>';
+    container.innerHTML =
+      '<div class="col-12 text-center text-muted">No models available</div>';
     return;
   }
-  container.innerHTML = models.map(m => (window.modelCards && window.modelCards.buildDownloadableModelCardHTML)
-  ? window.modelCards.buildDownloadableModelCardHTML(m)
-  : `<!-- modelCards module missing -->`).join("");
+  container.innerHTML = models
+    .map((m) =>
+      window.modelCards && window.modelCards.buildDownloadableModelCardHTML
+        ? window.modelCards.buildDownloadableModelCardHTML(m)
+        : `<!-- modelCards module missing -->`,
+    )
+    .join("");
 }
 
 async function toggleExtendedModels() {
@@ -1351,33 +1469,54 @@ function renderDownloadableModels(models) {
       '<div class="col-12 text-center text-muted">No models available</div>';
     return;
   }
-  container.innerHTML = models.map(m => (window.modelCards && window.modelCards.buildDownloadableModelCardHTML)
-  ? window.modelCards.buildDownloadableModelCardHTML(m)
-  : `<!-- modelCards module missing -->`).join("");
+  container.innerHTML = models
+    .map((m) =>
+      window.modelCards && window.modelCards.buildDownloadableModelCardHTML
+        ? window.modelCards.buildDownloadableModelCardHTML(m)
+        : `<!-- modelCards module missing -->`,
+    )
+    .join("");
 }
 
 async function pullModel(modelName) {
-  const card = document.querySelector(`.model-card[data-model-name="${cssEscape(modelName)}"]`);
-  const button = card ? card.querySelector('button[title="Download model"]') : null;
-  const progressContainer = card ? card.querySelector('.download-progress') : null;
-  const progressBar = progressContainer ? progressContainer.querySelector('.progress-bar') : null;
-  const progressText = progressContainer ? progressContainer.querySelector('small') : null;
+  const card = document.querySelector(
+    `.model-card[data-model-name="${cssEscape(modelName)}"]`,
+  );
+  const button = card
+    ? card.querySelector('button[title="Download model"]')
+    : null;
+  const progressContainer = card
+    ? card.querySelector(".download-progress")
+    : null;
+  const progressBar = progressContainer
+    ? progressContainer.querySelector(".progress-bar")
+    : null;
+  const progressText = progressContainer
+    ? progressContainer.querySelector("small")
+    : null;
   const originalText = button ? button.innerHTML : null;
 
   if (button) {
-    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Downloading...';
+    button.innerHTML =
+      '<i class="fas fa-spinner fa-spin me-1"></i>Downloading...';
     button.disabled = true;
   }
 
   if (progressContainer) {
-    progressContainer.style.display = 'block';
+    progressContainer.style.display = "block";
   }
 
-  showNotification(`Starting download for ${modelName}. This may take a while...`, "info");
+  showNotification(
+    `Starting download for ${modelName}. This may take a while...`,
+    "info",
+  );
 
   try {
     // Step 1: Pull model with streaming status updates
-    const pullResp = await fetch(`/api/models/pull/${encodeURIComponent(modelName)}?stream=true`, { method: "POST" });
+    const pullResp = await fetch(
+      `/api/models/pull/${encodeURIComponent(modelName)}?stream=true`,
+      { method: "POST" },
+    );
     if (!pullResp.ok) {
       throw new Error(`Failed to start download (${pullResp.status})`);
     }
@@ -1411,10 +1550,12 @@ async function pullModel(modelName) {
 
             // Update progress bar if total and completed are available
             if (payload.total && payload.completed !== undefined) {
-              const percent = Math.round((payload.completed / payload.total) * 100);
+              const percent = Math.round(
+                (payload.completed / payload.total) * 100,
+              );
               if (progressBar) {
                 progressBar.style.width = `${percent}%`;
-                progressBar.setAttribute('aria-valuenow', percent);
+                progressBar.setAttribute("aria-valuenow", percent);
               }
               if (progressText) {
                 progressText.textContent = `${percent}%`;
@@ -1427,11 +1568,11 @@ async function pullModel(modelName) {
             pullMessage = payload.message || pullMessage;
             // Set progress to 100% on completion
             if (progressBar) {
-              progressBar.style.width = '100%';
-              progressBar.setAttribute('aria-valuenow', 100);
+              progressBar.style.width = "100%";
+              progressBar.setAttribute("aria-valuenow", 100);
             }
             if (progressText) {
-              progressText.textContent = '100%';
+              progressText.textContent = "100%";
             }
           }
         }
@@ -1452,7 +1593,10 @@ async function pullModel(modelName) {
       }
     } else {
       // Fallback for environments without streaming support
-      const fallback = await fetch(`/api/models/pull/${encodeURIComponent(modelName)}`, { method: "POST" });
+      const fallback = await fetch(
+        `/api/models/pull/${encodeURIComponent(modelName)}`,
+        { method: "POST" },
+      );
       const fallbackResult = await fallback.json();
       pullSucceeded = !!fallbackResult.success;
       pullMessage = fallbackResult.message || pullMessage;
@@ -1465,16 +1609,26 @@ async function pullModel(modelName) {
     showNotification(pullMessage, "success");
 
     // Download complete - update UI and refresh models list
-    if (button) button.innerHTML = '<i class="fas fa-check me-1"></i>Downloaded';
+    if (button)
+      button.innerHTML = '<i class="fas fa-check me-1"></i>Downloaded';
     setTimeout(() => {
       updateModelData();
       location.reload();
     }, 1500);
   } catch (err) {
     showNotification(`Download failed: ${err.message}`, "error");
-    if (button && originalText !== null) { button.innerHTML = originalText; button.disabled = false; }
-    if (progressContainer) { progressContainer.style.display = 'none'; }
-    if (progressBar) { progressBar.style.width = '0%'; }
-    if (progressText) { progressText.textContent = '0%'; }
+    if (button && originalText !== null) {
+      button.innerHTML = originalText;
+      button.disabled = false;
+    }
+    if (progressContainer) {
+      progressContainer.style.display = "none";
+    }
+    if (progressBar) {
+      progressBar.style.width = "0%";
+    }
+    if (progressText) {
+      progressText.textContent = "0%";
+    }
   }
 }

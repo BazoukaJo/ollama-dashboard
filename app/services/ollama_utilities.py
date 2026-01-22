@@ -20,6 +20,7 @@ from app.services.model_settings_helpers import (
     model_settings_file_path,
     normalize_setting_value,
     write_model_settings_file,
+    validate_json_before_write,
 )
 
 
@@ -82,8 +83,17 @@ class OllamaServiceUtilities:
             return  # Skip saving when no app context
         if not self.history:
             return  # Skip saving when no history available
-        with open(self.app.config['HISTORY_FILE'], 'w', encoding='utf-8') as f:
-            json.dump(list(self.history), f)
+        try:
+            # Validate JSON serialization before write
+            json_str = json.dumps(list(self.history))
+            history_file = self.app.config['HISTORY_FILE']
+            # Write with atomic pattern: tmp then rename
+            tmp_path = history_file + '.tmp'
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                f.write(json_str)
+            os.replace(tmp_path, history_file)
+        except (ValueError, TypeError) as e:
+            self.logger.warning(f"Failed to serialize history: {e}")
 
     def format_size(self, size_bytes):
         """Format byte size to human-readable format."""

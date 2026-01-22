@@ -60,6 +60,14 @@ def write_model_settings_file(service, model_settings_dict):
         service.logger.exception("Error writing model settings: %s", e)
         return False
 
+def validate_json_before_write(data):
+    """Validate that data can be JSON serialized before writing to file."""
+    try:
+        json.dumps(data)
+        return True, None
+    except (ValueError, TypeError) as e:
+        return False, str(e)
+
 def normalize_setting_value(key, value, default_val):
     try:
         if key == 'stop':

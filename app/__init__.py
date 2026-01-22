@@ -1,150 +1,105 @@
-"""
-Flask application factory for Ollama Dashboard.
-"""
-import logging
-import os
-from logging.handlers import RotatingFileHandler
-from datetime import datetime, timezone
+"""Flask application factory for Ollama Dashboard.
 
-from flask import Flask, jsonify
+Initializes Flask app with configuration, services, and route blueprints.
+Single initialization point - ensures no duplicate service creation.
+"""
+
+import os
+import sys
+import logging
+from pathlib import Path
+from flask import Flask
 from flask_cors import CORS
 
-
-class Config:
-    """Application configuration settings."""
-    OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'localhost')
-    OLLAMA_PORT = int(os.getenv('OLLAMA_PORT', '11434'))
-    MAX_HISTORY = int(os.getenv('MAX_HISTORY', '50'))
-    HISTORY_FILE = os.getenv('HISTORY_FILE', 'history.json')
-    # Global settings file deprecated; only per-model settings retained.
-    MODEL_SETTINGS_FILE = os.getenv('MODEL_SETTINGS_FILE', 'model_settings.json')
-    LOG_FILE = os.getenv('LOG_FILE', 'logs/ollama-dashboard.log')
-    LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-    AUTO_START_OLLAMA = os.getenv('AUTO_START_OLLAMA', 'true').lower() in ('true', '1', 'yes', 'on')
-    STATIC_URL_PATH = ''
-    STATIC_FOLDER = 'static'
-    TEMPLATE_FOLDER = 'templates'
+logger = logging.getLogger(__name__)
 
 
-def create_app():
-    """
-    Application factory function.
+def create_app(config_name='development'):
+    """Create and configure Flask application.
+
+    Args:
+        config_name: Configuration mode ('development' or 'production')
 
     Returns:
-        Flask: Configured Flask application instance
+        Configured Flask application instance
+
+    Notes:
+        - Initializes single OllamaService instance
+        - Registers blueprints and middleware
+        - Sets up CORS and security headers
     """
-    app = Flask(__name__,
-                static_url_path=Config.STATIC_URL_PATH,
-                static_folder=Config.STATIC_FOLDER,
-                template_folder=Config.TEMPLATE_FOLDER)
+    app = Flask(
+        __name__,
+        static_folder='static',
+        static_url_path='/static',
+        template_folder='templates'
+    )
 
-    # Load configuration
-    app.config.from_object(Config)
-    app.config['START_TIME'] = datetime.now(timezone.utc)
+    # ===== CONFIGURATION =====
+    app.config['DEBUG'] = config_name == 'development'
+    app.config['JSON_SORT_KEYS'] = False
+    app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 
-    # Configure CORS
-    CORS(app, resources={
-        r"/*": {
-            "origins": "*",
-            "allow_headers": "*",
-            "expose_headers": "*"
-        }
-    })
+    # Data directory for history, settings, cache
+    base_dir = Path(__file__).parent.parent
+    data_dir = base_dir / 'data'
+    data_dir.mkdir(exist_ok=True)
+    app.config['DATA_DIR'] = str(data_dir)
 
-    # Configure logging to file if requested
-    log_file = app.config.get('LOG_FILE')
-    log_level = app.config.get('LOG_LEVEL', 'INFO')
-    if log_file:
-        os_dir = os.path.dirname(log_file)
-        if os_dir and not os.path.exists(os_dir):
-            os.makedirs(os_dir, exist_ok=True)
-        handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)
-        handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
-        handler.setLevel(getattr(logging, log_level.upper(), logging.INFO))
-        logging.getLogger().addHandler(handler)
+    # Ollama connection
+    app.config['OLLAMA_HOST'] = os.getenv('OLLAMA_HOST', 'localhost')
+    app.config['OLLAMA_PORT'] = int(os.getenv('OLLAMA_PORT', '11434'))
 
-    # Register template filters
-    _register_template_filters(app)
+    # Persistence
+    app.config['HISTORY_FILE'] = os.getenv('HISTORY_FILE', 'history.json')
+    app.config['MODEL_SETTINGS_FILE'] = os.getenv('MODEL_SETTINGS_FILE', 'model_settings.json')
+    app.config['MAX_HISTORY'] = int(os.getenv('MAX_HISTORY', '50'))
 
-    # Register blueprints
-    _register_blueprints(app)
+    logger.info(f"🔧 Configuring Ollama Dashboard in {config_name} mode")
+    logger.info(f"📁 Data directory: {app.config['DATA_DIR']}")
 
-    # Register error handlers
-    _register_error_handlers(app)
+    # ===== SERVICE INITIALIZATION =====
+    from app.services.ollama import OllamaService
 
-    # Health check endpoint
-    @app.route('/ping')
-    def ping():
-        """Health check endpoint."""
-        return jsonify({"status": "ok"})
+    # Create single service instance
+    ollama_service = OllamaService()
+    app.config['OLLAMA_SERVICE'] = ollama_service
 
+    # Initialize service with Flask app context
+    with app.app_context():
+        ollama_service.init_app(app)
+
+    logger.info("✅ OllamaService initialized")
+    logger.info("   • Error handling (20+ pattern detection)")
+    logger.info("   • Smart caching (2s-300s TTLs)")
+    logger.info("   • Rate limiting (3 operation types)")
+    logger.info("   • Performance monitoring")
+    logger.info("   • Health tracking")
+
+    # ===== MIDDLEWARE & SECURITY =====
+
+    # CORS: Allow requests from local interfaces
+    cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5000,http://127.0.0.1:5000')
+    CORS(app, resources={r"/api/*": {"origins": cors_origins.split(',')}})
+
+    # Security headers
+    @app.after_request
+    def set_security_headers(response):
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        if os.getenv('HTTPS_ENABLED', 'false').lower() == 'true':
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        return response
+
+    # ===== BLUEPRINT REGISTRATION =====
+
+    # Single initialization path for all routes
+    from app.routes import init_app
+
+    init_app(app)
+    logger.info("✅ Routes registered (47 endpoints)")
+
+
+    logger.info("✅ Application initialized successfully")
     return app
-
-
-def _register_template_filters(app):
-    """Register custom Jinja2 template filters."""
-    @app.template_filter('datetime')
-    def format_datetime(value):
-        """Format datetime value for display."""
-        if isinstance(value, str):
-            try:
-                value = datetime.fromisoformat(value.replace('Z', '+00:00').split('.')[0])
-            except ValueError:
-                return value
-        return value.strftime('%Y-%m-%d %H:%M:%S')
-
-    @app.template_filter('time_ago')
-    def time_ago(value):
-        """Convert datetime to relative time string."""
-        if isinstance(value, str):
-            try:
-                value = datetime.fromisoformat(value.replace('Z', '+00:00').split('.')[0])
-            except ValueError:
-                return value
-
-        now = datetime.now(timezone.utc)
-        if isinstance(value, datetime):
-            if value.tzinfo:
-                value = value.astimezone(timezone.utc)
-            else:
-                value = value.replace(tzinfo=timezone.utc)
-
-        diff = now - value
-        seconds = diff.total_seconds()
-
-        if seconds < 60:
-            return f"{int(seconds)} seconds ago"
-        elif seconds < 3600:
-            minutes = int(seconds / 60)
-            return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
-        elif seconds < 86400:
-            hours = int(seconds / 3600)
-            return f"{hours} hour{'s' if hours != 1 else ''} ago"
-        else:
-            days = int(seconds / 86400)
-            return f"{days} day{'s' if days != 1 else ''} ago"
-
-
-def _register_blueprints(app):
-    """Register Flask blueprints."""
-    # Import inside to avoid circular import at module load time
-    from app.routes import bp as main_bp  # pylint: disable=import-outside-toplevel
-    from app.routes.main import init_app as init_main_bp  # pylint: disable=import-outside-toplevel
-
-    app.register_blueprint(main_bp)
-    init_main_bp(app)
-
-
-def _register_error_handlers(app):
-    """Register error handlers."""
-    @app.errorhandler(404)
-    def not_found_error(error):
-        """Handle 404 errors."""
-        _ = error  # Suppress unused warning
-        return jsonify({"error": "Not found"}), 404
-
-    @app.errorhandler(500)
-    def internal_error(error):
-        """Handle 500 errors."""
-        _ = error  # Suppress unused warning
-        return jsonify({"error": "Internal server error"}), 500

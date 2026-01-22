@@ -1,3 +1,3 @@
 @echo off
 echo Starting Ollama Dashboard...
-python OllamaDashboard.py
+call python OllamaDashboard.py

@@ -1,10 +1,9 @@
 """
-Main routes for Ollama Dashboard.
+Main routes blueprint for Ollama Dashboard.
 
 This module is large and handles many endpoint variations; we relax a few
 lint rules to keep the legacy surface area stable while improving readability.
 """
-# pylint: disable=too-many-lines,line-too-long,broad-exception-caught,missing-function-docstring
 from datetime import datetime
 import json
 import os
@@ -17,10 +16,22 @@ import time
 
 import psutil
 import requests
-from flask import Response, current_app, jsonify, render_template, request, stream_with_context
+from flask import Blueprint, Response, current_app, jsonify, render_template, request, stream_with_context
 
 from app.routes import bp
 from app.services.ollama import OllamaService
+from app.services.error_handling import (
+    TransientErrorDetector,
+    TIMEOUT_GENERATE,
+    TIMEOUT_GENERATE_RETRY,
+    TIMEOUT_PULL,
+    TIMEOUT_DELETE,
+    TIMEOUT_STOP,
+    TIMEOUT_PS,
+    TIMEOUT_DEFAULT,
+)
+
+import logging
 
 # Initialize service without app
 ollama_service = OllamaService()
@@ -318,21 +329,21 @@ def start_model(model_name):
         if not ollama_service.get_service_status():
             return {"success": False, "message": "Ollama service is not running. Please start the service first."}, 503
 
+        # Use service method to check if error is transient
         def _is_transient_error(error_text):
             """Check if error is transient (connection forcibly closed, etc.)"""
-            transient_indicators = [
-                'forcibly closed',
-                'connection reset',
-                'broken pipe',
-                'wsarecv',
-                'connection aborted'
-            ]
-            error_lower = error_text.lower()
-            return any(indicator in error_lower for indicator in transient_indicators)
+            return ollama_service.is_transient_error(error_text)
 
         def _attempt_generate(retry_num=0, max_retries=3, timeout=60):
-            """Attempt to generate with retry logic for transient errors"""
+            """Attempt to generate with retry logic for transient errors.
+
+            Args:
+                retry_num: Current retry attempt (0-indexed)
+                max_retries: Maximum number of retries (3)
+                timeout: Request timeout in seconds (60s base, increases on retry)
+            """
             try:
+                # Explicit timeout prevents hanging on unresponsive Ollama
                 response = requests.post(
                     _get_ollama_url("generate"),
                     json={"model": model_name, "prompt": "Hello", "stream": False, "keep_alive": "24h"},
@@ -352,13 +363,13 @@ def start_model(model_name):
                     pass
 
                 # Log the error for debugging
-                print(f"[DEBUG] Attempt {retry_num + 1}/{max_retries + 1}: Response status {response.status_code}")
-                print(f"[DEBUG] Error text: {error_text[:200]}")  # First 200 chars
-                print(f"[DEBUG] Is transient: {_is_transient_error(error_text)}")
+                current_app.logger.debug(f"Attempt {retry_num + 1}/{max_retries + 1}: Response status {response.status_code}")
+                current_app.logger.debug(f"Error text: {error_text[:200]}")  # First 200 chars
+                current_app.logger.debug(f"Is transient: {_is_transient_error(error_text)}")
 
                 if _is_transient_error(error_text) and retry_num < max_retries:
                     wait_time = 2 ** retry_num  # Exponential backoff: 1s, 2s, 4s
-                    print(f"[DEBUG] Retrying in {wait_time}s...")
+                    current_app.logger.debug(f"Retrying in {wait_time}s...")
                     time.sleep(wait_time)
                     return _attempt_generate(retry_num + 1, max_retries, timeout + 30)  # Increase timeout on retry
 
@@ -387,6 +398,7 @@ def start_model(model_name):
             if error_result["success"] is False:
                 # Try to pull the model first, then generate
                 try:
+                    # Pull timeout set to 10 minutes for large models
                     pull_response = requests.post(
                         _get_ollama_url("pull"),
                         json={"name": model_name, "stream": False},
@@ -869,124 +881,57 @@ def chat():
     except Exception as e:
         return {"error": f"Unexpected error: {str(e)}"}, 500
 
+
 @bp.route('/api/models/delete/<model_name>', methods=['DELETE'])
 def delete_model(model_name):
-    """Delete a model from the system.
 
-    Process:
-    1. Stop the model if it's currently running (unload from memory)
-    2. Delete the model from Ollama
-    3. Clear caches to reflect changes in the UI
-    """
+    """Delete a model and its settings."""
     try:
         if not ollama_service.app:
             ollama_service.init_app(current_app)
 
-        # Step 1: Stop model if running (unload from memory first)
-        running_models = ollama_service.get_running_models()
-        is_running = any(model['name'] == model_name for model in running_models)
-
-        if is_running:
+        # Attempt to delete model from Ollama backend
+        host, port = ollama_service.get_ollama_host_port()
+        url = f"http://{host}:{port}/api/delete"
+        response = ollama_service._session.delete(url, json={"name": model_name}, timeout=30)
+        if response.status_code != 200:
             try:
-                # Use improved unload mechanism with single space prompt
-                unload_response = requests.post(
-                    _get_ollama_url("generate"),
-                    json={
-                        "model": model_name,
-                        "prompt": " ",  # Single space instead of empty to ensure valid request
-                        "stream": False,
-                        "keep_alive": "0s"
-                    },
-                    timeout=30
-                )
+                err_json = response.json()
+                error_msg = err_json.get("error") or err_json.get("message") or response.text
+            except Exception:
+                error_msg = response.text
+            return jsonify({"success": False, "message": f"Failed to delete model: {error_msg}"}), 400
 
-                if unload_response.status_code not in [200, 404]:
-                    current_app.logger.warning(
-                        f"Warning: Failed to unload model '{model_name}' before deletion. "
-                        f"Status: {unload_response.status_code}. Proceeding with deletion anyway."
-                    )
+        # Remove model settings
+        from app.services.model_settings_helpers import delete_model_settings_entry
+        settings_deleted = delete_model_settings_entry(ollama_service, model_name)
 
-                # Wait for unload to complete
-                time.sleep(1)
-
-                # Clear the cache to reflect model is no longer running
-                ollama_service.clear_cache('running_models')
-
-            except requests.exceptions.Timeout:
-                current_app.logger.warning(
-                    f"Warning: Timeout unloading model '{model_name}' before deletion. "
-                    f"Proceeding with deletion anyway."
-                )
-            except Exception as e:
-                current_app.logger.warning(
-                    f"Warning: Error unloading model '{model_name}' before deletion: {str(e)}. "
-                    f"Proceeding with deletion anyway."
-                )
-
-        # Step 2: Check if model exists
-        available_models = ollama_service.get_available_models()
-        if not any(model['name'] == model_name for model in available_models):
-            return {"success": False, "message": f"Model '{model_name}' not found in available models."}, 404
-
-        # Step 3: Delete the model from Ollama
-        try:
-            delete_response = requests.delete(
-                _get_ollama_url("delete"),
-                json={"name": model_name},
-                timeout=60  # Increased timeout for deletion
-            )
-
-            if delete_response.status_code == 200:
-                # Clear caches after successful deletion
-                ollama_service.clear_cache('available_models')
-                ollama_service.clear_cache('running_models')
-
-                return {
-                    "success": True,
-                    "message": f"Model '{model_name}' deleted successfully (unloaded from memory and removed from disk)."
-                }, 200
-            else:
-                error_msg = f"Failed to delete model: HTTP {delete_response.status_code}"
-                try:
-                    error_detail = delete_response.json().get('error', '')
-                    if error_detail:
-                        error_msg += f" - {error_detail}"
-                except Exception:
-                    error_msg += f" - {delete_response.text[:100]}"
-                return {"success": False, "message": error_msg}, delete_response.status_code or 500
-
-        except requests.exceptions.Timeout:
-            return {
-                "success": False,
-                "message": "Model deletion timed out. The model may still be deleting."
-            }, 504
-        except requests.exceptions.RequestException as e:
-            return {
-                "success": False,
-                "message": f"Network error while deleting model: {str(e)}"
-            }, 503
-
-    except Exception as e:
-        current_app.logger.error(f"Unexpected error deleting model {model_name}: {str(e)}")
-        return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
+        return jsonify({
+            "success": True,
+            "message": f"Model '{model_name}' deleted successfully. Settings removed: {settings_deleted}"
+        }), 200
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Exception: {str(exc)}"}), 500
 
 
-@bp.route('/api/models/status/<model_name>')
-def get_model_status(model_name):
-    """Get the status of a specific model."""
+
+@bp.route('/metrics', methods=['GET'])
+def prometheus_metrics():
+    """Prometheus metrics endpoint removed."""
+    return "# Prometheus metrics disabled", 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+@bp.route('/health', methods=['GET'])
+def simple_health():
+    """Simple health endpoint for monitoring."""
+
     try:
-        running_models = ollama_service.get_running_models()
-        if any(model['name'] == model_name for model in running_models):
-            return {"status": "running", "ready": True}
-
-        available_models = ollama_service.get_available_models()
-        if any(model['name'] == model_name for model in available_models):
-            return {"status": "available", "ready": False, "message": "Model is installed but not loaded."}
-
-        return {"status": "not_found", "ready": False, "message": "Model is not installed."}
-
-    except Exception as e:
-        return {"status": "error", "ready": False, "error": str(e)}, 500
+        health = ollama_service.get_component_health()
+        if health.get('background_thread_alive'):
+            return jsonify({'status': 'ok'}), 200
+        else:
+            return jsonify({'status': 'degraded'}), 503
+    except Exception:
+        return jsonify({'status': 'error'}), 500
 
 
 @bp.route('/api/chat/history', methods=['GET'])
@@ -1183,5 +1128,10 @@ def admin_model_defaults():
 def init_app(app):
     """Initialize the blueprint with the app."""
     ollama_service.init_app(app)
+    from app.routes.monitoring import create_monitoring_endpoints
+    create_monitoring_endpoints(bp, ollama_service)
+    from app.routes.observability import create_observability_endpoints
+    create_observability_endpoints(bp, ollama_service)
     # Template filters (`datetime` and `time_ago`) are registered in app factory via app.__init__.
     # Avoid duplicate registration here to prevent platform-specific filter overrides.
+    app.register_blueprint(bp)
