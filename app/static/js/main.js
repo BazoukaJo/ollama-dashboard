@@ -184,6 +184,45 @@ function toggleSidebar() {
 }
 
 // Model management functions
+
+/**
+ * Poll for model status change and reload when confirmed.
+ * @param {string} modelName - Name of the model to check
+ * @param {boolean} shouldBeRunning - True if we expect the model to be running, false if stopped
+ */
+async function pollForModelStatus(modelName, shouldBeRunning) {
+  const maxAttempts = 10; // Maximum 5 seconds (10 * 500ms)
+  let attempts = 0;
+
+  while (attempts < maxAttempts) {
+    attempts++;
+
+    try {
+      const response = await fetch("/api/models/running");
+      if (response.ok) {
+        const runningModels = await response.json();
+        const isRunning = runningModels.some((m) => m.name === modelName);
+
+        // Check if the expected state matches
+        if (isRunning === shouldBeRunning) {
+          // State has changed as expected, reload the page
+          location.reload();
+          return;
+        }
+      }
+    } catch (error) {
+      console.log("Error polling model status:", error);
+    }
+
+    // Wait 500ms before next check
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  // If we've exhausted attempts, reload anyway
+  console.log(`Status polling timeout for ${modelName}, reloading anyway`);
+  location.reload();
+}
+
 async function startModel(modelName) {
   try {
     const response = await fetch(
@@ -198,10 +237,8 @@ async function startModel(modelName) {
     const result = await response.json();
     if (result.success) {
       showNotification(result.message, "success");
-      if (typeof updateModelData === "function") {
-        updateModelData();
-      }
-      setTimeout(() => location.reload(), 1500);
+      // Poll for model status change before reloading
+      await pollForModelStatus(modelName, true);
     } else {
       showNotification(result.message, "error");
     }
@@ -266,8 +303,8 @@ async function stopModel(modelName) {
         result.message || `Model ${modelName} stopped successfully`,
         "success",
       );
-      // Reload after a short delay to reflect the change
-      setTimeout(() => location.reload(), 2000);
+      // Poll for model status change before reloading
+      await pollForModelStatus(modelName, false);
     } else {
       showNotification(
         result.message || `Failed to stop model ${modelName}`,
@@ -320,7 +357,8 @@ async function restartModel(modelName) {
 
     if (result.success) {
       showNotification(result.message, "success");
-      setTimeout(() => location.reload(), 2000);
+      // Poll for model status change before reloading
+      await pollForModelStatus(modelName, true);
     } else {
       showNotification(result.message, "error");
     }
@@ -1084,11 +1122,30 @@ function updateRunningModelsDisplay(models) {
   );
   if (!runningModelsContainer) return;
 
-  // Only update if there are changes to avoid unnecessary DOM manipulation
-  const currentCount =
-    runningModelsContainer.querySelectorAll(".model-card").length;
-  if (currentCount !== models.length) {
-    // Models count changed, trigger a page reload to get fresh data
+  // Get current model names from DOM
+  const currentCards = runningModelsContainer.querySelectorAll(".model-card");
+  const currentModelNames = Array.from(currentCards)
+    .map((card) =>
+      card.dataset && card.dataset.modelName
+        ? card.dataset.modelName.trim()
+        : "",
+    )
+    .filter((name) => name)
+    .sort();
+
+  // Get new model names from API response
+  const newModelNames = models
+    .map((m) => m.name)
+    .filter((name) => name)
+    .sort();
+
+  // Compare model names to detect any changes (not just count)
+  const namesChanged =
+    currentModelNames.length !== newModelNames.length ||
+    currentModelNames.some((name, idx) => name !== newModelNames[idx]);
+
+  if (namesChanged) {
+    // Models changed (loaded, unloaded, or replaced), trigger a page reload to get fresh data
     location.reload();
     return;
   }

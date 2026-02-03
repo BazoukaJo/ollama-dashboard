@@ -391,6 +391,14 @@ def start_model(model_name):
             result = _attempt_generate()
 
             if result["success"]:
+                # Clear the cache for running models to force a refresh
+                # This ensures the UI shows the model as loaded immediately
+                ollama_service.clear_cache('running_models')
+                # Force immediate refresh to populate cache with current state
+                try:
+                    ollama_service.get_running_models(force_refresh=True)
+                except Exception:
+                    pass  # Best-effort refresh, don't fail if it errors
                 return {"success": True, "message": f"Model {model_name} started successfully"}
 
             # Handle specific errors
@@ -410,6 +418,13 @@ def start_model(model_name):
                         result = _attempt_generate()
 
                         if result["success"]:
+                            # Clear the cache for running models to force a refresh
+                            ollama_service.clear_cache('running_models')
+                            # Force immediate refresh to populate cache with current state
+                            try:
+                                ollama_service.get_running_models(force_refresh=True)
+                            except Exception:
+                                pass  # Best-effort refresh, don't fail if it errors
                             return {"success": True, "message": f"Model {model_name} downloaded and started successfully"}
 
                         error_result, status_code = _handle_model_error(result["response"], model_name, "start after download")
@@ -472,6 +487,11 @@ def stop_model(model_name):
                 # Clear the cache for running models to force a refresh
                 # This ensures the UI shows the model as unloaded immediately
                 ollama_service.clear_cache('running_models')
+                # Force immediate refresh to populate cache with current state
+                try:
+                    ollama_service.get_running_models(force_refresh=True)
+                except Exception:
+                    pass  # Best-effort refresh, don't fail if it errors
                 return {"success": True, "message": f"Model {model_name} stopped successfully"}
             elif unload_response.status_code == 404:
                 return {"success": False, "message": f"Model {model_name} not found"}, 404

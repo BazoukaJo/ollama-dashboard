@@ -223,11 +223,16 @@ class OllamaServiceModels:
             self.logger.debug("Error fetching available models: %s", exc)
             return []
 
-    def get_running_models(self):
-        """Get list of currently running models."""
-        cached = self._get_cached('running_models', ttl_seconds=3)
-        if cached is not None:
-            return cached
+    def get_running_models(self, force_refresh=False):
+        """Get list of currently running models.
+
+        Args:
+            force_refresh: If True, bypass cache and fetch fresh data from API
+        """
+        if not force_refresh:
+            cached = self._get_cached('running_models', ttl_seconds=3)
+            if cached is not None:
+                return cached
         try:
             response = self._session.get(self.get_api_url(), timeout=5)
             response.raise_for_status()
