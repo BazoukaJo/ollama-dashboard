@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 from typing import Any, Optional, Tuple
 
 import requests
-from app.services.model_catalog import get_best_models as _get_best
-from app.services.model_catalog import get_all_downloadable_models as _get_all
-from app.services.model_catalog import get_downloadable_models as _get_dl
+from app.services.model_fetcher import get_best_models_live as _get_best
+from app.services.model_fetcher import get_all_downloadable_models_live as _get_all
+from app.services.model_fetcher import get_downloadable_models_live as _get_dl
 from app.services.model_settings_helpers import (
     delete_model_settings_entry,
     ensure_model_settings_exists,
