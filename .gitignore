@@ -48,9 +48,6 @@ venv.bak/
 
 # Local development
 *.log
-*.log.*
-logs/
-logs_backup/
 .env.local
 .env.development.local
 .env.test.local
@@ -63,11 +60,4 @@ htmlcov/
 
 # Project specific
 history.json
-.github/copilot-instructions.md
-model_settings.json
-
-Screenshot 2025-11-25 223549.png
-.github/copilot-instructions.md
-\
-
-.venv312\
+.github/

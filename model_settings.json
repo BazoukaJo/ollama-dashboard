@@ -1,0 +1,361 @@
+{
+  "deepseek-r1:latest": {
+    "settings": {
+      "temperature": 0.6,
+      "top_k": 8,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "model_settings_auto_save": true
+    },
+    "source": "recommended",
+    "last_updated": "2025-11-24T16:05:23.512257+00:00"
+  },
+  "qwen3-vl:4b": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 30,
+      "top_p": 0.9500000000000001,
+      "num_ctx": 4096,
+      "seed": 0,
+      "model_settings_auto_save": true
+    },
+    "source": "recommended",
+    "last_updated": "2025-11-24T16:05:23.513261+00:00"
+  },
+  "qwen3-vl:8b": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 30,
+      "top_p": 0.9500000000000001,
+      "num_ctx": 4096,
+      "seed": 0,
+      "model_settings_auto_save": true
+    },
+    "source": "recommended",
+    "last_updated": "2025-11-24T16:05:23.515766+00:00"
+  },
+  "gpt-oss:120b-cloud": {
+    "settings": {
+      "temperature": 0.6,
+      "top_k": 8,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "model_settings_auto_save": true
+    },
+    "source": "recommended",
+    "last_updated": "2025-11-24T16:05:23.516772+00:00"
+  },
+  "deepseek-v3.1:671b-cloud": {
+    "settings": {
+      "temperature": 0.6,
+      "top_k": 8,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "model_settings_auto_save": true
+    },
+    "source": "recommended",
+    "last_updated": "2025-11-24T16:05:23.517773+00:00"
+  },
+  "llava:latest": {
+    "settings": {
+      "temperature": 0.7,
+      "top_k": 40,
+      "top_p": 0.9,
+      "num_ctx": 2048,
+      "seed": 0,
+      "num_predict": 384,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2025-11-24T19:06:02.571262+00:00"
+  },
+  "deepseek-r1:8b": {
+    "settings": {
+      "temperature": 0.7,
+      "top_k": 40,
+      "top_p": 0.9,
+      "num_ctx": 2048,
+      "seed": 0,
+      "num_predict": 384,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2025-11-24T19:06:03.735040+00:00"
+  },
+  "devstral:latest": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 40,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2025-12-11T18:19:50.197047+00:00"
+  },
+  "devstral:24b": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 40,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2025-12-11T21:13:35.694798+00:00"
+  },
+  "deepseek-r1:14b": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 40,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2025-12-11T22:29:48.962406+00:00"
+  },
+  "qwen3-vl:30b": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 20,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2026-01-22T02:45:48.669900+00:00"
+  },
+  "glm-4.7-flash:latest": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 40,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2026-01-27T16:05:19.414470+00:00"
+  },
+  "deepseek-coder-v2:16b": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 40,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2026-01-27T16:22:16.832697+00:00"
+  },
+  "qwen2.5-coder:14b-instruct": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 40,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2026-01-27T16:35:38.230294+00:00"
+  },
+  "Qwen3-vl:30b": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 20,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2026-01-27T21:53:48.133882+00:00"
+  },
+  "llama3.2-vision:11b": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 20,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2026-02-03T07:16:16.342558+00:00"
+  },
+  "Qwen3-Coder-Next:latest": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 20,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2026-02-06T17:22:00.262134+00:00"
+  },
+  "Qwen3-vl:latest": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 20,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2026-02-20T19:55:45.919271+00:00"
+  }
+}

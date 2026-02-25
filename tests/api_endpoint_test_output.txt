@@ -1,9 +1,9 @@
 ============================= test session starts =============================
-platform win32 -- Python 3.12.7, pytest-7.4.3, pluggy-1.6.0 -- C:\Users\Admin\OneDrive\Bureau\ollama-dashboard\.venv312\Scripts\python.exe
+platform win32 -- Python 3.12.7, pytest-7.4.3, pluggy-1.6.0 -- C:\Users\Admin\OneDrive\Bureau\ollama-dashboard\.venv\Scripts\python.exe
 cachedir: .pytest_cache
 rootdir: C:\Users\Admin\OneDrive\Bureau\ollama-dashboard
 configfile: pytest.ini
 plugins: base-url-2.1.0, playwright-0.7.2
 collecting ... collected 1 item
 
-tests/test_api_endpoints.py::test_all_endpoints 
+tests/test_api_endpoints.py::test_all_endpoints

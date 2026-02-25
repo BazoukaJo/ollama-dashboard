@@ -23,13 +23,13 @@ timeout /t 2 /nobreak >nul
 REM Start the dashboard
 echo.
 echo [2/2] Starting Ollama Dashboard...
-IF EXIST .venv312\Scripts\activate.bat (
-    start "Ollama Dashboard" cmd /c ".venv312\Scripts\activate.bat && python OllamaDashboard.py"
+IF EXIST .venv\Scripts\activate.bat (
+    start "Ollama Dashboard" cmd /c ".venv\Scripts\activate.bat && python OllamaDashboard.py"
     echo.
     echo Dashboard is restarting in a new window...
     echo You can close this window.
 ) ELSE (
-    echo Virtual environment not found! Please set up .venv312 first.
+    echo Virtual environment not found! Please set up .venv first.
     pause
     exit /b 1
 )
