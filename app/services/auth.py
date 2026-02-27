@@ -42,7 +42,6 @@ class AuthService:
         '/api/service/restart',
         '/api/full/restart',
         '/api/force_kill',
-        '/api/reload_app',
         '/api/models/delete',
         '/admin/model-defaults',
     ]

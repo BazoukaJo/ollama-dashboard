@@ -1,6 +1,25 @@
 """Model formatting helpers extracted from OllamaService."""
 from app.services.capabilities import ensure_capability_flags
 
+
+def _extract_context_length(entry):
+    """Extract context_length from entry (top-level, details, or model_info)."""
+    if not isinstance(entry, dict):
+        return None
+    ctx = entry.get('context_length')
+    if ctx is not None:
+        return ctx
+    details = entry.get('details') or {}
+    ctx = details.get('context_length')
+    if ctx is not None:
+        return ctx
+    model_info = entry.get('model_info') or {}
+    for key, val in model_info.items():
+        if 'context_length' in key.lower() and val is not None:
+            return val
+    return None
+
+
 def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflict=False):
     if not isinstance(entry, dict):
         return {'name': str(entry), 'has_vision': False, 'has_tools': False, 'has_reasoning': False}
@@ -11,6 +30,7 @@ def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflic
         'details': entry.get('details') if entry.get('details') is not None else {},
         'tags': entry.get('tags'),
         'digest': entry.get('digest'),
+        'context_length': _extract_context_length(entry),
     }
     if isinstance(model.get('size'), (int, float)):
         try:
@@ -46,7 +66,7 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
             'digest': model.get('digest') if isinstance(model, dict) else None,
             'tags': model.get('tags') if isinstance(model, dict) else None,
             'size_vram': model.get('size_vram') if isinstance(model, dict) else None,
-            'context_length': model.get('context_length') if isinstance(model, dict) else None,
+            'context_length': _extract_context_length(model) if isinstance(model, dict) else None,
         }
 
         # Format VRAM size if present

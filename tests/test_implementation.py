@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test script to verify the implementation of auto-start, service control, and reload features."""
+"""Test script to verify the implementation of auto-start and service control features."""
 import os
 import sys
 import time

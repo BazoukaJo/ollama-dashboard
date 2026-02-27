@@ -56,10 +56,11 @@
   line-height: 1;
 }
 
-/* Reload button (top-left) */
-.reload-btn-position {
-  left: 20px;
-  right: auto;
+/* Compact mode toggle: 30% smaller than standard top buttons */
+#compactToggle {
+  width: 28px;
+  height: 28px;
+  font-size: 0.7rem;
 }
 
 /* Small spin animation fallback if fontawesome fa-spin isn't applied */
@@ -1028,14 +1029,23 @@ canvas {
 }
 
 .capability-icon.disabled {
-  /* Grayscale / muted look for disabled capability icons */
+  /* Grey: known to be not functional */
   background: rgba(108, 117, 125, 0.16);
   border-color: rgba(108, 117, 125, 0.24);
   color: #6c757d;
   opacity: 1;
 }
 
+.capability-icon.unknown {
+  /* Yellow: status undefined */
+  background: rgba(255, 193, 7, 0.15);
+  border-color: rgba(255, 193, 7, 0.35);
+  color: #ffc107;
+  opacity: 1;
+}
+
 .capability-icon.enabled {
+  /* Green: feature is supported */
   color: #28a745;
   background: rgba(40, 167, 69, 0.1);
   border-color: rgba(40, 167, 69, 0.3);
@@ -1758,6 +1768,12 @@ canvas {
 .capability-pill.disabled {
   border-color: #2a2a2a;
   background: rgba(42, 42, 42, 0.55);
+}
+
+.capability-pill.unknown {
+  border-color: rgba(255, 193, 7, 0.4);
+  background: rgba(255, 193, 7, 0.12);
+  color: #ffc107;
 }
 
 .json-table {

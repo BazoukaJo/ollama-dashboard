@@ -53,12 +53,13 @@ _VISION_FAMILY_INDICATORS = ['clip', 'projector', 'vision', 'multimodal', 'vl', 
 def detect_capabilities(model_name: str, families) -> dict:
     """Return capability flags for model name + families.
 
-    Mirrors original logic from OllamaService._detect_model_capabilities.
+    Returns True when supported, None when undefined (heuristics didn't match).
+    Use Ollama API capabilities or explicit catalog flags for False (known not supported).
     """
     capabilities = {
-        'has_vision': False,
-        'has_tools': False,
-        'has_reasoning': False
+        'has_vision': None,
+        'has_tools': None,
+        'has_reasoning': None
     }
 
     name_lower = (model_name or '').lower()
@@ -84,11 +85,10 @@ def detect_capabilities(model_name: str, families) -> dict:
             capabilities['has_vision'] = True
 
     # Tool detection
-    if (any(re.search(p, name_lower, re.IGNORECASE) for p in _TOOL_PATTERNS) and
-            not any(re.search(p, name_lower, re.IGNORECASE) for p in _TOOL_EXCLUDE_PATTERNS)):
-        capabilities['has_tools'] = True
-
-    if any(ind in name_lower for ind in _TOOL_FUNCTION_INDICATORS):
+    if any(re.search(p, name_lower, re.IGNORECASE) for p in _TOOL_EXCLUDE_PATTERNS):
+        capabilities['has_tools'] = False  # Known not supported (e.g. llama3.0)
+    elif (any(re.search(p, name_lower, re.IGNORECASE) for p in _TOOL_PATTERNS) or
+          any(ind in name_lower for ind in _TOOL_FUNCTION_INDICATORS)):
         capabilities['has_tools'] = True
 
     # Reasoning detection
@@ -110,34 +110,53 @@ def detect_capabilities(model_name: str, families) -> dict:
     return capabilities
 
 
-def ensure_capability_flags(model: dict, prefer_heuristics_on_conflict: bool = False) -> dict:
-    """Normalize capability flags; optionally favor heuristics even when flags are present.
+def _caps_from_ollama_api(caps_list: list) -> dict | None:
+    """Map Ollama API capabilities array to has_vision, has_tools, has_reasoning.
+    Returns dict with True/False when we have definitive API data, else None.
+    """
+    if not caps_list or not isinstance(caps_list, list):
+        return None
+    caps_lower = [str(c).lower() for c in caps_list]
+    return {
+        'has_vision': 'vision' in caps_lower or 'image' in caps_lower,
+        'has_tools': any(x in caps_lower for x in ('tools', 'tool', 'function', 'function-calling')),
+        'has_reasoning': any(x in caps_lower for x in ('reasoning', 'thinking', 'think')),
+    }
 
-    When prefer_heuristics_on_conflict=True, always recompute flags via detect_capabilities
-    and overwrite existing booleans. Otherwise, only re-detect when flags are missing or non-bool.
-    Mirrors original _ensure_capability_flags logic with an opt-in override.
+
+def ensure_capability_flags(model: dict, prefer_heuristics_on_conflict: bool = False) -> dict:
+    """Normalize capability flags: True (supported), False (known not supported), None (undefined).
+
+    - Green: True = feature supported
+    - Grey: False = known to be not functional
+    - Yellow: None = status undefined
     """
     try:
         name = model.get('name', '')
         details = model.get('details', {}) or {}
         families = details.get('families', []) or []
+        caps_list = model.get('capabilities') or details.get('capabilities')
 
-        needs_redetect = any(
-            model.get(k) is None or not isinstance(model.get(k), bool)
-            for k in ('has_vision', 'has_tools', 'has_reasoning')
-        )
+        # 1. Ollama API capabilities (definitive): True or False
+        api_caps = _caps_from_ollama_api(caps_list) if caps_list else None
 
-        if prefer_heuristics_on_conflict or needs_redetect:
-            caps = detect_capabilities(name, families)
-            model['has_vision'] = bool(caps.get('has_vision'))
-            model['has_tools'] = bool(caps.get('has_tools'))
-            model['has_reasoning'] = bool(caps.get('has_reasoning'))
-        else:
-            model['has_vision'] = bool(model.get('has_vision'))
-            model['has_tools'] = bool(model.get('has_tools'))
-            model['has_reasoning'] = bool(model.get('has_reasoning'))
+        # 2. Explicit catalog/source flags (definitive when bool)
+        def get_flag(key: str):
+            val = model.get(key)
+            if api_caps is not None and key in api_caps:
+                return api_caps[key]
+            if isinstance(val, bool):
+                return val
+            if prefer_heuristics_on_conflict or val is None or not isinstance(val, bool):
+                detected = detect_capabilities(name, families).get(key)
+                return detected  # True or None
+            return bool(val)
+
+        model['has_vision'] = get_flag('has_vision')
+        model['has_tools'] = get_flag('has_tools')
+        model['has_reasoning'] = get_flag('has_reasoning')
     except Exception:
-        model.setdefault('has_vision', False)
-        model.setdefault('has_tools', False)
-        model.setdefault('has_reasoning', False)
+        model.setdefault('has_vision', None)
+        model.setdefault('has_tools', None)
+        model.setdefault('has_reasoning', None)
     return model

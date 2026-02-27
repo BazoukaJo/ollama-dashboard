@@ -45,14 +45,11 @@ def server_process():
         proc.kill()
 
 
-def test_reload_and_service_buttons(page, server_process):
+def test_service_buttons(page, server_process):
     # Mask network fetch to avoid actual service calls
     page.add_init_script("window.fetch = (u,o) => Promise.resolve({ok:true,json:()=>Promise.resolve({success:true, message:'mock'})})")
 
     page.goto("http://127.0.0.1:5000/")
-    # Ensure reload button exists
-    reload_btn = page.locator("#reloadAppBtn")
-    assert reload_btn.count() == 1
     # Ensure start/stop/restart buttons exist
     start_btn = page.locator("#startServiceBtn")
     stop_btn = page.locator("#stopServiceBtn")

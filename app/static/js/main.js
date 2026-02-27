@@ -1,154 +1,3 @@
-// Stop Service logic
-function showStopServiceConfirm() {
-  let modal = document.getElementById("stopServiceConfirmModal");
-  if (!modal) {
-    // Create modal if not present
-    modal = document.createElement("div");
-    modal.className = "modal fade";
-    modal.id = "stopServiceConfirmModal";
-    modal.tabIndex = -1;
-    modal.innerHTML = `
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content bg-dark text-light">
-          <div class="modal-header">
-            <h5 class="modal-title">Confirm Stop Service</h5>
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <p>Stopping the Ollama service will terminate all backend processes. Are you sure you want to proceed?</p>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button id="confirmStopServiceBtn" type="button" class="btn btn-danger">Stop Service</button>
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
-  }
-  const bsModal = new bootstrap.Modal(modal);
-  bsModal.show();
-  setTimeout(() => {
-    const stopBtn = document.getElementById("confirmStopServiceBtn");
-    if (stopBtn) {
-      stopBtn.onclick = async function () {
-        stopBtn.disabled = true;
-        stopBtn.innerHTML =
-          '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
-        try {
-          const response = await fetch("/api/service/stop", { method: "POST" });
-          if (response.ok) {
-            document
-              .getElementById("reloadAppFeedback")
-              .classList.remove("d-none");
-            document.getElementById("reloadAppFeedback").textContent =
-              "Service stopped.";
-            setTimeout(() => {
-              window.location.reload();
-            }, 3000);
-          } else {
-            document
-              .getElementById("reloadAppFeedback")
-              .classList.remove("d-none");
-            document.getElementById("reloadAppFeedback").textContent =
-              "Failed to stop service.";
-          }
-        } catch (err) {
-          document
-            .getElementById("reloadAppFeedback")
-            .classList.remove("d-none");
-          document.getElementById("reloadAppFeedback").textContent =
-            "Error: " + err.message;
-        } finally {
-          stopBtn.disabled = false;
-          stopBtn.innerHTML = "Stop Service";
-        }
-      };
-    }
-  }, 500);
-}
-// Reload Application logic
-function showReloadAppConfirm() {
-  const modal = new bootstrap.Modal(
-    document.getElementById("reloadAppConfirmModal"),
-  );
-  modal.show();
-}
-
-document.addEventListener("DOMContentLoaded", function () {
-  const reloadBtn = document.getElementById("confirmReloadAppBtn");
-  if (reloadBtn) {
-    reloadBtn.onclick = async function () {
-      reloadBtn.disabled = true;
-      reloadBtn.innerHTML =
-        '<i class="fas fa-spinner fa-spin me-1"></i>Reloading...';
-      const feedbackEl = document.getElementById("reloadAppFeedback");
-      try {
-        const response = await fetch("/api/reload_app", { method: "POST" });
-        const data = await response.json().catch(() => ({}));
-        if (response.ok || response.status === 202) {
-          if (feedbackEl) {
-            feedbackEl.classList.remove("d-none");
-            feedbackEl.classList.remove("alert-danger");
-            feedbackEl.classList.add("alert-info");
-            feedbackEl.textContent =
-              data.message ||
-              "Application is restarting. Please wait a few seconds and refresh the page.";
-          }
-          // Close modal
-          const modalEl = document.getElementById("reloadAppConfirmModal");
-          if (modalEl) {
-            const modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) modal.hide();
-          }
-          // Poll for app to come back online, then reload
-          const startTime = Date.now();
-          const maxWait = 30000; // 30 seconds max
-          const poll = async () => {
-            if (Date.now() - startTime > maxWait) {
-              window.location.reload();
-              return;
-            }
-            try {
-              const healthCheck = await fetch("/api/health", {
-                method: "GET",
-                signal: AbortSignal.timeout(2000),
-              });
-              if (healthCheck.ok) {
-                window.location.reload();
-                return;
-              }
-            } catch (_) {
-              // App not ready yet, continue polling
-            }
-            setTimeout(poll, 2000);
-          };
-          setTimeout(poll, 3000); // Start polling after 3 seconds
-        } else {
-          if (feedbackEl) {
-            feedbackEl.classList.remove("d-none");
-            feedbackEl.classList.remove("alert-info");
-            feedbackEl.classList.add("alert-danger");
-            feedbackEl.textContent =
-              data.message || "Failed to reload application.";
-          }
-          reloadBtn.disabled = false;
-          reloadBtn.innerHTML = "Reload Application";
-        }
-      } catch (err) {
-        if (feedbackEl) {
-          feedbackEl.classList.remove("d-none");
-          feedbackEl.classList.remove("alert-info");
-          feedbackEl.classList.add("alert-danger");
-          feedbackEl.textContent =
-            "Error: " + (err.message || "Failed to reload application");
-        }
-        reloadBtn.disabled = false;
-        reloadBtn.innerHTML = "Reload Application";
-      }
-    };
-  }
-});
 /**
  * Main JavaScript functionality for Ollama Dashboard
  */
@@ -686,22 +535,23 @@ function formatDate(value) {
 }
 
 function renderCapabilityBadges(info) {
-  const { hasReasoning, hasVision, hasTools } = getCapabilityFlags(info);
-
+  const r = info?.has_reasoning, v = info?.has_vision, t = info?.has_tools;
   const badges = [
-    { label: "Reasoning", icon: "fa-brain", enabled: hasReasoning },
-    { label: "Vision", icon: "fa-eye", enabled: hasVision },
-    { label: "Tools", icon: "fa-wrench", enabled: hasTools },
+    { label: "Reasoning", icon: "fa-brain", val: r },
+    { label: "Vision", icon: "fa-eye", val: v },
+    { label: "Tools", icon: "fa-wrench", val: t },
   ];
 
   return badges
     .map(
-      (badge) => `
-        <span class="capability-pill ${badge.enabled ? "enabled" : "disabled"}" title="${badge.label}: ${badge.enabled ? "Available" : "Not available"}">
+      (badge) => {
+        const state = capState(badge.val);
+        const title = capTitle(badge.val, badge.label);
+        return `<span class="capability-pill ${state}" title="${title}">
           <i class="fas ${badge.icon}"></i>
           <span>${badge.label}</span>
-        </span>
-      `,
+        </span>`;
+      },
     )
     .join("");
 }
@@ -874,19 +724,31 @@ function copyErrorToClipboard(button) {
     });
 }
 
+// Capability state: green=enabled, grey=disabled (known not functional), yellow=unknown
+function capState(val) {
+  if (val === true) return "enabled";
+  if (val === false) return "disabled";
+  return "unknown";
+}
+function capTitle(val, label) {
+  if (val === true) return `${label}: Available`;
+  if (val === false) return `${label}: Not available`;
+  return `${label}: Unknown`;
+}
+
 // Capability rendering using backend-provided flags
 function getCapabilitiesHTML(model) {
-  // Use shared capability flag detection for consistency with modal
-  const { hasReasoning, hasVision, hasTools } = getCapabilityFlags(model);
-
+  const r = model?.has_reasoning;
+  const v = model?.has_vision;
+  const t = model?.has_tools;
   return `
-    <span class="capability-icon ${hasReasoning ? "enabled" : "disabled"}" title="Reasoning: ${hasReasoning ? "Available" : "Not available"}">
+    <span class="capability-icon ${capState(r)}" title="${capTitle(r, "Reasoning")}">
       <i class="fas fa-brain"></i>
     </span>
-    <span class="capability-icon ${hasVision ? "enabled" : "disabled"}" title="Image Processing: ${hasVision ? "Available" : "Not available"}">
+    <span class="capability-icon ${capState(v)}" title="${capTitle(v, "Image Processing")}">
       <i class="fas fa-image"></i>
     </span>
-    <span class="capability-icon ${hasTools ? "enabled" : "disabled"}" title="Tool Usage: ${hasTools ? "Available" : "Not available"}">
+    <span class="capability-icon ${capState(t)}" title="${capTitle(t, "Tool Usage")}">
       <i class="fas fa-tools"></i>
     </span>
   `;
@@ -1190,37 +1052,21 @@ function updateRunningModelsDisplay(models) {
         sizeEl.textContent = model.formatted_size;
       }
 
-      // Update capability icons (reasoning, vision, tools)
+      // Update capability icons (reasoning, vision, tools): enabled=green, disabled=grey, unknown=yellow
       try {
         const caps = modelCard.querySelectorAll(".capability-icon");
         if (caps && caps.length >= 3) {
           const [reasoningEl, visionEl, toolsEl] = caps;
-          if (model.has_reasoning) {
-            reasoningEl.classList.add("enabled");
-            reasoningEl.classList.remove("disabled");
-            reasoningEl.setAttribute("title", "Reasoning: Available");
-          } else {
-            reasoningEl.classList.add("disabled");
-            reasoningEl.classList.remove("enabled");
-            reasoningEl.setAttribute("title", "Reasoning: Not available");
-          }
-          if (model.has_vision) {
-            visionEl.classList.add("enabled");
-            visionEl.classList.remove("disabled");
-            visionEl.setAttribute("title", "Image Processing: Available");
-          } else {
-            visionEl.classList.add("disabled");
-            visionEl.classList.remove("enabled");
-            visionEl.setAttribute("title", "Image Processing: Not available");
-          }
-          if (model.has_tools) {
-            toolsEl.classList.add("enabled");
-            toolsEl.classList.remove("disabled");
-            toolsEl.setAttribute("title", "Tool Usage: Available");
-          } else {
-            toolsEl.classList.add("disabled");
-            toolsEl.classList.remove("enabled");
-            toolsEl.setAttribute("title", "Tool Usage: Not available");
+          for (const [el, val, label] of [
+            [reasoningEl, model.has_reasoning, "Reasoning"],
+            [visionEl, model.has_vision, "Image Processing"],
+            [toolsEl, model.has_tools, "Tool Usage"],
+          ]) {
+            const state = val === true ? "enabled" : val === false ? "disabled" : "unknown";
+            const title = val === true ? `${label}: Available` : val === false ? `${label}: Not available` : `${label}: Unknown`;
+            el.classList.remove("enabled", "disabled", "unknown");
+            el.classList.add(state);
+            el.setAttribute("title", title);
           }
         }
       } catch (err) {
@@ -1242,8 +1088,9 @@ function updateRunningModelsDisplay(models) {
           gpuEl.textContent = `${vramPercent}% (${vramFormatted})`;
         }
 
-        if (contextEl && model.context_length !== undefined) {
-          contextEl.textContent = model.context_length || "Unknown";
+        if (contextEl) {
+          const ctx = model.context_length ?? (model.details || {}).context_length;
+          contextEl.textContent = ctx != null && ctx !== "" ? String(ctx) : "Unknown";
         }
       } catch (err) {
         console.log("Failed to update live metrics for", model.name, err);
@@ -1286,32 +1133,16 @@ function updateAvailableModelsDisplay(models) {
       const caps = card.querySelectorAll(".capability-icon");
       if (caps && caps.length >= 3) {
         const [reasoningEl, visionEl, toolsEl] = caps;
-        if (matching.has_reasoning) {
-          reasoningEl.classList.add("enabled");
-          reasoningEl.classList.remove("disabled");
-          reasoningEl.setAttribute("title", "Reasoning: Available");
-        } else {
-          reasoningEl.classList.add("disabled");
-          reasoningEl.classList.remove("enabled");
-          reasoningEl.setAttribute("title", "Reasoning: Not available");
-        }
-        if (matching.has_vision) {
-          visionEl.classList.add("enabled");
-          visionEl.classList.remove("disabled");
-          visionEl.setAttribute("title", "Image Processing: Available");
-        } else {
-          visionEl.classList.add("disabled");
-          visionEl.classList.remove("enabled");
-          visionEl.setAttribute("title", "Image Processing: Not available");
-        }
-        if (matching.has_tools) {
-          toolsEl.classList.add("enabled");
-          toolsEl.classList.remove("disabled");
-          toolsEl.setAttribute("title", "Tool Usage: Available");
-        } else {
-          toolsEl.classList.add("disabled");
-          toolsEl.classList.remove("enabled");
-          toolsEl.setAttribute("title", "Tool Usage: Not available");
+        for (const [el, val, label] of [
+          [reasoningEl, matching.has_reasoning, "Reasoning"],
+          [visionEl, matching.has_vision, "Image Processing"],
+          [toolsEl, matching.has_tools, "Tool Usage"],
+        ]) {
+          const state = val === true ? "enabled" : val === false ? "disabled" : "unknown";
+          const title = val === true ? `${label}: Available` : val === false ? `${label}: Not available` : `${label}: Unknown`;
+          el.classList.remove("enabled", "disabled", "unknown");
+          el.classList.add(state);
+          el.setAttribute("title", title);
         }
       }
     });
@@ -1365,39 +1196,6 @@ function initializeCompactMode() {
       localStorage.setItem("compactMode", "true");
     }
   });
-}
-
-// Reload application UI / data
-async function reloadApplication() {
-  const btn = document.getElementById("reloadBtn");
-  if (!btn) return;
-  const icon = btn.querySelector("i");
-  const originalClass = icon ? icon.className : "";
-  try {
-    // Show spinner
-    if (icon) {
-      icon.classList.add("fa-spin");
-      icon.classList.add("spinning");
-    }
-    btn.disabled = true;
-    showNotification("Reloading application...", "info");
-
-    // Perform a full page reload (bypass partial refresh)
-    // Use a small delay so the spinner is visible briefly for visual feedback
-    setTimeout(() => {
-      // Add a cache-busting timestamp query param to ensure fresh reload
-      const url = new URL(window.location.href);
-      url.searchParams.set("r", Date.now());
-      window.location.href = url.toString();
-    }, 200);
-  } catch (err) {
-    showNotification("Failed to reload: " + (err.message || err), "error");
-  } finally {
-    btn.disabled = false;
-    if (icon) {
-      icon.className = originalClass;
-    }
-  }
 }
 
 // updateHealthStatus & updateServiceControlButtons moved to serviceControl.js

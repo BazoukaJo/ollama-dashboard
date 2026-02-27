@@ -247,7 +247,6 @@ GET /api/observability/alerts      — Current alerts
 GET  /                             — Main dashboard
 GET  /api/version                  — Ollama version
 GET  /admin/model-defaults         — Admin settings page
-POST /api/reload_app               — Reload application
 POST /api/force_kill               — Force kill process
 GET  /api/test                     — API test endpoint
 GET  /api/test-models-debug        — Debug endpoint

@@ -37,8 +37,8 @@ class TestCapabilityDetection:
         model = {'name': 'llava:latest', 'details': {}}
         capabilities = ollama_service._detect_model_capabilities(model)
         assert capabilities['has_vision'] is True
-        assert capabilities['has_tools'] is False
-        assert capabilities['has_reasoning'] is False
+        assert capabilities['has_tools'] in (False, None)
+        assert capabilities['has_reasoning'] in (False, None)
 
     def test_detect_vision_by_name_qwen3_vl(self, ollama_service):
         """Test vision detection for qwen3-vl model."""
@@ -69,7 +69,7 @@ class TestCapabilityDetection:
         model = {'name': 'llama3.1:8b', 'details': {}}
         capabilities = ollama_service._detect_model_capabilities(model)
         assert capabilities['has_tools'] is True
-        assert capabilities['has_vision'] is False
+        assert capabilities['has_vision'] in (False, None)
 
     def test_detect_tools_qwen2_5(self, ollama_service):
         """Test tools detection for qwen2.5 model."""
@@ -94,8 +94,8 @@ class TestCapabilityDetection:
         model = {'name': 'deepseek-r1:8b', 'details': {}}
         capabilities = ollama_service._detect_model_capabilities(model)
         assert capabilities['has_reasoning'] is True
-        assert capabilities['has_vision'] is False
-        assert capabilities['has_tools'] is False
+        assert capabilities['has_vision'] in (False, None)
+        assert capabilities['has_tools'] in (False, None)
 
     def test_detect_reasoning_qwq(self, ollama_service):
         """Test reasoning detection for qwq model."""
@@ -113,9 +113,9 @@ class TestCapabilityDetection:
         """Test that basic text model has no special capabilities."""
         model = {'name': 'llama2:7b', 'details': {}}
         capabilities = ollama_service._detect_model_capabilities(model)
-        assert capabilities['has_vision'] is False
-        assert capabilities['has_tools'] is False
-        assert capabilities['has_reasoning'] is False
+        assert capabilities['has_vision'] in (False, None)
+        assert capabilities['has_tools'] in (False, None)
+        assert capabilities['has_reasoning'] in (False, None)
 
 
 class TestRunningModelsCapabilities:
@@ -155,8 +155,8 @@ class TestRunningModelsCapabilities:
 
         # Verify correct capability detection for llava
         assert model['has_vision'] is True
-        assert model['has_tools'] is False
-        assert model['has_reasoning'] is False
+        assert model['has_tools'] in (False, None)
+        assert model['has_reasoning'] in (False, None)
 
     @patch('requests.Session.get')
     def test_running_models_tools_capability(self, mock_get, ollama_service):
@@ -182,8 +182,8 @@ class TestRunningModelsCapabilities:
         model = models[0]
 
         assert model['has_tools'] is True
-        assert model['has_vision'] is False
-        assert model['has_reasoning'] is False
+        assert model['has_vision'] in (False, None)
+        assert model['has_reasoning'] in (False, None)
 
     @patch('requests.Session.get')
     def test_running_models_reasoning_capability(self, mock_get, ollama_service):
@@ -209,8 +209,8 @@ class TestRunningModelsCapabilities:
         model = models[0]
 
         assert model['has_reasoning'] is True
-        assert model['has_vision'] is False
-        assert model['has_tools'] is False
+        assert model['has_vision'] in (False, None)
+        assert model['has_tools'] in (False, None)
 
 
 class TestAvailableModelsCapabilities:
@@ -246,14 +246,14 @@ class TestAvailableModelsCapabilities:
         # Check llava has vision
         llava = models[0]
         assert llava['has_vision'] is True
-        assert llava['has_tools'] is False
-        assert llava['has_reasoning'] is False
+        assert llava['has_tools'] in (False, None)
+        assert llava['has_reasoning'] in (False, None)
 
         # Check llama3.1 has tools
         llama = models[1]
         assert llama['has_tools'] is True
-        assert llama['has_vision'] is False
-        assert llama['has_reasoning'] is False
+        assert llama['has_vision'] in (False, None)
+        assert llama['has_reasoning'] in (False, None)
 
 
 class TestAPIEndpoints:
@@ -342,14 +342,14 @@ class TestDownloadableModelsCapabilities:
         data = response.get_json()
         models = data.get('models', [])
 
-        # Verify all models have capability fields
+        # Verify all models have capability fields (True, False, or None)
         for model in models:
             assert 'has_vision' in model
             assert 'has_tools' in model
             assert 'has_reasoning' in model
-            assert isinstance(model['has_vision'], bool)
-            assert isinstance(model['has_tools'], bool)
-            assert isinstance(model['has_reasoning'], bool)
+            assert model['has_vision'] in (True, False, None)
+            assert model['has_tools'] in (True, False, None)
+            assert model['has_reasoning'] in (True, False, None)
 
 
 class TestMultipleCapabilities:
@@ -364,7 +364,7 @@ class TestMultipleCapabilities:
         assert capabilities['has_vision'] is True
         # qwen3 pattern should match tools
         assert capabilities['has_tools'] is True
-        assert capabilities['has_reasoning'] is False
+        assert capabilities['has_reasoning'] in (False, None)
 
 
 if __name__ == '__main__':

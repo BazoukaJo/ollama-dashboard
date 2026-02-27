@@ -42,10 +42,10 @@ def test_available_models_capabilities_normalized(client):
     for m in models:
         for key in ('has_vision','has_tools','has_reasoning'):
             assert key in m, f"Missing capability flag {key}"
-            assert isinstance(m[key], bool), f"Capability {key} not boolean: {m[key]!r}"
+            assert m[key] in (True, False, None), f"Capability {key} must be True/False/None: {m[key]!r}"
     # Specific expectations
     llava = next(x for x in models if x['name'] == 'llava')
     assert llava['has_vision'] is True
     foo = next(x for x in models if x['name'] == 'foo-tools')
-    assert isinstance(foo['has_tools'], bool)
-    assert isinstance(foo['has_vision'], bool)
+    assert foo['has_tools'] in (True, False, None)
+    assert foo['has_vision'] in (True, False, None)

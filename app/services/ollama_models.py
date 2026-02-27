@@ -1,5 +1,6 @@
 """Model management functionality for OllamaService: model operations, info retrieval, and capabilities."""
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Protocol, Tuple
 
 import requests
@@ -7,7 +8,8 @@ from app.services.system_stats import get_vram_info
 from app.services.system_stats import get_disk_info
 from app.services.capabilities import detect_capabilities
 from app.services.capabilities import ensure_capability_flags
-from app.services.model_helpers import (format_running_model_entry,
+from app.services.model_helpers import (_extract_context_length,
+                                        format_running_model_entry,
                                         normalize_available_model_entry)
 from app.services.system_stats import collect_system_stats, models_memory_usage
 
@@ -200,6 +202,18 @@ class OllamaServiceModels:
             self.logger.debug("Detailed info fetch failed for %s: %s", model_name, exc)
             return None
 
+    def _enrich_model_context_length(self, model):
+        """Fetch /api/show for a model and return context_length, or None on failure."""
+        name = model.get('name')
+        if not name:
+            return name, None
+        try:
+            info = self.get_detailed_model_info(name)
+            ctx = _extract_context_length(info) if info else None
+            return name, ctx
+        except Exception:
+            return name, None
+
     def get_available_models(self):
         """Get list of available models from the Ollama server."""
         # Always fetch fresh to avoid stale capability flags and to honor test monkeypatching
@@ -217,6 +231,26 @@ class OllamaServiceModels:
                     normalized = [self._normalize_available_model_entry(entry) for entry in curated]
                 except Exception:
                     normalized = []
+
+            # Enrich with context_length from /api/show (parallel, non-blocking)
+            ctx_by_name = {}
+            try:
+                with ThreadPoolExecutor(max_workers=min(6, len(normalized) or 1)) as ex:
+                    futures = {ex.submit(self._enrich_model_context_length, m): m for m in normalized}
+                    for future in as_completed(futures, timeout=15):
+                        try:
+                            name, ctx = future.result()
+                            if name and ctx is not None:
+                                ctx_by_name[name] = ctx
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            for m in normalized:
+                if m.get('name') in ctx_by_name:
+                    m['context_length'] = ctx_by_name[m['name']]
+
             self._set_cached('available_models', normalized)
             return normalized
         except Exception as exc:

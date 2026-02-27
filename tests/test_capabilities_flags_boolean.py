@@ -10,9 +10,12 @@ def test_available_models_capability_flags_boolean_types():
     if not models:
         return
     for m in models:
-        assert isinstance(m.get('has_vision'), bool)
-        assert isinstance(m.get('has_tools'), bool)
-        assert isinstance(m.get('has_reasoning'), bool)
+        v = m.get('has_vision')
+        assert v in (True, False, None), f"has_vision must be bool or None: {v!r}"
+        v = m.get('has_tools')
+        assert v in (True, False, None), f"has_tools must be bool or None: {v!r}"
+        v = m.get('has_reasoning')
+        assert v in (True, False, None), f"has_reasoning must be bool or None: {v!r}"
 
 
 def test_best_models_capability_flags_boolean_types():
@@ -20,6 +23,6 @@ def test_best_models_capability_flags_boolean_types():
     svc = OllamaService()
     models = svc.get_best_models()
     for m in models:
-        assert isinstance(m.get('has_vision'), bool)
-        assert isinstance(m.get('has_tools'), bool)
-        assert isinstance(m.get('has_reasoning'), bool)
+        for key in ('has_vision', 'has_tools', 'has_reasoning'):
+            v = m.get(key)
+            assert v in (True, False, None), f"{key} must be bool or None: {v!r}"

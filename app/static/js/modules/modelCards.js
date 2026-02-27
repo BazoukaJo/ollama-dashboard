@@ -1,17 +1,17 @@
-// Ensure getCapabilitiesHTML is available globally
+// Ensure getCapabilitiesHTML is available globally (uses capState from main.js when loaded)
 if (!window.getCapabilitiesHTML) {
   window.getCapabilitiesHTML = function (model) {
-    const hasReasoning = model.has_reasoning || false;
-    const hasVision = model.has_vision || false;
-    const hasTools = model.has_tools || false;
+    const capState = (v) => (v === true ? "enabled" : v === false ? "disabled" : "unknown");
+    const capTitle = (v, l) => (v === true ? `${l}: Available` : v === false ? `${l}: Not available` : `${l}: Unknown`);
+    const r = model?.has_reasoning, v = model?.has_vision, t = model?.has_tools;
     return `
-            <span class="capability-icon ${hasReasoning ? "enabled" : "disabled"}" title="Reasoning: ${hasReasoning ? "Available" : "Not available"}">
+            <span class="capability-icon ${capState(r)}" title="${capTitle(r, "Reasoning")}">
                 <i class="fas fa-brain"></i>
             </span>
-            <span class="capability-icon ${hasVision ? "enabled" : "disabled"}" title="Image Processing: ${hasVision ? "Available" : "Not available"}">
+            <span class="capability-icon ${capState(v)}" title="${capTitle(v, "Image Processing")}">
                 <i class="fas fa-image"></i>
             </span>
-            <span class="capability-icon ${hasTools ? "enabled" : "disabled"}" title="Tool Usage: ${hasTools ? "Available" : "Not available"}">
+            <span class="capability-icon ${capState(t)}" title="${capTitle(t, "Tool Usage")}">
                 <i class="fas fa-tools"></i>
             </span>
         `;
@@ -73,7 +73,7 @@ if (!window.getCapabilitiesHTML) {
                             </div>
                             <div class="spec-content">
                                 <div class="spec-label">Context</div>
-                                <div class="spec-value">${model.context_length || "—"}</div>
+                                <div class="spec-value">${model.context_length ?? "Unknown"}</div>
                             </div>
                         </div>
                     </div>
