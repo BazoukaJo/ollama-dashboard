@@ -660,6 +660,14 @@ canvas {
   box-shadow: 0 6px 20px rgba(102, 102, 102, 0.4);
 }
 
+.refresh-indicator .btn-refresh {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 0.75rem;
+}
+
+
 .resource-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));

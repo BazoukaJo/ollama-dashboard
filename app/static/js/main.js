@@ -2,27 +2,39 @@
  * Main JavaScript functionality for Ollama Dashboard
  */
 
+// Refresh countdown (1s = model data poll interval for live dashboard)
+let refreshCountdown = 1;
+
+function resetRefreshCountdown() {
+  refreshCountdown = 1;
+  const el = document.getElementById("nextRefresh");
+  if (el) el.textContent = refreshCountdown;
+}
+
 // Timer and UI update functions
 function updateTimes() {
-  const now = new Date();
-  const timeStr = now.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-
   const refreshIndicator = document.querySelector(".refresh-indicator");
   const tzAbbr = refreshIndicator ? refreshIndicator.dataset.timezone : "";
-  const displayText = tzAbbr ? `${timeStr} ${tzAbbr}` : timeStr;
 
-  document.getElementById("lastUpdate").textContent = displayText;
+  const tick = () => {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    const displayText = tzAbbr ? `${timeStr} ${tzAbbr}` : timeStr;
+    const lastEl = document.getElementById("lastUpdate");
+    if (lastEl) lastEl.textContent = displayText;
 
-  let seconds = 30;
-  const countdown = setInterval(() => {
-    seconds--;
-    document.getElementById("nextRefresh").textContent = seconds;
-    if (seconds <= 0) clearInterval(countdown);
-  }, 1000);
+    refreshCountdown--;
+    if (refreshCountdown <= 0) refreshCountdown = 1;
+    const nextEl = document.getElementById("nextRefresh");
+    if (nextEl) nextEl.textContent = refreshCountdown;
+  };
+
+  tick();
+  setInterval(tick, 1000);
 }
 
 function toggleSidebar() {
@@ -34,8 +46,22 @@ function toggleSidebar() {
 
 // Model management functions
 
+/** Refresh all dashboard data (models + stats) without full page reload. */
+function refreshDashboardData() {
+  const btn = document.getElementById("refreshDashboardBtn");
+  if (btn) {
+    const icon = btn.querySelector("i");
+    if (icon) {
+      icon.classList.add("fa-spin");
+      setTimeout(() => icon.classList.remove("fa-spin"), 800);
+    }
+  }
+  if (typeof updateModelData === "function") updateModelData();
+  if (typeof updateSystemStats === "function") updateSystemStats();
+}
+
 /**
- * Poll for model status change and reload when confirmed.
+ * Poll for model status change and refresh UI when confirmed.
  * @param {string} modelName - Name of the model to check
  * @param {boolean} shouldBeRunning - True if we expect the model to be running, false if stopped
  */
@@ -54,8 +80,7 @@ async function pollForModelStatus(modelName, shouldBeRunning) {
 
         // Check if the expected state matches
         if (isRunning === shouldBeRunning) {
-          // State has changed as expected, reload the page
-          location.reload();
+          refreshDashboardData();
           return;
         }
       }
@@ -67,9 +92,9 @@ async function pollForModelStatus(modelName, shouldBeRunning) {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  // If we've exhausted attempts, reload anyway
-  console.log(`Status polling timeout for ${modelName}, reloading anyway`);
-  location.reload();
+  // If we've exhausted attempts, refresh anyway
+  console.log(`Status polling timeout for ${modelName}, refreshing anyway`);
+  refreshDashboardData();
 }
 
 async function startModel(modelName) {
@@ -86,7 +111,7 @@ async function startModel(modelName) {
     const result = await response.json();
     if (result.success) {
       showNotification(result.message, "success");
-      // Poll for model status change before reloading
+      refreshDashboardData();
       await pollForModelStatus(modelName, true);
     } else {
       showNotification(result.message, "error");
@@ -152,7 +177,7 @@ async function stopModel(modelName) {
         result.message || `Model ${modelName} stopped successfully`,
         "success",
       );
-      // Poll for model status change before reloading
+      refreshDashboardData();
       await pollForModelStatus(modelName, false);
     } else {
       showNotification(
@@ -206,7 +231,7 @@ async function restartModel(modelName) {
 
     if (result.success) {
       showNotification(result.message, "success");
-      // Poll for model status change before reloading
+      refreshDashboardData();
       await pollForModelStatus(modelName, true);
     } else {
       showNotification(result.message, "error");
@@ -976,6 +1001,8 @@ async function updateModelData() {
   } catch (error) {
     console.log("Failed to update model memory usage:", error);
   }
+
+  resetRefreshCountdown();
 }
 
 function updateRunningModelsDisplay(models) {

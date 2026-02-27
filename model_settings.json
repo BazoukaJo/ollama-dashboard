@@ -44,7 +44,7 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-02-27T05:06:16.635790+00:00"
+    "last_updated": "2026-02-27T16:19:43.827563+00:00"
   },
   "gpt-oss:120b-cloud": {
     "settings": {
@@ -206,7 +206,7 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-02-27T05:06:16.633259+00:00"
+    "last_updated": "2026-02-27T16:19:43.825429+00:00"
   },
   "Qwen3-vl:latest": {
     "settings": {
@@ -413,7 +413,7 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-02-27T05:06:16.635790+00:00"
+    "last_updated": "2026-02-27T16:19:43.828633+00:00"
   },
   "glm-ocr:latest": {
     "settings": {
@@ -436,7 +436,7 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-02-27T05:06:16.639825+00:00"
+    "last_updated": "2026-02-27T16:19:43.831165+00:00"
   },
   "qwen3.5:27b": {
     "settings": {
@@ -459,7 +459,7 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-02-27T05:06:16.638319+00:00"
+    "last_updated": "2026-02-27T16:19:43.830146+00:00"
   },
   "test-model": {
     "settings": {
@@ -482,6 +482,6 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-02-27T05:06:16.786589+00:00"
+    "last_updated": "2026-02-27T16:19:43.957320+00:00"
   }
 }
