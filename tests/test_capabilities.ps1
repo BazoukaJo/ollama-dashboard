@@ -51,9 +51,10 @@ try {
     $response = Invoke-WebRequest -Uri "http://127.0.0.1:5000/api/models/running" -UseBasicParsing
     $json = $response.Content | ConvertFrom-Json
 
-    if ($json -and $json.Count -gt 0) {
-        Write-Host "   Running models: $($json.Count)" -ForegroundColor Green
-        foreach ($model in $json) {
+    $models = if ($json.models) { $json.models } else { @() }
+    if ($models -and $models.Count -gt 0) {
+        Write-Host "   Running models: $($models.Count)" -ForegroundColor Green
+        foreach ($model in $models) {
             Write-Host "   - $($model.name)"
             Write-Host "     has_vision: $($model.has_vision)"
             Write-Host "     has_tools: $($model.has_tools)"

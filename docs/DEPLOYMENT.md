@@ -198,9 +198,12 @@ tmp_upload_dir = None
 ```
 
 **Run Gunicorn:**
+
+The project includes `wsgi.py` as the WSGI entry point. Use `wsgi:app`:
+
 ```bash
 gunicorn \
-  --config gunicorn_config.py \
+  --config app/config/gunicorn.py \
   --env OLLAMA_HOST=localhost \
   --env API_KEY_ADMIN=sk-admin-... \
   wsgi:app

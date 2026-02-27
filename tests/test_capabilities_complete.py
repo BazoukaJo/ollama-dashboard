@@ -280,10 +280,10 @@ class TestAPIEndpoints:
         assert response.status_code == 200
 
         data = response.get_json()
-        assert isinstance(data, list)
-        assert len(data) == 1
+        assert 'models' in data and isinstance(data['models'], list)
+        assert len(data['models']) == 1
 
-        model = data[0]
+        model = data['models'][0]
         assert 'has_vision' in model
         assert 'has_tools' in model
         assert 'has_reasoning' in model

@@ -76,6 +76,39 @@ def create_app(config_name='development'):
     logger.info("   • Performance monitoring")
     logger.info("   • Health tracking")
 
+    # ===== AUTHENTICATION (optional) =====
+    # When ENABLE_AUTH=true, protects /api/force_kill and other admin routes with API key
+    enable_auth = os.getenv('ENABLE_AUTH', 'false').lower() in ('true', '1', 'yes')
+    if enable_auth:
+        from app.services.auth import AuthService
+        auth_service = AuthService()
+        app.config['AUTH_SERVICE'] = auth_service
+
+        @app.before_request
+        def check_auth():
+            from flask import request, jsonify
+            path = request.path
+            auth_svc = app.config.get('AUTH_SERVICE')
+            if not auth_svc:
+                return None
+            # Check admin-only routes
+            if any(path.startswith(p) for p in auth_svc.ADMIN_ONLY):
+                ok, role = auth_svc.authenticate_request(request)
+                if not ok:
+                    return jsonify({"error": "Unauthorized"}), 401
+                if not auth_svc.check_permission(request, role, path, request.method):
+                    return jsonify({"error": "Forbidden"}), 403
+            # Check operator-only routes
+            elif any(path.startswith(p) for p in auth_svc.OPERATOR_ONLY):
+                ok, role = auth_svc.authenticate_request(request)
+                if not ok:
+                    return jsonify({"error": "Unauthorized"}), 401
+                if not auth_svc.check_permission(request, role, path, request.method):
+                    return jsonify({"error": "Forbidden"}), 403
+            return None
+
+        logger.info("🔐 Auth enabled (admin/operator routes protected)")
+
     # ===== MIDDLEWARE & SECURITY =====
 
     # CORS: Allow requests from local interfaces

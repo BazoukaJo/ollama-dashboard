@@ -111,14 +111,9 @@ class OllamaServiceCore:
         self._total_retry_attempts = 0
         self._successful_retries = 0
         self._failed_retries = 0
-        # Retry metrics for monitoring
-        self._total_retry_attempts = 0
-        self._successful_retries = 0
-        self._failed_retries = 0
         if app is not None:
             self.init_app(app)
         else:
-            self.history = deque(maxlen=50)
             self.history = deque(maxlen=50)
 
     def init_app(self, app):
@@ -231,7 +226,6 @@ class OllamaServiceCore:
         """Periodically collect system stats, running models, available models, and version info."""
         while not self._stop_background.is_set():
             try:
-                cycle_had_ps_failure = False
                 # Check if _get_system_stats_raw is available (from OllamaServiceModels mixin)
                 if hasattr(self, '_get_system_stats_raw') and callable(getattr(self, '_get_system_stats_raw', None)):
                     stats = getattr(self, '_get_system_stats_raw')() or {}  # Defined in OllamaServiceModels
@@ -274,10 +268,7 @@ class OllamaServiceCore:
                             self.logger.exception("Background version collection error: %s", e)
                             self._last_background_error = self._sanitize_error_message(e)
                         self._model_update_counter = 0
-                if cycle_had_ps_failure:
-                    self._consecutive_ps_failures += 1
-                else:
-                    self._consecutive_ps_failures = 0
+                self._consecutive_ps_failures = 0  # Reset on successful cycle
             except Exception as e:
                 self.logger.exception("Background updates error: %s", e)
                 self._last_background_error = self._sanitize_error_message(e)
@@ -417,11 +408,6 @@ class OllamaServiceCore:
             'background_thread_alive': thread_alive,
             'consecutive_ps_failures': self._consecutive_ps_failures,
             'last_background_error': self._last_background_error,  # Keep raw for debugging
-            'retry_metrics': {
-                'total_attempts': self._total_retry_attempts,
-                'successful': self._successful_retries,
-                'failed': self._failed_retries,
-            },
             'retry_metrics': {
                 'total_attempts': self._total_retry_attempts,
                 'successful': self._successful_retries,

@@ -32,7 +32,7 @@ A production-ready web dashboard for monitoring, controlling, and optimizing Oll
 - **Structured Logging**: JSON-formatted logs with trace ID propagation
 - **Distributed Tracing**: OpenTelemetry-ready request tracking
 - **Grafana Dashboards**: Pre-built dashboard templates
-- **Health Endpoints**: Deep component health checks (/api/health, /health)
+- **Health Endpoints**: Lightweight /ping for orchestrators; deep checks at /api/health, /health
 - **Performance Tracking**: Per-operation timing, success rates, anomalies
 - **Alerting System**: Threshold-based alerts with webhook integration
 
@@ -48,7 +48,7 @@ A production-ready web dashboard for monitoring, controlling, and optimizing Oll
 ### 🎨 User Interface
 - **Dark Mode**: Modern dark theme optimized for long sessions
 - **Responsive Design**: Mobile-friendly, touch-optimized controls
-- **Real-time Updates**: Auto-refresh every 30 seconds
+- **Real-time Updates**: Auto-refresh every 5 seconds (model data), 1 second (system stats)
 - **Capability Icons**: Visual indicators for model capabilities (vision, tools, reasoning)
 - **Compact Mode**: Space-efficient layout toggle
 - **Zero Configuration**: Works out-of-the-box with sensible defaults
@@ -222,6 +222,7 @@ GET /api/system/stats/history      — Historical stats
 GET /api/models/memory/usage       — Per-model memory
 GET /api/metrics/performance       — Op timing stats
 GET /metrics                       — Prometheus metrics
+GET /ping                          — Lightweight health (Docker, K8s)
 GET /health                        — Health check (k8s)
 ```
 
@@ -408,18 +409,20 @@ Minimal dependencies for maximum compatibility:
 
 ```
 Flask==3.0.0           # Web framework
+flask-cors==4.0.0      # CORS support
+gunicorn==21.2.0       # Production server (Docker/wsgi)
 requests==2.31.0       # HTTP client
 psutil==5.9.6          # System stats
 pytz==2023.3           # Timezone support
-prometheus-client      # Metrics export
-flask-cors==4.0.0      # CORS support
 ```
 
 Optional (for advanced features):
 ```
+prometheus-client      # Prometheus metrics export (disabled by default)
 redis                  # Distributed caching
 sqlalchemy             # Database ORM
-gunicorn               # Production server
+nvidia-ml-py           # VRAM monitoring (NVIDIA GPUs)
+GPUtil                 # Alternative GPU stats
 ```
 
 ---

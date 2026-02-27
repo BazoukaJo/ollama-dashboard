@@ -64,7 +64,11 @@ def create_observability_endpoints(bp, ollama_service):
         """
         try:
             from flask import request
-            limit = int(request.args.get('limit', 20))
+            try:
+                limit = int(request.args.get('limit', 20))
+            except (ValueError, TypeError):
+                limit = 20
+            limit = max(1, min(limit, 100))  # Clamp to sensible range
 
             alerts = ALERT_MANAGER.get_recent_alerts(limit=limit)
 

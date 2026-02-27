@@ -1,4 +1,13 @@
 (function(){
+  function escapeHtml(str) {
+    if (!str && str !== 0) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
   async function openModelSettingsModal(modelName){
     try {
       const resp = await fetch(`/api/models/settings/${encodeURIComponent(modelName)}`);
@@ -9,7 +18,7 @@
         <div class="modal-dialog modal-dialog-centered modal-md">
           <div class="modal-content bg-dark text-light">
             <div class="modal-header">
-              <h5 class="modal-title">Model Settings: ${modelName}</h5>
+              <h5 class="modal-title">Model Settings: ${escapeHtml(modelName)}</h5>
               <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -109,24 +118,40 @@
 
   function collectSettingsPayload(){
     const g = id=>document.getElementById(id);
+    const safeFloat = (el, defaultVal) => {
+      const el2 = typeof el === 'string' ? g(el) : el;
+      if (!el2 || !el2.value) return defaultVal;
+      const v = parseFloat(el2.value);
+      return Number.isFinite(v) ? v : defaultVal;
+    };
+    const safeInt = (el, defaultVal) => {
+      const el2 = typeof el === 'string' ? g(el) : el;
+      if (!el2 || !el2.value) return defaultVal;
+      const v = parseInt(el2.value, 10);
+      return Number.isFinite(v) ? v : defaultVal;
+    };
+    const stopEl = g('ms-stop');
+    const stopRaw = stopEl && stopEl.value ? stopEl.value.trim() : '';
+    const stopArr = !stopRaw ? [] : stopRaw.split(',').map(s=>s.trim()).filter(s=>s).slice(0,10);
+    const penalizeEl = g('ms-penalize-newline');
     return {
-      temperature: parseFloat(g('ms-temperature').value),
-      top_k: parseInt(g('ms-top-k').value),
-      top_p: parseFloat(g('ms-top-p').value),
-      num_ctx: parseInt(g('ms-num-ctx').value),
-      seed: parseInt(g('ms-seed').value),
-      num_predict: parseInt(g('ms-num-predict').value),
-      repeat_last_n: parseInt(g('ms-repeat-last-n').value),
-      repeat_penalty: parseFloat(g('ms-repeat-penalty').value),
-      presence_penalty: parseFloat(g('ms-presence-penalty').value),
-      frequency_penalty: parseFloat(g('ms-frequency-penalty').value),
-      min_p: parseFloat(g('ms-min-p').value),
-      typical_p: parseFloat(g('ms-typical-p').value),
-      mirostat: parseInt(g('ms-mirostat').value),
-      mirostat_tau: parseFloat(g('ms-mirostat-tau').value),
-      mirostat_eta: parseFloat(g('ms-mirostat-eta').value),
-      penalize_newline: g('ms-penalize-newline').checked,
-      stop: (function(){ const raw = g('ms-stop').value.trim(); if(!raw) return []; return raw.split(',').map(s=>s.trim()).filter(s=>s).slice(0,10); })()
+      temperature: safeFloat('ms-temperature', 0.7),
+      top_k: safeInt('ms-top-k', 40),
+      top_p: safeFloat('ms-top-p', 0.9),
+      num_ctx: safeInt('ms-num-ctx', 2048),
+      seed: safeInt('ms-seed', 0),
+      num_predict: safeInt('ms-num-predict', 256),
+      repeat_last_n: safeInt('ms-repeat-last-n', 64),
+      repeat_penalty: safeFloat('ms-repeat-penalty', 1.1),
+      presence_penalty: safeFloat('ms-presence-penalty', 0),
+      frequency_penalty: safeFloat('ms-frequency-penalty', 0),
+      min_p: safeFloat('ms-min-p', 0.05),
+      typical_p: safeFloat('ms-typical-p', 1),
+      mirostat: safeInt('ms-mirostat', 0),
+      mirostat_tau: safeFloat('ms-mirostat-tau', 5),
+      mirostat_eta: safeFloat('ms-mirostat-eta', 0.1),
+      penalize_newline: penalizeEl ? !!penalizeEl.checked : false,
+      stop: stopArr
     };
   }
 

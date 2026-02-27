@@ -152,7 +152,7 @@ class TestModelEndpoints:
         response = client.get('/api/models/running')
         assert response.status_code == 200
         data = response.get_json()
-        assert isinstance(data, list)
+        assert 'models' in data and isinstance(data['models'], list)
 
     @patch('app.routes.main.ollama_service.get_available_models')
     def test_get_available_models(self, mock_available, client):

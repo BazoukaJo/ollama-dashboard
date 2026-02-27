@@ -64,7 +64,9 @@
         };
         actionCell.appendChild(applyBtn);
 
-        row.innerHTML = `<td>${m.name}</td>`;
+        const nameCell = document.createElement('td');
+        nameCell.textContent = m.name || '';
+        row.appendChild(nameCell);
         row.appendChild(recommendedCell);
         row.appendChild(actionCell);
         tbody.appendChild(row);

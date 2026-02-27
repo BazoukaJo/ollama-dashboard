@@ -85,7 +85,8 @@ async function pollForModelStatus(modelName, shouldBeRunning) {
     try {
       const response = await fetch("/api/models/running");
       if (response.ok) {
-        const runningModels = await response.json();
+        const data = await response.json();
+        const runningModels = Array.isArray(data.models) ? data.models : [];
         const isRunning = runningModels.some((m) => m.name === modelName);
 
         // Check if the expected state matches
@@ -365,12 +366,11 @@ async function showModelInfo(modelName) {
         }
         if (!flagsFromCards && runningResp.ok) {
           const runningJson = await runningResp.json();
-          const rmatch = Array.isArray(runningJson)
-            ? runningJson.find((m) => {
-                const rn = normalizeName(m?.name || m?.model || "");
-                return equalsLoose(rn, target);
-              })
-            : null;
+          const runningList = Array.isArray(runningJson.models) ? runningJson.models : [];
+          const rmatch = runningList.find((m) => {
+            const rn = normalizeName(m?.name || m?.model || "");
+            return equalsLoose(rn, target);
+          }) || null;
           if (rmatch) flagsFromCards = getCapabilityFlags(rmatch);
         }
       } catch (e) {
@@ -524,8 +524,8 @@ function buildModelSummary(info, details, modelName) {
     .map(
       (item) => `
         <div class="summary-item">
-          <div class="summary-label">${item.label}</div>
-          <div class="summary-value">${item.value}</div>
+          <div class="summary-label">${escapeHtml(item.label)}</div>
+          <div class="summary-value">${escapeHtml(String(item.value))}</div>
         </div>
       `,
     )
@@ -619,20 +619,16 @@ function jsonToTable(json, level = 0) {
 
   if (typeof json === "string") {
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(json)) {
-      return `<span class="text-info">${new Date(
+      return `<span class="text-info">${escapeHtml(new Date(
         json,
-      ).toLocaleString()}</span>`;
+      ).toLocaleString())}</span>`;
     }
     const maxLength = 100;
     if (json.length > maxLength) {
       const truncated = json.substring(0, maxLength);
-      const escapedJson = json
-        .replace(/"/g, '"')
-        .replace(/</g, "<")
-        .replace(/>/g, ">");
-      return `<span class="text-warning" title="${escapedJson}">"${truncated}..."</span>`;
+      return `<span class="text-warning" title="${escapeHtml(json)}">"${escapeHtml(truncated)}..."</span>`;
     }
-    return `<span class="text-warning">"${json}"</span>`;
+    return `<span class="text-warning">"${escapeHtml(json)}"</span>`;
   }
 
   if (Array.isArray(json)) {
@@ -673,7 +669,7 @@ function jsonToTable(json, level = 0) {
       html += "<tr>";
       html += `<td class="json-key-cell" style="padding-left: ${
         level * 20
-      }px"><strong>${formattedKey}</strong></td>`;
+      }px"><strong>${escapeHtml(formattedKey)}</strong></td>`;
       html += '<td class="json-value-cell">';
 
       if (typeof value === "object" && value !== null) {
@@ -972,7 +968,8 @@ async function updateModelData() {
   try {
     const runningResponse = await fetch("/api/models/running");
     if (runningResponse.ok) {
-      const runningModels = await runningResponse.json();
+      const runningData = await runningResponse.json();
+      const runningModels = Array.isArray(runningData.models) ? runningData.models : [];
       updateRunningModelsDisplay(runningModels);
     }
   } catch (error) {

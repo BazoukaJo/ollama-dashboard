@@ -19,4 +19,4 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:5000/ping || exit 1
 
-CMD ["gunicorn", "--config", "app/config/gunicorn.py", "OllamaDashboard:app"]
+CMD ["gunicorn", "--config", "app/config/gunicorn.py", "wsgi:app"]
