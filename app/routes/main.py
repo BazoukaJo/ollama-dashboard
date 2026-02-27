@@ -534,9 +534,11 @@ def get_available_models():
 
 @bp.route('/api/models/running')
 def get_running_models():
-    """Get list of currently running models."""
+    """Get list of currently running models. Always fetches fresh from Ollama for accuracy."""
     try:
-        models = ollama_service.get_running_models()
+        if not ollama_service.app:
+            ollama_service.init_app(current_app)
+        models = ollama_service.get_running_models(force_refresh=True)
         return models
     except Exception as e:
         return {"error": str(e), "models": []}, 500

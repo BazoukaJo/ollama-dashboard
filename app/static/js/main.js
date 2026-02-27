@@ -2,19 +2,27 @@
  * Main JavaScript functionality for Ollama Dashboard
  */
 
-// Refresh countdown (1s = model data poll interval for live dashboard)
-let refreshCountdown = 1;
+// Model data poll interval (seconds) - read from DOM or default 5
+function getPollIntervalSec() {
+  const el = document.querySelector(".refresh-indicator");
+  const val = el && el.dataset.pollInterval;
+  const n = parseInt(val, 10);
+  return Number.isFinite(n) && n > 0 ? n : 5;
+}
+
+let refreshCountdown = 5;
 
 function resetRefreshCountdown() {
-  refreshCountdown = 1;
+  refreshCountdown = getPollIntervalSec();
   const el = document.getElementById("nextRefresh");
-  if (el) el.textContent = refreshCountdown;
+  if (el) el.textContent = String(refreshCountdown);
 }
 
 // Timer and UI update functions
 function updateTimes() {
   const refreshIndicator = document.querySelector(".refresh-indicator");
   const tzAbbr = refreshIndicator ? refreshIndicator.dataset.timezone : "";
+  refreshCountdown = getPollIntervalSec();
 
   const tick = () => {
     const now = new Date();
@@ -27,10 +35,12 @@ function updateTimes() {
     const lastEl = document.getElementById("lastUpdate");
     if (lastEl) lastEl.textContent = displayText;
 
-    refreshCountdown--;
-    if (refreshCountdown <= 0) refreshCountdown = 1;
     const nextEl = document.getElementById("nextRefresh");
-    if (nextEl) nextEl.textContent = refreshCountdown;
+    if (nextEl) {
+      refreshCountdown--;
+      if (refreshCountdown <= 0) refreshCountdown = getPollIntervalSec();
+      nextEl.textContent = String(refreshCountdown);
+    }
   };
 
   tick();

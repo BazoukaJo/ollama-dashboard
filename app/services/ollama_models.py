@@ -264,7 +264,7 @@ class OllamaServiceModels:
             force_refresh: If True, bypass cache and fetch fresh data from API
         """
         if not force_refresh:
-            cached = self._get_cached('running_models', ttl_seconds=1)
+            cached = self._get_cached('running_models', ttl_seconds=5)
             if cached is not None:
                 return cached
         try:

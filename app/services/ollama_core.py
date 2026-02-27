@@ -242,36 +242,8 @@ class OllamaServiceCore:
                     self._cache['system_stats'] = stats
                     self._cache_timestamps['system_stats'] = datetime.now()
                 self._model_update_counter += 1
-                if self._model_update_counter >= 1:  # Refresh running models every cycle for faster visibility
-                    try:
-                        host, port = self._get_ollama_host_port()
-                        ps_url = f"http://{host}:{port}/api/ps"
-                        response = self._session.get(ps_url, timeout=5)
-                        if response.status_code == 200:
-                            data = response.json()
-                            models = data.get('models', [])
-                            current_models = [self._format_running_model_entry(m) for m in models]  # In OllamaServiceModels
-                            for m in current_models:
-                                try:
-                                    self._ensure_model_settings_exists(m)  # In OllamaServiceUtilities
-                                except Exception:
-                                    pass
-                            with self._stats_lock:
-                                self._cache['running_models'] = current_models
-                                self._cache_timestamps['running_models'] = datetime.now()
-                            self._consecutive_ps_failures = 0
-                            # Clear error on successful connection
-                            if self._last_background_error:
-                                self._last_background_error = None
-                        else:
-                            cycle_had_ps_failure = True
-                            self._last_background_error = f"ps status {response.status_code}"
-                    except Exception as e:
-                        cycle_had_ps_failure = True
-                        self.logger.exception("Background model collection error: %s", e)
-                        # Store user-friendly error message
-                        self._last_background_error = self._sanitize_error_message(e)
-                    if self._model_update_counter >= 15:
+                # Running models: fetched on-demand by API (force_refresh) for accuracy, not here
+                if self._model_update_counter >= 15:
                         try:
                             host, port = self._get_ollama_host_port()
                             tags_url = f"http://{host}:{port}/api/tags"
@@ -400,7 +372,7 @@ class OllamaServiceCore:
         stale = {}
         ttl_map = {
             'system_stats': 5,
-            'running_models': 1,
+            'running_models': 5,
             'available_models': 60,
             'ollama_version': 300
         }

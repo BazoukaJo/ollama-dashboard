@@ -28,9 +28,9 @@
             </div>
         </div>
 
-        <div class="refresh-indicator mb-2 {% if error %}error{% endif %} d-flex align-items-center gap-2" data-timezone="{{ timezone }}">
+        <div class="refresh-indicator mb-2 {% if error %}error{% endif %} d-flex align-items-center gap-2" data-timezone="{{ timezone }}" data-poll-interval="5">
             <div class="dot"></div>
-            <span>Last updated: <span id="lastUpdate"></span> • Next refresh in <span id="nextRefresh">1</span>s</span>
+            <span>Last updated: <span id="lastUpdate"></span> • Next refresh in <span id="nextRefresh">5</span>s</span>
             <button type="button" class="btn btn-sm btn-outline-secondary btn-refresh" id="refreshDashboardBtn" title="Refresh dashboard data" onclick="refreshDashboardData()" aria-label="Refresh">
                 <i class="fas fa-sync-alt"></i>
             </button>
