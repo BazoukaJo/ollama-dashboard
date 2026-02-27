@@ -16,6 +16,26 @@ def start_service_windows(get_status):
     except Exception:
         pass
     try:
+        methods_tried.append('installation path')
+        paths = [r"C:\Program Files\Ollama\ollama.exe",
+                 r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe",
+                 r"C:\Users\%USERNAME%\AppData\Local\Programs\Ollama\ollama.exe",
+                 os.path.expanduser(r"~\AppData\Local\Programs\Ollama\ollama.exe")]
+        for p in paths:
+            ep = os.path.expandvars(os.path.expanduser(p))
+            if os.path.exists(ep):
+                try:
+                    subprocess.Popen([ep, 'serve'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                                     close_fds=True, cwd=os.path.dirname(ep))
+                except Exception:
+                    pass
+                time.sleep(5)
+                if get_status():
+                    return {"success": True, "message": f"Ollama service started successfully from {ep}"}, methods_tried
+    except Exception:
+        pass
+    try:
         methods_tried.append('direct execution')
         check = subprocess.run(['where', 'ollama'], capture_output=True, text=True, timeout=5)
         if check.returncode == 0:
@@ -27,24 +47,6 @@ def start_service_windows(get_status):
             time.sleep(5)
             if get_status():
                 return {"success": True, "message": "Ollama service started successfully via direct execution"}, methods_tried
-    except Exception:
-        pass
-    try:
-        methods_tried.append('installation path')
-        paths = [r"C:\Program Files\Ollama\ollama.exe",
-                 r"C:\Users\%USERNAME%\AppData\Local\Programs\Ollama\ollama.exe",
-                 os.path.expanduser(r"~\AppData\Local\Programs\Ollama\ollama.exe")]
-        for p in paths:
-            ep = os.path.expandvars(p)
-            if os.path.exists(ep):
-                try:
-                    subprocess.Popen([ep, 'serve'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                     creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS, close_fds=True)
-                except Exception:
-                    pass
-                time.sleep(5)
-                if get_status():
-                    return {"success": True, "message": f"Ollama service started successfully from {ep}"}, methods_tried
     except Exception:
         pass
     return None, methods_tried
@@ -102,7 +104,7 @@ def stop_service_windows(get_status):
     try:
         methods_tried.append('process termination')
         subprocess.run(['taskkill', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10)
-        time.sleep(3)
+        time.sleep(5)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via graceful termination"}, methods_tried
     except Exception:
@@ -110,7 +112,7 @@ def stop_service_windows(get_status):
     try:
         methods_tried.append('force kill')
         subprocess.run(['taskkill', '/F', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10)
-        time.sleep(3)
+        time.sleep(5)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via force kill"}, methods_tried
     except Exception:

@@ -64,7 +64,42 @@ class OllamaServiceControl:
                     return {"success": True, "message": "Ollama service started successfully via Windows service"}, methods_tried
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
             pass
-        # Method 2: direct execution if command exists
+        # Method 2: common installation paths (prioritized over where ollama - more reliable)
+        try:
+            methods_tried.append('installation path')
+            common_paths = [
+                r"C:\Program Files\Ollama\ollama.exe",
+                r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe",
+                r"C:\Users\%USERNAME%\AppData\Local\Programs\Ollama\ollama.exe",
+                os.path.expanduser(r"~\AppData\Local\Programs\Ollama\ollama.exe")
+            ]
+            for path in common_paths:
+                expanded = os.path.expandvars(os.path.expanduser(path))
+                if os.path.exists(expanded):
+                    try:
+                        subprocess.Popen(
+                            [expanded, 'serve'],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                            close_fds=True,
+                            cwd=os.path.dirname(expanded)
+                        )
+                    except Exception as e:
+                        self.logger.debug("Popen failed for %s: %s", expanded, e)
+                    time.sleep(5)
+                    if self.get_service_status():
+                        return {"success": True, "message": f"Ollama service started successfully from {expanded}"}, methods_tried
+                    # API fallback: process may be slow to appear in tasklist
+                    try:
+                        api_ok, _ = self._verify_ollama_api(max_retries=2, retry_delay=1)
+                        if api_ok:
+                            return {"success": True, "message": f"Ollama service started successfully from {expanded}"}, methods_tried
+                    except Exception:
+                        pass
+        except (OSError, subprocess.SubprocessError):
+            pass
+        # Method 3: direct execution if command exists
         try:
             methods_tried.append('direct execution')
             check = subprocess.run(['where', 'ollama'], capture_output=True, text=True, timeout=5, check=False)
@@ -77,38 +112,18 @@ class OllamaServiceControl:
                         creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
                         close_fds=True
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.debug("Popen failed for ollama serve: %s", e)
                 time.sleep(5)
                 if self.get_service_status():
                     return {"success": True, "message": "Ollama service started successfully via direct execution"}, methods_tried
+                try:
+                    api_ok, _ = self._verify_ollama_api(max_retries=2, retry_delay=1)
+                    if api_ok:
+                        return {"success": True, "message": "Ollama service started successfully via direct execution"}, methods_tried
+                except Exception:
+                    pass
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
-            pass
-        # Method 3: common installation paths
-        try:
-            methods_tried.append('installation path')
-            common_paths = [
-                r"C:\Program Files\Ollama\ollama.exe",
-                r"C:\Users\%USERNAME%\AppData\Local\Programs\Ollama\ollama.exe",
-                os.path.expanduser(r"~\AppData\Local\Programs\Ollama\ollama.exe")
-            ]
-            for path in common_paths:
-                expanded = os.path.expandvars(path)
-                if os.path.exists(expanded):
-                    try:
-                        subprocess.Popen(
-                            [expanded, 'serve'],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
-                            close_fds=True
-                        )
-                    except Exception:
-                        pass
-                    time.sleep(5)
-                    if self.get_service_status():
-                        return {"success": True, "message": f"Ollama service started successfully from {expanded}"}, methods_tried
-        except (OSError, subprocess.SubprocessError):
             pass
         return None, methods_tried
 
@@ -177,7 +192,7 @@ class OllamaServiceControl:
         try:
             methods_tried.append('process termination')
             subprocess.run(['taskkill', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10, check=False)
-            time.sleep(3)
+            time.sleep(5)
             if not self.get_service_status():
                 return {"success": True, "message": "Ollama service stopped successfully via graceful termination"}, methods_tried
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
@@ -186,7 +201,7 @@ class OllamaServiceControl:
         try:
             methods_tried.append('force kill')
             subprocess.run(['taskkill', '/F', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10, check=False)
-            time.sleep(3)
+            time.sleep(5)
             if not self.get_service_status():
                 return {"success": True, "message": "Ollama service stopped successfully via force kill"}, methods_tried
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
@@ -392,55 +407,30 @@ class OllamaServiceControl:
                 except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
                     pass
 
-                # Method 2: Try running ollama serve directly
-                try:
-                    methods_tried.append("direct execution")
-                    # Check if ollama command exists
-                    ollama_check = subprocess.run(['where', 'ollama'],
-                        capture_output=True, text=True, timeout=5, check=False)
-                    if ollama_check.returncode == 0:
-                        # Start ollama serve in background
-                        subprocess.Popen(
-                            ['ollama', 'serve'],
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
-                            close_fds=True
-                        )
-                        time.sleep(5)  # Wait for startup
-                        if self.get_service_status():
-                            # Verify API is accessible
-                            try:
-                                api_ok, api_msg = self._verify_ollama_api(max_retries=3, retry_delay=2)
-                                if api_ok:
-                                    return {"success": True, "message": "Ollama service started successfully via direct execution"}
-                                else:
-                                    return {"success": False, "message": f"Service started but API not accessible: {api_msg}"}
-                            except Exception as e:
-                                self.logger.warning("API verification error: %s", e)
-                                return {"success": True, "message": "Ollama service started via direct execution (API verification failed)"}
-                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
-                    pass
-
-                # Method 3: Try to find and run from common installation paths
+                # Method 2: Try to find and run from common installation paths (prioritized - more reliable)
                 try:
                     methods_tried.append("installation path")
                     common_paths = [
                         r"C:\Program Files\Ollama\ollama.exe",
+                        r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe",
                         r"C:\Users\%USERNAME%\AppData\Local\Programs\Ollama\ollama.exe",
                         os.path.expanduser(r"~\AppData\Local\Programs\Ollama\ollama.exe")
                     ]
 
                     for path in common_paths:
-                        expanded_path = os.path.expandvars(path)
+                        expanded_path = os.path.expandvars(os.path.expanduser(path))
                         if os.path.exists(expanded_path):
-                            subprocess.Popen(
-                                [expanded_path, 'serve'],
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL,
-                                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
-                                close_fds=True
-                            )
+                            try:
+                                subprocess.Popen(
+                                    [expanded_path, 'serve'],
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL,
+                                    creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                                    close_fds=True,
+                                    cwd=os.path.dirname(expanded_path)
+                                )
+                            except Exception as e:
+                                self.logger.debug("Popen failed for %s: %s", expanded_path, e)
                             time.sleep(5)
                             if self.get_service_status():
                                 # Verify API is accessible
@@ -453,7 +443,54 @@ class OllamaServiceControl:
                                 except Exception as e:
                                     self.logger.warning("API verification error: %s", e)
                                     return {"success": True, "message": f"Ollama service started from {expanded_path} (API verification failed)"}
+                            # API fallback: process may be slow to appear in tasklist
+                            try:
+                                api_ok, api_msg = self._verify_ollama_api(max_retries=2, retry_delay=1)
+                                if api_ok:
+                                    return {"success": True, "message": f"Ollama service started successfully from {expanded_path}"}
+                            except Exception:
+                                pass
                 except (OSError, subprocess.SubprocessError):
+                    pass
+
+                # Method 3: Try running ollama serve directly
+                try:
+                    methods_tried.append("direct execution")
+                    # Check if ollama command exists
+                    ollama_check = subprocess.run(['where', 'ollama'],
+                        capture_output=True, text=True, timeout=5, check=False)
+                    if ollama_check.returncode == 0:
+                        # Start ollama serve in background
+                        try:
+                            subprocess.Popen(
+                                ['ollama', 'serve'],
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
+                                close_fds=True
+                            )
+                        except Exception as e:
+                            self.logger.debug("Popen failed for ollama serve: %s", e)
+                        time.sleep(5)  # Wait for startup
+                        if self.get_service_status():
+                            # Verify API is accessible
+                            try:
+                                api_ok, api_msg = self._verify_ollama_api(max_retries=3, retry_delay=2)
+                                if api_ok:
+                                    return {"success": True, "message": "Ollama service started successfully via direct execution"}
+                                else:
+                                    return {"success": False, "message": f"Service started but API not accessible: {api_msg}"}
+                            except Exception as e:
+                                self.logger.warning("API verification error: %s", e)
+                                return {"success": True, "message": "Ollama service started via direct execution (API verification failed)"}
+                        # API fallback
+                        try:
+                            api_ok, api_msg = self._verify_ollama_api(max_retries=2, retry_delay=1)
+                            if api_ok:
+                                return {"success": True, "message": "Ollama service started successfully via direct execution"}
+                        except Exception:
+                            pass
+                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
                     pass
 
             else:
@@ -564,13 +601,20 @@ class OllamaServiceControl:
             except Exception:
                 pass
             stop_result = self.stop_service()
-            if not stop_result["success"]:
-                # Attempt to proceed if service already stopped
-                if "already" not in stop_result.get("message", "").lower():
-                    return stop_result
+            # Poll until service is down (up to 10s); do not return early on stop "failure"
+            # - stop may report failure (e.g. sc stop fails) yet taskkill succeeded
+            for _ in range(10):
+                if not self.get_service_status():
+                    break
+                time.sleep(1)
+            else:
+                # Service still running after poll - hard failure
+                return stop_result if not stop_result["success"] else {
+                    "success": False,
+                    "message": "Ollama service could not be stopped (still running after stop attempts)."
+                }
 
-            # Wait a moment before starting
-            time.sleep(2)
+            time.sleep(10)  # Allow port 11434 to be released before starting
 
             start_result = self.start_service()
             if start_result["success"]:

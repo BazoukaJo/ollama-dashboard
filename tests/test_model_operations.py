@@ -46,11 +46,11 @@ class TestModelStop:
         assert data['success'] is True
         assert 'stopped successfully' in data['message'].lower()
 
-        # Verify the correct API call was made
+        # Verify the correct API call was made (per Ollama docs: empty prompt, keep_alive=0)
         mock_post.assert_called_once()
         call_args = mock_post.call_args
-        assert 'keep_alive' in call_args[1]['json']
-        assert call_args[1]['json']['keep_alive'] == '0s'
+        assert call_args[1]['json']['keep_alive'] == 0
+        assert call_args[1]['json']['prompt'] == ''
         assert call_args[1]['json']['model'] == 'llama2:latest'
 
     @patch('app.routes.main.ollama_service.get_running_models')

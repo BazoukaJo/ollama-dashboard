@@ -142,6 +142,22 @@ def _validate_model_name(model_name):
     return None, None
 
 
+def _verify_model_unloaded(model_name, max_attempts=5, delay_seconds=1):
+    """Poll /api/ps to confirm model is no longer loaded. Returns True when verified gone."""
+    for _ in range(max_attempts):
+        try:
+            resp = requests.get(_get_ollama_url("ps"), timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                models = data.get("models", [])
+                if not any(m.get("name") == model_name for m in models):
+                    return True
+        except Exception:
+            pass
+        time.sleep(delay_seconds)
+    return False
+
+
 def _handle_model_error(response, model_name, operation="operation"):
     """Handle common model operation errors."""
     error_text = response.text.lower()
@@ -329,29 +345,26 @@ def stop_model(model_name):
             return {"success": False, "message": f"Model {model_name} is not currently running"}, 400
 
         # Gracefully unload the model using Ollama API
-        # According to Ollama API, sending a request with keep_alive=0s unloads the model
-        # We use a minimal prompt to ensure the request completes
+        # Per Ollama docs: empty prompt + keep_alive=0 (numeric) unloads immediately
         try:
             unload_response = requests.post(
                 _get_ollama_url("generate"),
                 json={
                     "model": model_name,
-                    "prompt": " ",  # Single space instead of empty to ensure valid request
+                    "prompt": "",
                     "stream": False,
-                    "keep_alive": "0s"
+                    "keep_alive": 0
                 },
                 timeout=30
             )
 
             if unload_response.status_code == 200:
-                # Clear the cache for running models to force a refresh
-                # This ensures the UI shows the model as unloaded immediately
+                _verify_model_unloaded(model_name)
                 _get_ollama_service().clear_cache('running_models')
-                # Force immediate refresh to populate cache with current state
                 try:
                     _get_ollama_service().get_running_models(force_refresh=True)
                 except Exception:
-                    pass  # Best-effort refresh, don't fail if it errors
+                    pass
                 return {"success": True, "message": f"Model {model_name} stopped successfully"}
             elif unload_response.status_code == 404:
                 return {"success": False, "message": f"Model {model_name} not found"}, 404
@@ -401,9 +414,9 @@ def restart_model(model_name):
                     _get_ollama_url("generate"),
                     json={
                         "model": model_name,
-                        "prompt": " ",  # Single space instead of empty to ensure valid request
+                        "prompt": "",
                         "stream": False,
-                        "keep_alive": "0s"
+                        "keep_alive": 0
                     },
                     timeout=30
                 )
@@ -423,9 +436,8 @@ def restart_model(model_name):
             except requests.exceptions.RequestException as e:
                 return {"success": False, "message": f"Network error while stopping model: {str(e)}"}, 503
 
-            # Brief pause to ensure unload completes
-            time.sleep(1)
-            # Clear the cache to force a refresh of running models
+            time.sleep(3)
+            _verify_model_unloaded(model_name)
             _get_ollama_service().clear_cache('running_models')
 
         # Step 2: Start the model (warm start with retry logic)
