@@ -54,10 +54,10 @@ class OllamaService(
     - Health component tracking
     """
 
-    def __init__(self):
+    def __init__(self, app=None):
         """Initialize OllamaService with all enterprise capabilities."""
         # Initialize base service (from OllamaServiceCore mixin)
-        super().__init__()
+        super().__init__(app=app)
 
         # ===== NEW IMPROVEMENTS =====
 
@@ -169,9 +169,10 @@ class OllamaService(
         Called via atexit hook to ensure cleanup even on abnormal exit.
         """
         try:
-            self._stop_background = True
-            if hasattr(self, '_background_thread') and self._background_thread:
-                self._background_thread.join(timeout=5)
+            if hasattr(self, '_stop_background') and hasattr(self._stop_background, 'set'):
+                self._stop_background.set()
+            if hasattr(self, '_background_stats') and self._background_stats:
+                self._background_stats.join(timeout=5)
                 logger.debug("Background thread stopped")
 
             if hasattr(self, '_session'):

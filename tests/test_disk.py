@@ -1,14 +1,22 @@
-import sys
-sys.path.append('.')
+"""Test system stats API — disk stats specifically."""
 
-from app import create_app
-from app.services.ollama import OllamaService
+import pytest
+from unittest.mock import patch
 
-app = create_app()
-print('Testing system stats API...')
 
-with app.app_context():
-    s = OllamaService(app)
-    stats = s.get_system_stats()
-    print('System stats:', stats)
-    print('Disk percent:', stats.get('disk', {}).get('percent', 'N/A'))
+@pytest.fixture(scope="module")
+def app():
+    from app import create_app
+    app = create_app()
+    app.config['TESTING'] = True
+    return app
+
+
+def test_system_stats_includes_disk(app):
+    """System stats should include disk percent."""
+    with app.app_context():
+        service = app.config['OLLAMA_SERVICE']
+        stats = service.get_system_stats()
+        assert stats is not None
+        assert 'disk' in stats
+        assert 'percent' in stats['disk']

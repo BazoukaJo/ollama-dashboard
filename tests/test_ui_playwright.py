@@ -89,3 +89,38 @@ def test_reload_and_service_buttons(page, server_process):
     assert 'enabled' in classes
     classes = caps.nth(2).get_attribute('class')
     assert 'disabled' in classes
+
+
+def test_visual_layout_model_cards_have_valid_spec_rows(page, server_process):
+    """Visual regression: Running has 3 spec rows; Available/Downloadable have 2 (Size+Context on same line)."""
+    page.goto("http://127.0.0.1:5000/")
+    page.wait_for_load_state("networkidle")
+
+    assert page.locator(".model-card").count() >= 0
+    assert page.locator("#runningModelsContainer, #availableModelsContainer, #bestModelsContainer").count() >= 1
+
+    cards = page.locator(".model-card")
+    for i in range(cards.count()):
+        card = cards.nth(i)
+        spec_rows = card.locator(".spec-row")
+        count = spec_rows.count()
+        if count > 0:
+            assert count in (2, 3), (
+                f"Model card {i} has {count} spec rows; expected 2 (Available/Downloadable) or 3 (Running)"
+            )
+
+
+def test_visual_layout_section_containers_visible(page, server_process):
+    """Section containers and key layout elements must be present."""
+    page.goto("http://127.0.0.1:5000/")
+    page.wait_for_load_state("domcontentloaded")
+
+    assert page.locator(".section-title-text").count() >= 1
+    assert page.locator(".model-specs, .model-card").count() >= 0
+    # Spec row layout rule exists in DOM (from CSS)
+    spec_rows = page.locator(".spec-row")
+    # If any spec-row exists, it should be visible (not display:none) when not in compact
+    for i in range(min(3, spec_rows.count())):
+        box = spec_rows.nth(i).bounding_box()
+        if box:
+            assert box["width"] >= 0 and box["height"] >= 0

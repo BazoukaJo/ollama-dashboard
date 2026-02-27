@@ -27,6 +27,8 @@
   --space-md: 0.625rem;    /* 10px */
   --space-lg: 1.25rem;     /* 20px - for major sections */
   --space-xl: 1.875rem;    /* 30px - for page sections */
+  --space-element: 0.5rem; /* 8px - for inline elements */
+  --space-section: 0.75rem; /* 12px - for section spacing */
 }
 
 /* ===== Compact Mode Toggle Button ===== */
@@ -174,14 +176,14 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
+  gap: 4px;
 }
 
 .title-container .d-flex {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
   flex-wrap: wrap;
 }
 
@@ -204,7 +206,7 @@ body {
 }
 
 .page-title-minimal {
-  font-size: 1.8rem;
+  font-size: 1.85rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -226,9 +228,9 @@ body {
 }
 
 .title-logo-small {
-  width: 1.8rem;
-  height: 1.8rem;
-  padding: 0.3rem;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0.25rem;
 }
 
 .title-logo img,
@@ -252,7 +254,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
+}
+.refresh-indicator.mb-2 {
+  margin-bottom: 0.2rem !important;
 }
 
 .refresh-indicator .dot {
@@ -585,16 +590,16 @@ canvas {
 /* Modern System Resources Styles */
 .system-resources-container {
   background: #1f2021;
-  border-radius: 20px;
-  padding: 1.25rem;
+  border-radius: 12px;
+  padding: 0.75rem;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .system-header {
   border-bottom: 2px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 0.625rem;
-  margin-bottom: 1.25rem;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
 }
 
 .system-icon-wrapper {
@@ -657,14 +662,14 @@ canvas {
 .resource-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.25rem;
-  margin-bottom: 1.25rem;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .resource-card-modern {
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 20px;
-  padding: 1.25rem;
+  border-radius: 12px;
+  padding: 0.6rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
   -webkit-backdrop-filter: blur(10px);
@@ -685,17 +690,17 @@ canvas {
 
 .card-header-modern {
   text-align: center;
-  margin-bottom: 0.625rem;
+  margin-bottom: 0.35rem;
 }
 
 .metric-icon {
-  width: 50px;
-  height: 50px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 0.625rem;
+  margin: 0 auto 0.35rem;
   font-size: 1.2rem;
 }
 
@@ -715,18 +720,18 @@ canvas {
 }
 
 .metric-value {
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 700;
   color: #ffffff;
   text-align: center;
-  margin: 0.625rem 0;
+  margin: 0.35rem 0;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .progress-ring {
   display: flex;
   justify-content: center;
-  margin: 0.625rem 0;
+  margin: 0.35rem 0;
 }
 
 .progress-circle {
@@ -780,18 +785,18 @@ canvas {
 
 .system-overview {
   background: rgba(255, 255, 255, 0.02);
-  border-radius: 15px;
-  padding: 0.625rem;
+  border-radius: 10px;
+  padding: 0.4rem;
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .overview-header {
-  margin-bottom: 0.625rem;
+  margin-bottom: 0.35rem;
 }
 
 .overview-title {
   color: #ffffff;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   margin: 0;
 }
@@ -799,12 +804,12 @@ canvas {
 .overview-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 0.625rem;
+  gap: 0.35rem;
 }
 
 .metric-item {
   text-align: center;
-  padding: 0.75rem;
+  padding: 0.4rem;
   background: rgba(255, 255, 255, 0.02);
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -812,27 +817,30 @@ canvas {
 
 .metric-name {
   color: #8b949e;
-  font-size: 0.8rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.1rem;
 }
 
 .metric-data {
   color: #ffffff;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 }
 
 /* Compact System Resources Styles */
 .compact-system-resources {
   background: #252526;
-  border-radius: 12px;
-  padding: 1.25rem;
+  border-radius: 10px;
+  padding: 0.4rem 0.6rem;
   border: 1px solid #3e3e42;
   -webkit-backdrop-filter: blur(5px);
   backdrop-filter: blur(5px);
   transition: all 0.3s ease;
+}
+.compact-system-resources.mb-2 {
+  margin-bottom: 0.25rem !important;
 }
 
 .compact-system-resources:hover {
@@ -841,17 +849,21 @@ canvas {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
+.compact-system-resources .d-flex.justify-content-between.mb-1 {
+  margin-bottom: 0.4rem !important;
+}
+
 .compact-metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.625rem;
-  margin-top: 0.625rem;
+  gap: 0.25rem;
+  margin-top: 0.15rem;
 }
 
 .compact-metric {
   background: rgba(255, 255, 255, 0.01);
-  border-radius: 8px;
-  padding: 0.625rem;
+  border-radius: 6px;
+  padding: 0.25rem 0.4rem;
   border: 1px solid rgba(255, 255, 255, 0.03);
   transition: all 0.2s ease;
 }
@@ -862,7 +874,7 @@ canvas {
 }
 
 .metric-label-compact {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 600;
   color: #8b949e;
   text-transform: uppercase;
@@ -870,7 +882,7 @@ canvas {
 }
 
 .metric-value-compact {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: #ffffff;
 }
@@ -893,17 +905,17 @@ canvas {
 /* Timeline Canvas Styles */
 .timeline-canvas {
   width: 100%;
-  height: 20px;
+  height: 14px;
   border-radius: 2px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  margin-top: 0.25rem;
+  margin-top: 0.1rem;
 }
 
 /* Professional Model Card Styles */
 .model-card {
-  padding: 1rem;
-  margin-bottom: 0;
+  padding: 4px;
+  margin: 4px;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -911,7 +923,21 @@ canvas {
   position: relative;
   overflow: visible;
   animation: fadeInUp 0.5s ease-out;
+  /* Grid layout for clear element positioning */
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto auto auto auto;
+  gap: 0 0.5rem;
+  align-items: start;
 }
+.model-card .model-header { grid-column: 1 / -1; grid-row: 1; }
+.model-card .model-title { grid-column: 1; grid-row: 2; min-width: 0; }
+.model-card .model-capabilities { grid-column: 2; grid-row: 2; align-self: center; }
+.model-card .model-specs { grid-column: 1 / -1; grid-row: 3; }
+.model-card .download-progress { grid-column: 1 / -1; grid-row: 4; }
+.model-card .model-actions { grid-column: 1 / -1; grid-row: 5; }
+/* When no download-progress, model-actions uses row 4 */
+.model-card:not(:has(.download-progress)) .model-actions { grid-row: 4; }
 
 .model-card:nth-child(1) {
   animation-delay: 0.1s;
@@ -942,15 +968,15 @@ canvas {
 .model-header {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  margin-bottom: 0.625rem;
+  gap: 3px;
+  margin-bottom: 1px;
   position: relative;
   z-index: 0;
 }
 
 .model-icon-wrapper {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   background: linear-gradient(135deg, #666666, #999999);
   border-radius: 8px;
   display: flex;
@@ -960,28 +986,27 @@ canvas {
 }
 
 .model-icon-main {
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   color: white;
 }
 
 .model-title {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #ffffff;
   margin: 0;
-  line-height: 1.3;
-  padding-bottom: 0.625rem;
-  padding-right: 120px; /* Make space for capability icons */
+  margin-top: 0.15rem;
+  line-height: 1.2;
+  padding-bottom: 0.3125rem;
+  min-height: 1.4em;
 }
 
 .model-capabilities {
   display: flex !important;
-  gap: 0.4rem;
+  gap: 0.35rem;
   justify-content: flex-end;
-  position: absolute !important;
-  top: 1rem !important;
-  right: 1rem !important;
-  z-index: 10 !important;
+  flex-shrink: 0;
+  align-self: center;
 }
 
 .capability-icon {
@@ -1049,33 +1074,103 @@ canvas {
   border: 1px solid rgba(108, 117, 125, 0.3);
 }
 
-.model-specs {
-  margin-bottom: var(--space-md);
-  flex: 1;
+/* Unified spec spacing: same for all card types (Running, Available, Best) */
+.model-card .model-specs {
+  margin-bottom: 0 !important;
+  margin-top: 0;
+  flex: none;
 }
 
-.spec-row {
+.model-card .spec-row {
   display: flex;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-xs);
+  flex-direction: row; /* Row first, column second */
+  gap: 0.08rem; /* same as vertical row spacing */
+  margin-bottom: 0.08rem;
+  flex-wrap: nowrap;
 }
 
-.spec-row:last-child {
-  margin-bottom: 0;
+.model-card .spec-row:last-child {
+  margin-bottom: 0 !important;
 }
 
-.spec-item {
-  flex: 1;
-  font-size: 0.875rem;
+/* Consistent gap between specs and actions for all card types */
+.model-card .model-actions {
+  margin-top: 0.2rem !important;
+}
+
+/* Placeholder rows with only opacity-0 items must not add vertical space */
+.spec-row:has(.spec-item.opacity-0):not(:has(.spec-item:not(.opacity-0))) {
+  min-height: 0 !important;
+  margin-bottom: 0 !important;
+  overflow: hidden;
+}
+
+.spec-item.opacity-0 {
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  overflow: hidden;
+  flex: 1 1 0% !important; /* Reserve equal row space for row-first layout */
+  min-width: 2rem; /* Prevent collapse so row stays two-column */
+}
+
+.model-card .spec-item {
+  flex: 1 1 0%;
+  min-width: 0;
+  font-size: 0.8125rem;
   background: rgba(255, 255, 255, 0.02);
-  border-radius: 8px;
-  padding: 0.625rem;
+  border-radius: 6px;
+  padding: 0.2rem;
+  margin: 1px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   transition: all 0.2s ease;
   display: flex;
   align-items: flex-start;
-  gap: 0.625rem;
-  min-height: 2.5rem;
+  gap: 0.2rem;
+  min-height: 1.5rem;
+  overflow: hidden;
+}
+
+/* Legacy selectors for non-card usage */
+.model-specs {
+  margin-bottom: 0 !important;
+  flex: none;
+}
+
+.spec-row {
+  display: flex;
+  flex-direction: row; /* Row first, column second */
+  gap: 0.08rem; /* same as vertical row spacing */
+  margin-bottom: 0.08rem;
+  flex-wrap: nowrap;
+}
+
+.spec-row:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* Size+Context row: keep on same line (Available/Downloadable when no GPU) */
+.spec-row-size-context {
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+}
+
+.spec-item {
+  flex: 1 1 0%;
+  min-width: 0;
+  font-size: 0.8125rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  padding: 0.2rem;
+  margin: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.2rem;
+  min-height: 1.5rem;
+  overflow: hidden;
 }
 
 .spec-item:hover {
@@ -1108,15 +1203,15 @@ canvas {
   color: #bcbec0;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  font-size: 0.75rem;
-  margin-bottom: 0.25rem;
+  font-size: 0.7rem;
+  margin-bottom: 0.06rem;
   display: block;
 }
 
 .spec-value {
   color: #ffffff;
   font-weight: 500;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   word-break: break-word;
   line-height: 1.4;
 }
@@ -1124,25 +1219,27 @@ canvas {
 .model-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.2rem;
+  margin-top: 0 !important;
+  justify-content: flex-start;
 }
 
 .model-actions .btn {
-  flex: 1 1 calc(33.333% - 0.34rem);
-  max-width: calc(33.333% - 0.34rem);
-  font-size: 0.8rem;
-  padding: 0.375rem 0.5rem;
+  flex: 0 1 calc(33.333% - 0.2rem);
+  width: calc(33.333% - 0.2rem);
+  max-width: calc(33.333% - 0.2rem);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.375rem;
   border-radius: 4px;
   font-weight: 500;
   text-transform: none;
   letter-spacing: 0;
 }
 
-/* Full width for 1-2 buttons */
-.model-actions:has(.btn:only-child) .btn,
-.model-actions:has(.btn:nth-last-child(2):first-child) .btn,
-.model-actions:has(.btn:nth-last-child(2):first-child) ~ .btn {
+/* Full width only for single Download button */
+.model-actions:has(.btn:only-child) .btn {
   flex: 1 1 100%;
+  min-width: 100%;
   max-width: 100%;
 }
 
@@ -1573,7 +1670,7 @@ canvas {
   padding: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 4px;
 }
 
 .summary-label {
@@ -1788,31 +1885,17 @@ canvas {
 
 /* ===== Compact Mode Styles ===== */
 body.compact-mode {
-  /* Compact mode only affects card content, not positioning */
+  display: block; /* Ensure body remains block */
 }
 
 /* Compact mode rules: only affect card internal styling */
 body.compact-mode .model-card {
-  /* Keep same padding and margins as normal mode */
+  display: grid; /* Keep grid layout for positioning */
 }
 
 body.compact-mode .model-header {
   gap: 0.625rem;
   margin-bottom: 0.625rem;
-}
-
-body.compact-mode .model-icon-wrapper {
-  width: 28px;
-  height: 28px;
-}
-
-body.compact-mode .model-icon-main {
-  font-size: 0.9rem;
-}
-
-body.compact-mode .model-title {
-  font-size: 0.95rem;
-  padding-bottom: 0.3125rem;
 }
 
 body.compact-mode .status-indicator {
@@ -1821,17 +1904,21 @@ body.compact-mode .status-indicator {
 }
 
 body.compact-mode .model-specs {
-  margin-bottom: var(--space-sm);
+  margin-bottom: 0;
 }
 
-body.compact-mode .spec-row {
-  gap: var(--space-xs);
-  margin-bottom: var(--space-xs);
+body.compact-mode .model-card .spec-row {
+  gap: 0.08rem;
+  margin-bottom: 0.08rem;
 }
 
-body.compact-mode .spec-item {
-  padding: 0.625rem;
-  min-height: 2rem;
+body.compact-mode .model-card .spec-row:last-child {
+  margin-bottom: 0 !important;
+}
+
+body.compact-mode .model-card .spec-item {
+  padding: 0.2rem;
+  min-height: 1.5rem;
 }
 
 body.compact-mode .spec-icon {
@@ -1853,21 +1940,21 @@ body.compact-mode .spec-value {
 }
 
 body.compact-mode .model-actions {
-  gap: 0.625rem;
+  gap: 0.25rem;
 }
 
 body.compact-mode .model-actions .btn {
-  flex: 1 1 calc(33.333% - 0.42rem);
-  max-width: calc(33.333% - 0.42rem);
+  flex: 0 1 calc(33.333% - 0.2rem);
+  width: calc(33.333% - 0.2rem);
+  max-width: calc(33.333% - 0.2rem);
   font-size: 0.75rem;
-  padding: 0.3rem 0.4rem;
+  padding: 0.25rem 0.375rem;
 }
 
-/* Full width for 1-2 buttons in compact mode */
-body.compact-mode .model-actions:has(.btn:only-child) .btn,
-body.compact-mode .model-actions:has(.btn:nth-last-child(2):first-child) .btn,
-body.compact-mode .model-actions:has(.btn:nth-last-child(2):first-child) ~ .btn {
+/* Full width only for single Download button */
+body.compact-mode .model-actions:has(.btn:only-child) .btn {
   flex: 1 1 100%;
+  width: 100%;
   max-width: 100%;
 }
 
@@ -1879,29 +1966,231 @@ body.compact-mode .compact-hide {
   display: none !important;
 }
 
-/* ===== Vertical Rhythm Enhancements (Normal Mode) ===== */
+/* ===== Page-level spacing - compact mode ===== */
+body.compact-mode .container.py-3 {
+  padding-top: 0.35rem !important;
+  padding-bottom: 0.35rem !important;
+}
+
+body.compact-mode .title-container.mb-1 {
+  margin-bottom: 0.15rem !important;
+}
+
+body.compact-mode .d-flex.justify-content-center.mb-2.align-items-center.gap-2 {
+  margin-bottom: 0.25rem !important;
+}
+
+body.compact-mode .service-controls.d-flex.gap-2 {
+  gap: 0.2rem !important;
+}
+
+body.compact-mode .models-management.mt-4 {
+  margin-top: 0.5rem !important;
+}
+
+body.compact-mode .models-management > div,
+body.compact-mode .models-management > div.mb-4 {
+  margin-bottom: 0.5rem !important;
+}
+
+body.compact-mode .models-management > div:last-child {
+  margin-bottom: 0.5rem !important;
+}
+
+body.compact-mode .models-management .d-flex.align-items-center.justify-content-between.mb-3,
+body.compact-mode .models-management .d-flex.align-items-center.gap-2.mb-3 {
+  margin-bottom: 0.5rem !important;
+}
+
+body.compact-mode #runningModelsContainer.row.g-3,
+body.compact-mode #availableModelsContainer.row.g-3,
+body.compact-mode #downloadableModelsContainer.row.g-3,
+body.compact-mode .extended-models-container.row.g-3 {
+  --bs-gutter-x: 0.5rem;
+  --bs-gutter-y: 0.5rem;
+}
+
+body.compact-mode .compact-system-resources.mb-2 {
+  margin-bottom: 0.25rem !important;
+}
+
+/* ===== Page-level spacing - normal mode ===== */
+body:not(.compact-mode) .container.py-3 {
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+}
+
+body:not(.compact-mode) .title-container.mb-1 {
+  margin-bottom: 0.25rem !important;
+}
+
+body:not(.compact-mode) .refresh-indicator.mb-2,
+body:not(.compact-mode) .refresh-indicator {
+  margin-bottom: 0.25rem !important;
+}
+
+body:not(.compact-mode) .d-flex.justify-content-center.mb-2.align-items-center.gap-2 {
+  margin-bottom: 0.35rem !important;
+}
+
+body:not(.compact-mode) .compact-system-resources {
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  margin-bottom: 0.5rem !important;
+}
+
+body:not(.compact-mode) .compact-system-resources .d-flex.justify-content-between.mb-1 {
+  margin-bottom: 0.4rem !important;
+}
+
+body:not(.compact-mode) .compact-metrics-grid {
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+body:not(.compact-mode) .compact-metric {
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+}
+
+body:not(.compact-mode) .timeline-canvas {
+  height: 16px;
+  margin-top: 0.15rem;
+}
+
+body:not(.compact-mode) .metric-label-compact {
+  font-size: 0.7rem;
+}
+
+body:not(.compact-mode) .metric-value-compact {
+  font-size: 0.8rem;
+}
+
+body:not(.compact-mode) .models-management.mt-4 {
+  margin-top: 1rem !important;
+}
+
+body:not(.compact-mode) .models-management > div,
+body:not(.compact-mode) .models-management > div.mb-4 {
+  margin-bottom: 1rem !important;
+}
+
+body:not(.compact-mode) .models-management > div:last-child {
+  margin-bottom: var(--space-lg) !important;
+}
+
+body:not(.compact-mode) .models-management .d-flex.align-items-center.justify-content-between.mb-3,
+body:not(.compact-mode) .models-management .d-flex.align-items-center.gap-2.mb-3,
+body:not(.compact-mode) .models-management .d-flex.align-items-center.gap-2 {
+  margin-bottom: var(--space-section) !important;
+}
+
+body:not(.compact-mode) #runningModelsContainer.row.g-3,
+body:not(.compact-mode) #availableModelsContainer.row.g-3,
+body:not(.compact-mode) #downloadableModelsContainer.row.g-3,
+body:not(.compact-mode) .extended-models-container.row.g-3 {
+  --bs-gutter-x: var(--space-section);
+  --bs-gutter-y: var(--space-section);
+}
+
+/* Normal mode: use same card size as compact */
+body:not(.compact-mode) .model-card {
+  padding: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body:not(.compact-mode) .model-header {
+  margin-bottom: 2px !important;
+  gap: 4px !important;
+}
+
+body:not(.compact-mode) .model-card .model-header {
+  margin-bottom: 2px !important;
+}
+
+body:not(.compact-mode) .model-title,
+body:not(.compact-mode) .model-card .model-title {
+  margin-bottom: 0.1rem !important;
+  margin-top: 0.15rem !important;
+  padding-bottom: 0.3125rem !important;
+}
+
+body:not(.compact-mode) .model-specs {
+  margin-bottom: 0 !important;
+}
+
+body:not(.compact-mode) .model-card .spec-item {
+  padding: 0.2rem !important;
+  min-height: 1.5rem !important;
+}
+
+body:not(.compact-mode) .model-actions {
+  gap: 0.2rem !important;
+}
+
+body:not(.compact-mode) .model-actions .btn {
+  padding: 0.25rem 0.375rem !important;
+  font-size: 0.75rem !important;
+}
+
+body:not(.compact-mode) .health-status-badge {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+}
+
+body:not(.compact-mode) .section-icon {
+  font-size: 1.05rem;
+}
+
+body:not(.compact-mode) .section-title-text {
+  font-size: 1.1rem;
+}
+
+body:not(.compact-mode) .extended-models-container.mt-2 {
+  margin-top: 0.35rem !important;
+}
+
+body:not(.compact-mode) .text-center.mt-3 {
+  margin-top: 0.35rem !important;
+}
+
+body:not(.compact-mode) .service-controls.d-flex.gap-2 {
+  gap: 0.5rem !important;
+}
+
+body:not(.compact-mode) .models-section {
+  margin-top: var(--space-section) !important;
+}
+
+/* ===== Vertical Rhythm (base = compact-friendly) ===== */
 .title-container { margin-bottom: var(--space-xs); }
-.refresh-indicator { margin-bottom: var(--space-md); }
-.models-management > div { margin-bottom: var(--space-md); }
-.model-card { padding: var(--space-xs); margin-bottom: var(--space-md); }
-.model-title { margin-bottom: var(--space-xxs); line-height: 1.25; }
-.model-card .model-title { margin-bottom: var(--space-xxs); }
+.refresh-indicator { margin-bottom: 0.2rem; }
+.models-management > div { margin-bottom: var(--space-xs); }
+.models-management > div:last-child { margin-bottom: var(--space-xs); }
+.model-card { padding: 0.4rem; margin-bottom: 0; }
+.model-title { margin-bottom: 0.1rem; line-height: 1.2; }
+.model-card .model-title { margin-bottom: 0.1rem; }
 .model-card .model-description { margin-top: 0; }
-.model-specs { margin-bottom: var(--space-sm); }
-.spec-row { margin-bottom: var(--space-xxs); }
-.spec-item { padding: var(--space-xs); }
-.model-actions { margin-top: var(--space-xs); }
-/* Downloadable card specific adjustments */
-.model-card .model-description { margin-bottom: var(--space-xs); }
-.model-card .model-header { margin-bottom: var(--space-xs); }
-.model-actions .btn-group { gap: var(--space-xs); }
-.models-section { margin-top: var(--space-md); }
+.model-specs { margin-bottom: 0; }
+.spec-row { margin-bottom: 0.08rem; }
+.spec-row:last-child { margin-bottom: 0 !important; }
+.model-card .model-description { margin-bottom: 1px; }
+.model-card .model-header { margin-bottom: 1px; }
+.model-card .download-progress { margin-top: 0.25rem; margin-bottom: 0.25rem; }
+.model-actions .btn-group { gap: 4px; }
+.models-section { margin-top: var(--space-section); }
 
-/* Tighter spacing for headings within sections */
-.models-management .d-flex.align-items-center.gap-2 { margin-bottom: var(--space-sm); }
+/* Card grid gaps: base (compact) */
+#runningModelsContainer.row.g-3,
+#availableModelsContainer.row.g-3,
+#downloadableModelsContainer.row.g-3,
+.extended-models-container.row.g-3 {
+  --bs-gutter-x: 0.5rem;
+  --bs-gutter-y: 0.5rem;
+}
 
-/* Ensure last section has extra breathing room */
-.models-management > div:last-child { margin-bottom: var(--space-md); }
+/* Section header to content: base (compact) */
+.models-management .d-flex.align-items-center.gap-2 { margin-bottom: var(--space-xs); }
 
 body.compact-mode .badge {
   font-size: 0.7rem;
@@ -1911,6 +2200,8 @@ body.compact-mode .badge {
 .icon-xs { font-size: 0.9rem; }
 .heading-xs { font-size: 0.95rem; }
 .extended-models-container { display: none; }
+.extended-models-container.mt-2 { margin-top: 0.35rem !important; }
+.text-center.mt-3 { margin-top: 0.5rem !important; }
 
 body.compact-mode .text-muted {
   font-size: 0.8rem;
@@ -1927,33 +2218,38 @@ body.compact-mode .compact-hide {
 @media (max-width: 768px) {
   .resource-cards-grid {
     grid-template-columns: 1fr;
-    gap: 0.625rem;
+    gap: 0.35rem;
   }
 
   .system-resources-container {
-    padding: 0.625rem;
+    padding: 0.5rem;
   }
 
   .metric-value {
-    font-size: 2rem;
+    font-size: 1.75rem;
   }
 
   .overview-metrics {
     grid-template-columns: repeat(2, 1fr);
+    gap: 0.25rem;
   }
 
   .compact-metrics-grid {
     grid-template-columns: 1fr;
-    gap: 0.625rem;
+    gap: 0.25rem;
   }
 
   .compact-system-resources {
-    padding: 0.625rem;
+    padding: 0.4rem 0.5rem;
   }
 
   .spec-row {
     flex-direction: column;
-    gap: 0.625rem;
+    gap: 0.25rem;
+  }
+  /* Size+Context row stays horizontal (no GPU case) - never stack to column */
+  .spec-row-size-context {
+    flex-direction: row !important;
   }
 
   .model-meta {
@@ -1973,20 +2269,20 @@ body.compact-mode .compact-hide {
 }
 
 .health-status-badge {
-  padding: 0.5rem 1rem;
-  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
 }
 
 .section-icon {
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 .section-title-text {
-  font-size: 0.95rem;
+  font-size: 1.05rem;
 }
 
 .last-update-time {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
 }
 
 .resource-icon {
@@ -1998,4 +2294,53 @@ body.compact-mode .compact-hide {
 .resource-icon-gpu,
 .resource-icon-disk {
   color: #bcbec0;
+}
+
+/* ===== Capability Filter Styles ===== */
+.capability-filters .filter-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #6c757d;
+}
+
+.capability-filters .filter-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.capability-filters .filter-btn.active {
+    background: rgba(13, 110, 253, 0.15);
+    border-color: rgba(13, 110, 253, 0.4);
+    color: #0dcaf0;
+}
+
+.capability-filters .filter-btn.active[data-capability="reasoning"] {
+    color: #0dcaf0;
+    background: rgba(13, 202, 240, 0.15);
+    border-color: rgba(13, 202, 240, 0.4);
+}
+
+.capability-filters .filter-btn.active[data-capability="vision"] {
+    color: #0d6efd;
+    background: rgba(13, 110, 253, 0.15);
+    border-color: rgba(13, 110, 253, 0.4);
+}
+
+.capability-filters .filter-btn.active[data-capability="tools"] {
+    color: #ffc107;
+    background: rgba(255, 193, 7, 0.1);
+    border-color: rgba(255, 193, 7, 0.3);
+}
+
+.capability-filters .filter-btn i {
+    font-size: 0.85rem;
 }

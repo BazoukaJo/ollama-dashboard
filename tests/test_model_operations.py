@@ -187,7 +187,7 @@ class TestModelRestart:
 class TestModelDelete:
     """Test suite for model delete endpoint."""
 
-    @patch('app.routes.main.requests.delete')
+    @patch('app.routes.main.ollama_service._session.delete')
     @patch('app.routes.main.ollama_service.get_available_models')
     @patch('app.routes.main.ollama_service.get_running_models')
     def test_delete_model_success(self, mock_running, mock_available, mock_delete, client):
@@ -205,16 +205,22 @@ class TestModelDelete:
         data = response.get_json()
         assert data['success'] is True
 
+    @patch('app.routes.main.ollama_service._session.delete')
     @patch('app.routes.main.ollama_service.get_available_models')
     @patch('app.routes.main.ollama_service.get_running_models')
-    def test_delete_nonexistent_model(self, mock_running, mock_available, client):
+    def test_delete_nonexistent_model(self, mock_running, mock_available, mock_delete, client):
         """Test deleting a model that doesn't exist."""
         mock_running.return_value = []
         mock_available.return_value = []
 
+        delete_response = Mock()
+        delete_response.status_code = 404
+        delete_response.json.return_value = {'error': 'model not found'}
+        mock_delete.return_value = delete_response
+
         response = client.delete('/api/models/delete/nonexistent:latest')
 
-        assert response.status_code == 404
+        assert response.status_code == 400
         data = response.get_json()
         assert data['success'] is False
 

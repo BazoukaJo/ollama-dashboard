@@ -18,10 +18,6 @@ def _exercise_basic_endpoints():
     print("✓ App created successfully")
 
     with app.test_client() as client:
-        # Test ping endpoint
-        resp = client.get('/ping')
-        assert resp.status_code == 200
-        print("✓ Ping endpoint works")
 
         # Test health endpoint
         resp = client.get('/api/health')

@@ -45,7 +45,17 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
             'session': model.get('session') if isinstance(model, dict) else None,
             'digest': model.get('digest') if isinstance(model, dict) else None,
             'tags': model.get('tags') if isinstance(model, dict) else None,
+            'size_vram': model.get('size_vram') if isinstance(model, dict) else None,
+            'context_length': model.get('context_length') if isinstance(model, dict) else None,
         }
+
+        # Format VRAM size if present
+        if entry.get('size_vram') is not None:
+            try:
+                entry['formatted_size_vram'] = service.format_size(entry['size_vram'])
+            except Exception:
+                entry['formatted_size_vram'] = str(entry['size_vram'])
+
         try:
             entry = ensure_capability_flags(entry, prefer_heuristics_on_conflict=prefer_heuristics_on_conflict)
         except Exception:

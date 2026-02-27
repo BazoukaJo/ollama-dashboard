@@ -29,7 +29,7 @@ def client(monkeypatch):
             return DummyResponse(sample)
         # Return empty models for other endpoints to avoid side effects
         return DummyResponse({'models': []})
-    monkeypatch.setattr('app.services.ollama.requests.Session.get', fake_get)
+    monkeypatch.setattr('requests.Session.get', fake_get)
     return client
 
 

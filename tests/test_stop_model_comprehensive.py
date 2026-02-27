@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Test script to verify the stop_model fix works correctly."""
 
+import pytest
 import requests
 import json
 import time
@@ -24,8 +25,7 @@ def test_stop_model_comprehensive():
     print(f"   Available models count: {len(available_models) if isinstance(available_models, list) else 'N/A'}")
 
     if not available_models or len(available_models) == 0:
-        print("\n   ⚠️  No available models. Cannot run test.")
-        return False
+        pytest.skip("No available models - cannot run stop test")
 
     model_name = available_models[0]['name'] if isinstance(available_models, list) else None
     print(f"   Selected model for testing: {model_name}")
@@ -38,9 +38,7 @@ def test_stop_model_comprehensive():
     print(f"   Status Code: {response.status_code}")
 
     if not start_result.get('success'):
-        print(f"\n   ⚠️  Failed to start model: {start_result.get('message')}")
-        print("   Test cannot proceed without starting a model.")
-        return False
+        pytest.skip(f"Could not start model: {start_result.get('message')}")
 
     # 3. Wait for model to load
     print("\n3. Waiting for model to load...")
@@ -55,9 +53,7 @@ def test_stop_model_comprehensive():
 
     model_is_running = any(m.get('name') == model_name for m in running_models_before)
     if not model_is_running:
-        print(f"\n   ⚠️  Model '{model_name}' is not running after start.")
-        print("   Cannot test stop without a running model.")
-        return False
+        pytest.skip(f"Model '{model_name}' is not running after start")
 
     # 5. Get system stats before stop
     print("\n5. Getting system stats before stop...")
@@ -75,9 +71,7 @@ def test_stop_model_comprehensive():
     print(f"   Response: {json.dumps(result, indent=2)}")
     print(f"   Status Code: {response.status_code}")
 
-    if not result.get('success'):
-        print(f"\n   ❌ Failed to stop model: {result.get('message')}")
-        return False
+    assert result.get('success'), f"Failed to stop model: {result.get('message')}"
 
     # 7. Wait for model to unload
     print("\n7. Waiting for model to unload...")
@@ -108,21 +102,17 @@ def test_stop_model_comprehensive():
 
     # 10. Final verdict
     print("\n" + "=" * 60)
-    if model_still_running:
-        print(f"❌ FAILED: Model '{model_name}' is still in running list after stop!")
-        return False
-    else:
-        print(f"✅ SUCCESS: Model '{model_name}' was successfully unloaded!")
-        print(f"   - Model removed from running list")
-        if memory_freed > 0:
-            print(f"   - Memory freed: {memory_freed / (1024**3):.2f} GB")
-        if vram_freed > 0:
-            print(f"   - VRAM freed: {vram_freed / (1024**3):.2f} GB")
-        return True
+    assert not model_still_running, f"Model '{model_name}' is still in running list after stop"
+    print(f"✅ SUCCESS: Model '{model_name}' was successfully unloaded!")
+    print(f"   - Model removed from running list")
+    if memory_freed > 0:
+        print(f"   - Memory freed: {memory_freed / (1024**3):.2f} GB")
+    if vram_freed > 0:
+        print(f"   - VRAM freed: {vram_freed / (1024**3):.2f} GB")
 
 if __name__ == '__main__':
     try:
-        success = test_stop_model_comprehensive()
+        test_stop_model_comprehensive()
         print("=" * 60)
     except Exception as e:
         print(f"\n❌ Test ERROR: {str(e)}")

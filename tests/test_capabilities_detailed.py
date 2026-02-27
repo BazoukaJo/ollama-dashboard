@@ -7,15 +7,22 @@ import json
 
 BASE_URL = "http://127.0.0.1:5000"
 
-def test_downloadable_models_best():
+@pytest.fixture
+def client():
+    from app import create_app
+    app = create_app()
+    with app.test_client() as client:
+        yield client
+
+def test_downloadable_models_best(client):
     """Test best downloadable models have capabilities"""
     print("\n1. Testing /api/models/downloadable?category=best")
     print("-" * 50)
 
-    response = requests.get(f"{BASE_URL}/api/models/downloadable?category=best", timeout=5)
+    response = client.get("/api/models/downloadable?category=best")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
-    data = response.json()
+    data = response.get_json()
     models = data.get('models', [])
 
     print(f"✓ Found {len(models)} models")
@@ -32,15 +39,15 @@ def test_downloadable_models_best():
 
     # Test assertions above will raise on failure; no return value needed
 
-def test_downloadable_models_all():
+def test_downloadable_models_all(client):
     """Test extended downloadable models have capabilities"""
     print("\n2. Testing /api/models/downloadable?category=all")
     print("-" * 50)
 
-    response = requests.get(f"{BASE_URL}/api/models/downloadable?category=all", timeout=5)
+    response = client.get("/api/models/downloadable?category=all")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
-    data = response.json()
+    data = response.get_json()
     models = data.get('models', [])
 
     print(f"✓ Found {len(models)} models")
@@ -61,15 +68,15 @@ def test_downloadable_models_all():
 
     # Test assertions above will raise on failure; no return value needed
 
-def test_available_models():
+def test_available_models(client):
     """Test available models endpoint adds capabilities"""
     print("\n3. Testing /api/models/available")
     print("-" * 50)
 
-    response = requests.get(f"{BASE_URL}/api/models/available", timeout=5)
+    response = client.get("/api/models/available")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
-    data = response.json()
+    data = response.get_json()
     models = data.get('models', [])
 
     if len(models) == 0:
@@ -94,15 +101,15 @@ def test_available_models():
 
     # Test assertions above will raise on failure; no return value needed
 
-def test_running_models():
+def test_running_models(client):
     """Test running models endpoint adds capabilities"""
     print("\n4. Testing /api/models/running")
     print("-" * 50)
 
-    response = requests.get(f"{BASE_URL}/api/models/running", timeout=5)
+    response = client.get("/api/models/running")
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
-    data = response.json()
+    data = response.get_json()
 
     if isinstance(data, dict):
         models = data.get('models', [])

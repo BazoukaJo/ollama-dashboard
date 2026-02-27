@@ -1122,6 +1122,12 @@ function updateRunningModelsDisplay(models) {
   );
   if (!runningModelsContainer) return;
 
+  // Update the count display
+  const countEl = document.getElementById("runningModelsCount");
+  if (countEl) {
+    countEl.textContent = models.length;
+  }
+
   // Get current model names from DOM
   const currentCards = runningModelsContainer.querySelectorAll(".model-card");
   const currentModelNames = Array.from(currentCards)
@@ -1224,8 +1230,28 @@ function updateRunningModelsDisplay(models) {
           err,
         );
       }
+
+      // Update Live Metrics: GPU Allocation and Context
+      try {
+        const gpuEl = modelCard.querySelector(`[id^="model-gpu-"]`);
+        const contextEl = modelCard.querySelector(`[id^="model-context-"]`);
+
+        if (gpuEl && model.size_vram !== undefined && model.size > 0) {
+          const vramPercent = ((model.size_vram / model.size) * 100).toFixed(1);
+          const vramFormatted = model.formatted_size_vram || "0 B";
+          gpuEl.textContent = `${vramPercent}% (${vramFormatted})`;
+        }
+
+        if (contextEl && model.context_length !== undefined) {
+          contextEl.textContent = model.context_length || "Unknown";
+        }
+      } catch (err) {
+        console.log("Failed to update live metrics for", model.name, err);
+      }
     }
   });
+  // Re-apply filters after update
+  applyCapabilityFilters("runningModelsContainer");
 }
 
 function updateAvailableModelsDisplay(models) {
@@ -1289,6 +1315,7 @@ function updateAvailableModelsDisplay(models) {
         }
       }
     });
+    applyCapabilityFilters("availableModelsContainer");
   } catch (err) {
     console.log("Failed to update capability icons for available models", err);
   }
@@ -1302,63 +1329,8 @@ function updateVersionDisplay(version) {
 }
 
 function updateModelMemoryDisplay(memoryData) {
-  if (!memoryData || !memoryData.models) return;
-
-  // Update each model's memory usage display
-  memoryData.models.forEach((model, index) => {
-    const ramEl = document.getElementById(`model-ram-${index + 1}`);
-    const vramEl = document.getElementById(`model-vram-${index + 1}`);
-
-    if (ramEl) {
-      // Since Ollama doesn't provide per-model RAM usage, show system RAM usage
-      const systemRam = memoryData.system_ram;
-      if (systemRam && systemRam.total > 0) {
-        const usedGB = (systemRam.used / 1024 ** 3).toFixed(1);
-        const totalGB = (systemRam.total / 1024 ** 3).toFixed(1);
-        ramEl.textContent = `${usedGB}GB / ${totalGB}GB`;
-      } else {
-        ramEl.textContent = "N/A";
-      }
-    }
-
-    if (vramEl) {
-      // Since Ollama doesn't provide per-model VRAM usage, show system VRAM usage
-      const systemVram = memoryData.system_vram;
-      if (systemVram && systemVram.total > 0) {
-        const usedGB = (systemVram.used / 1024 ** 3).toFixed(1);
-        const totalGB = (systemVram.total / 1024 ** 3).toFixed(1);
-        vramEl.textContent = `${usedGB}GB / ${totalGB}GB`;
-      } else {
-        vramEl.textContent = "No GPU";
-      }
-    }
-  });
-
-  // Update available model placeholders with system-wide usage
-  const systemRam = memoryData.system_ram;
-  const systemVram = memoryData.system_vram;
-  if (systemRam && systemRam.total > 0) {
-    const usedGB = (systemRam.used / 1024 ** 3).toFixed(1);
-    const totalGB = (systemRam.total / 1024 ** 3).toFixed(1);
-    document.querySelectorAll('[id^="available-ram-"]').forEach((el) => {
-      el.textContent = `${usedGB}GB / ${totalGB}GB`;
-    });
-  } else {
-    document.querySelectorAll('[id^="available-ram-"]').forEach((el) => {
-      el.textContent = "N/A";
-    });
-  }
-  if (systemVram && systemVram.total > 0) {
-    const usedGB = (systemVram.used / 1024 ** 3).toFixed(1);
-    const totalGB = (systemVram.total / 1024 ** 3).toFixed(1);
-    document.querySelectorAll('[id^="available-vram-"]').forEach((el) => {
-      el.textContent = `${usedGB}GB / ${totalGB}GB`;
-    });
-  } else {
-    document.querySelectorAll('[id^="available-vram-"]').forEach((el) => {
-      el.textContent = "No GPU";
-    });
-  }
+  // Logic removed as redundant system info was removed from model cards.
+  // System-wide stats are already handled by updateSystemStats().
 }
 
 // Service management functions moved to serviceControl.js
@@ -1467,6 +1439,9 @@ function renderExtendedModels(models, container) {
         : `<!-- modelCards module missing -->`,
     )
     .join("");
+
+  // Apply current filters to the newly rendered models
+  applyCapabilityFilters("extendedModelsContainer");
 }
 
 async function toggleExtendedModels() {
@@ -1533,6 +1508,9 @@ function renderDownloadableModels(models) {
         : `<!-- modelCards module missing -->`,
     )
     .join("");
+
+  // Apply current filters to the newly rendered models
+  applyCapabilityFilters("downloadableModelsContainer");
 }
 
 async function pullModel(modelName) {
@@ -1689,3 +1667,76 @@ async function pullModel(modelName) {
     }
   }
 }
+
+// Capability filtering logic
+function toggleCapabilityFilter(capability) {
+  // Toggle globally for ALL containers
+  const filterBtns = document.querySelectorAll(
+    `.filter-btn[data-capability="${capability}"]`,
+  );
+
+  filterBtns.forEach((btn) => {
+    btn.classList.toggle("active");
+  });
+
+  // Apply filters to ALL containers
+  applyCapabilityFilters("runningModelsContainer");
+  applyCapabilityFilters("availableModelsContainer");
+  applyCapabilityFilters("downloadableModelsContainer");
+  applyCapabilityFilters("extendedModelsContainer");
+}
+
+function applyCapabilityFilters(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  // Use the state of any visible filter button (only one section shows filters)
+  const firstReasoningBtn = document.querySelector(
+    `.filter-btn[data-capability="reasoning"]`,
+  );
+  const firstVisionBtn = document.querySelector(
+    `.filter-btn[data-capability="vision"]`,
+  );
+  const firstToolsBtn = document.querySelector(
+    `.filter-btn[data-capability="tools"]`,
+  );
+
+  const reasoningActive =
+    firstReasoningBtn?.classList.contains("active") ?? true;
+  const visionActive = firstVisionBtn?.classList.contains("active") ?? true;
+  const toolsActive = firstToolsBtn?.classList.contains("active") ?? true;
+
+  // If all filters are active, show all models
+  if (reasoningActive && visionActive && toolsActive) {
+    const cards = container.querySelectorAll(".model-card");
+    cards.forEach((card) => {
+      const column = card.closest(".col-md-6, .col-lg-4, .col-12");
+      if (column) column.style.display = "";
+    });
+    return;
+  }
+
+  // Otherwise, filter by selected capabilities
+  const cards = container.querySelectorAll(".model-card");
+  cards.forEach((card) => {
+    const caps = card.querySelectorAll(".capability-icon");
+    if (caps.length >= 3) {
+      const hasReasoning = caps[0].classList.contains("enabled");
+      const hasVision = caps[1].classList.contains("enabled");
+      const hasTools = caps[2].classList.contains("enabled");
+
+      let shouldShow = true;
+      if (hasReasoning && !reasoningActive) shouldShow = false;
+      if (hasVision && !visionActive) shouldShow = false;
+      if (hasTools && !toolsActive) shouldShow = false;
+
+      const column = card.closest(".col-md-6, .col-lg-4, .col-12");
+      if (column) {
+        column.style.display = shouldShow ? "" : "none";
+      }
+    }
+  });
+}
+
+// Global exposure
+window.toggleCapabilityFilter = toggleCapabilityFilter;

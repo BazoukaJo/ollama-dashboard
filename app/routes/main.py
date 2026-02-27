@@ -1145,13 +1145,18 @@ def admin_model_defaults():
 # Global /api/settings endpoint removed (legacy global settings deprecated).
 
 
+_bp_registered = False
+
 def init_app(app):
     """Initialize the blueprint with the app."""
+    global _bp_registered
     ollama_service.init_app(app)
-    from app.routes.monitoring import create_monitoring_endpoints
-    create_monitoring_endpoints(bp, ollama_service)
-    from app.routes.observability import create_observability_endpoints
-    create_observability_endpoints(bp, ollama_service)
+    if not _bp_registered:
+        from app.routes.monitoring import create_monitoring_endpoints
+        create_monitoring_endpoints(bp, ollama_service)
+        from app.routes.observability import create_observability_endpoints
+        create_observability_endpoints(bp, ollama_service)
+        _bp_registered = True
     # Template filters (`datetime` and `time_ago`) are registered in app factory via app.__init__.
     # Avoid duplicate registration here to prevent platform-specific filter overrides.
     app.register_blueprint(bp)

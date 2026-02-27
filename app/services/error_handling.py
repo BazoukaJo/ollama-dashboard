@@ -19,6 +19,7 @@ class TransientErrorDetector:
         'timed out',
         'econnreset',
         'econnrefused',
+        'connection refused',
         'econnaborted',
         'enetdown',
         'enetunreach',

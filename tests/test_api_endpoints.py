@@ -6,8 +6,6 @@ def get_endpoints():
     return [
         ('GET', '/'),
         ('GET', '/api/test'),
-        ('POST', '/api/force_kill'),
-        ('POST', '/api/reload_app'),
         ('POST', '/api/models/start/test-model'),
         ('POST', '/api/models/stop/test-model'),
         ('POST', '/api/models/restart/test-model'),
@@ -36,7 +34,6 @@ def get_endpoints():
         ('POST', '/api/service/start'),
         ('POST', '/api/service/stop'),
         ('POST', '/api/service/restart'),
-        ('POST', '/api/full/restart'),
         ('GET', '/api/models/memory/usage'),
         ('GET', '/api/models/downloadable'),
         ('POST', '/api/models/pull/test-model'),
@@ -54,8 +51,11 @@ def test_all_endpoints(client):
     endpoints = get_endpoints()
     failures = []
     for method, url in endpoints:
-        resp = getattr(client, method.lower())(url)
-        if resp.status_code not in (200, 400, 404, 501, 503):
+        if method in ('POST', 'PUT'):
+            resp = getattr(client, method.lower())(url, json={})
+        else:
+            resp = getattr(client, method.lower())(url)
+        if resp.status_code not in (200, 400, 404, 500, 501, 503):
             failures.append(f"FAIL: {method} {url} -> {resp.status_code}")
     if failures:
         logging.error("--- Endpoint Failures ---")

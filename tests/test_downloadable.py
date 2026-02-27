@@ -1,15 +1,21 @@
-import traceback
-from app import create_app
-from app.routes.main import ollama_service
+"""Test downloadable models endpoint."""
 
-app = create_app()
-ollama_service.init_app(app)
+import pytest
 
-with app.app_context():
-    try:
-        models = ollama_service.get_downloadable_models('best')
-        print(f"Success! Got {len(models)} models")
-        print(f"First model: {models[0]}")
-    except Exception as e:
-        print(f"Error: {e}")
-        traceback.print_exc()
+
+@pytest.fixture(scope="module")
+def app():
+    from app import create_app
+    app = create_app()
+    app.config['TESTING'] = True
+    return app
+
+
+def test_get_downloadable_models_best(app):
+    """get_downloadable_models('best') should return a non-empty list."""
+    with app.app_context():
+        service = app.config['OLLAMA_SERVICE']
+        models = service.get_downloadable_models('best')
+        assert isinstance(models, list)
+        assert len(models) > 0
+        assert 'name' in models[0]

@@ -344,7 +344,10 @@ python -m pytest tests/test_start_model_pytest.py::test_start_model_success -q
 python -m pytest --cov=app --cov-report=html
 open htmlcov/index.html
 
-# UI testing (Playwright)
+# Visual layout tests (no browser; catches HTML/CSS regressions)
+python -m pytest tests/test_visual_layout.py -v
+
+# UI testing (Playwright; requires: pip install pytest-playwright && playwright install)
 python -m pytest tests/test_ui_playwright.py -q
 ```
 
