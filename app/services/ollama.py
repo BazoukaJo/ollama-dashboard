@@ -15,7 +15,6 @@ Key Improvements:
 """
 
 import os
-import atexit
 import logging
 from typing import Dict, Any, Optional
 
@@ -79,9 +78,9 @@ class OllamaService(
         logger.info("  ✓ Performance monitoring (timing, success rates)")
         logger.info("  ✓ Rate limiting (3 configurable operation types)")
         logger.info("  ✓ Health component tracking")
-
-        # Register graceful shutdown handler
-        atexit.register(self._shutdown_handler)
+        # Note: atexit cleanup is registered once by OllamaServiceCore.init_app() via
+        # self._cleanup.  A second handler here would double-join the background thread
+        # and double-close the session on process exit.
 
     def is_transient_error(self, error_text: str) -> bool:
         """Check if error is transient and warrants retry.

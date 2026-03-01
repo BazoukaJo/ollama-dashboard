@@ -31,10 +31,14 @@ def test_health_endpoint_structure(app_client):
     assert isinstance(data['cache_age_seconds'], dict)
     assert isinstance(data['stale_flags'], dict)
 
-    # Expected cache age keys
-    expected_age_keys = {'system_stats','running_models','available_models','ollama_version'}
+    # Expected cache age keys — running_models is intentionally excluded because it is
+    # fetched on-demand (force_refresh=True) rather than by the background thread,
+    # so tracking its TTL would produce a permanent false-positive "stale" flag.
+    expected_age_keys = {'system_stats', 'available_models', 'ollama_version'}
     assert expected_age_keys.issubset(set(data['cache_age_seconds'].keys()))
     assert expected_age_keys.issubset(set(data['stale_flags'].keys()))
+    # running_models must NOT appear in the stale_flags to avoid false-positive degraded status
+    assert 'running_models' not in data['stale_flags']
 
     # Ages should be None or non-negative numbers
     for _, value in data['cache_age_seconds'].items():

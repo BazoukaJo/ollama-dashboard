@@ -7,6 +7,7 @@ Single initialization point - ensures no duplicate service creation.
 import os
 import sys
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from flask import Flask
 from flask_cors import CORS
@@ -34,6 +35,9 @@ def create_app(config_name='development'):
         static_url_path='/static',
         template_folder='templates'
     )
+
+    # Record exact startup time so get_component_health() can report accurate uptime
+    app.config['START_TIME'] = datetime.now(timezone.utc)
 
     # ===== CONFIGURATION =====
     app.config['DEBUG'] = config_name == 'development'

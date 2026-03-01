@@ -268,14 +268,10 @@ class OllamaServiceCore:
                             self.logger.exception("Background version collection error: %s", e)
                             self._last_background_error = self._sanitize_error_message(e)
                         self._model_update_counter = 0
-                self._consecutive_ps_failures = 0  # Reset on successful cycle
             except Exception as e:
                 self.logger.exception("Background updates error: %s", e)
                 self._last_background_error = self._sanitize_error_message(e)
-            base_interval = 1
-            backoff_multiplier = 2 ** min(4, self._consecutive_ps_failures) if self._consecutive_ps_failures > 0 else 1
-            sleep_seconds = base_interval * backoff_multiplier
-            self._stop_background.wait(sleep_seconds)
+            self._stop_background.wait(1)
 
     # Simple cache helpers restored after refactor corruption
     def _get_cached(self, key, ttl_seconds):
@@ -363,7 +359,8 @@ class OllamaServiceCore:
         stale = {}
         ttl_map = {
             'system_stats': 5,
-            'running_models': 5,
+            # running_models is fetched on-demand (force_refresh) by the route, never by
+            # the background thread, so it must not be treated as stale passively.
             'available_models': 60,
             'ollama_version': 300
         }

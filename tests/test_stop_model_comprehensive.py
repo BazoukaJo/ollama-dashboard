@@ -1,120 +1,124 @@
-#!/usr/bin/env python3
-"""Test script to verify the stop_model fix works correctly."""
+"""Comprehensive tests for the stop_model endpoint.
 
+All tests are fully mocked — no live Ollama server is required.
+"""
 import pytest
-import requests
-import json
-import time
+from unittest.mock import patch, MagicMock
 from app import create_app
 
-def test_stop_model_comprehensive():
-    """Test the stop_model endpoint with a complete flow."""
-    # Create app and test client
+
+@pytest.fixture(scope="module")
+def client():
     app = create_app()
-    client = app.test_client()
+    with app.test_client() as c:
+        yield c
 
-    print("=" * 60)
-    print("Testing Model Stop Functionality (Comprehensive)")
-    print("=" * 60)
 
-    # 1. Get available models
-    print("\n1. Checking available models...")
-    response = client.get('/api/models/available')
-    data = response.get_json()
-    available_models = data.get('models', []) if isinstance(data, dict) else data
-    print(f"   Available models count: {len(available_models) if isinstance(available_models, list) else 'N/A'}")
+# ---------------------------------------------------------------------------
+# Success path
+# ---------------------------------------------------------------------------
 
-    if not available_models or len(available_models) == 0:
-        pytest.skip("No available models - cannot run stop test")
+@patch('app.routes.main.requests.post')
+@patch('app.routes.main._verify_model_unloaded')
+@patch('app.routes.main.ollama_service.get_running_models')
+@patch('app.routes.main.ollama_service.get_service_status')
+def test_stop_model_success(mock_status, mock_running, mock_verify, mock_post, client):
+    """Stopping a running model returns 200 with success=True."""
+    mock_status.return_value = True
+    mock_running.return_value = [{'name': 'llama2:latest'}]
+    mock_post.return_value = MagicMock(status_code=200, text='ok')
+    mock_verify.return_value = True
 
-    model_name = available_models[0]['name'] if isinstance(available_models, list) else None
-    print(f"   Selected model for testing: {model_name}")
+    resp = client.post('/api/models/stop/llama2:latest')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['success'] is True
+    assert 'stopped' in data['message'].lower()
 
-    # 2. Start the model
-    print(f"\n2. Starting model '{model_name}'...")
-    response = client.post(f'/api/models/start/{model_name}')
-    start_result = response.get_json()
-    print(f"   Response: {json.dumps(start_result, indent=2)}")
-    print(f"   Status Code: {response.status_code}")
 
-    if not start_result.get('success'):
-        pytest.skip(f"Could not start model: {start_result.get('message')}")
+# ---------------------------------------------------------------------------
+# Guard rails
+# ---------------------------------------------------------------------------
 
-    # 3. Wait for model to load
-    print("\n3. Waiting for model to load...")
-    time.sleep(3)
+@patch('app.routes.main.ollama_service.get_service_status')
+def test_stop_model_service_not_running(mock_status, client):
+    """Returns 503 when Ollama service is stopped."""
+    mock_status.return_value = False
+    resp = client.post('/api/models/stop/llama2:latest')
+    assert resp.status_code == 503
+    data = resp.get_json()
+    assert data['success'] is False
 
-    # 4. Check running models
-    print("\n4. Checking running models after start...")
-    response = client.get('/api/models/running')
-    data = response.get_json()
-    running_models_before = data if isinstance(data, list) else data.get('models', [])
-    print(f"   Running models: {[m.get('name') for m in running_models_before]}")
 
-    model_is_running = any(m.get('name') == model_name for m in running_models_before)
-    if not model_is_running:
-        pytest.skip(f"Model '{model_name}' is not running after start")
+@patch('app.routes.main.ollama_service.get_running_models')
+@patch('app.routes.main.ollama_service.get_service_status')
+def test_stop_model_not_running(mock_status, mock_running, client):
+    """Returns 400 when the model is not currently running."""
+    mock_status.return_value = True
+    mock_running.return_value = []  # model is not loaded
 
-    # 5. Get system stats before stop
-    print("\n5. Getting system stats before stop...")
-    response = client.get('/api/system/stats')
-    stats_before = response.get_json()
-    memory_before = stats_before.get('memory', {}).get('used', 0) if stats_before else 0
-    vram_before = stats_before.get('vram', {}).get('used', 0) if stats_before else 0
-    print(f"   Memory used: {memory_before / (1024**3):.2f} GB")
-    print(f"   VRAM used: {vram_before / (1024**3):.2f} GB")
+    resp = client.post('/api/models/stop/llama2:latest')
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data['success'] is False
 
-    # 6. Test stop_model endpoint
-    print(f"\n6. Stopping model '{model_name}'...")
-    response = client.post(f'/api/models/stop/{model_name}')
-    result = response.get_json()
-    print(f"   Response: {json.dumps(result, indent=2)}")
-    print(f"   Status Code: {response.status_code}")
 
-    assert result.get('success'), f"Failed to stop model: {result.get('message')}"
+# ---------------------------------------------------------------------------
+# Ollama API error handling
+# ---------------------------------------------------------------------------
 
-    # 7. Wait for model to unload
-    print("\n7. Waiting for model to unload...")
-    time.sleep(2)
+@patch('app.routes.main.requests.post')
+@patch('app.routes.main.ollama_service.get_running_models')
+@patch('app.routes.main.ollama_service.get_service_status')
+def test_stop_model_ollama_404(mock_status, mock_running, mock_post, client):
+    """Returns 404 when Ollama says the model does not exist."""
+    mock_status.return_value = True
+    mock_running.return_value = [{'name': 'ghost-model:latest'}]
+    mock_post.return_value = MagicMock(status_code=404, text='not found')
 
-    # 8. Check running models again
-    print("\n8. Checking running models after stop...")
-    response = client.get('/api/models/running')
-    data = response.get_json()
-    running_models_after = data if isinstance(data, list) else data.get('models', [])
-    print(f"   Running models: {[m.get('name') for m in running_models_after]}")
+    resp = client.post('/api/models/stop/ghost-model:latest')
+    assert resp.status_code == 404
+    data = resp.get_json()
+    assert data['success'] is False
 
-    model_still_running = any(m.get('name') == model_name for m in running_models_after)
 
-    # 9. Get system stats after stop
-    print("\n9. Getting system stats after stop...")
-    response = client.get('/api/system/stats')
-    stats_after = response.get_json()
-    memory_after = stats_after.get('memory', {}).get('used', 0) if stats_after else 0
-    vram_after = stats_after.get('vram', {}).get('used', 0) if stats_after else 0
-    print(f"   Memory used: {memory_after / (1024**3):.2f} GB")
-    print(f"   VRAM used: {vram_after / (1024**3):.2f} GB")
+@patch('app.routes.main.requests.post')
+@patch('app.routes.main.ollama_service.get_running_models')
+@patch('app.routes.main.ollama_service.get_service_status')
+def test_stop_model_ollama_500(mock_status, mock_running, mock_post, client):
+    """Returns the Ollama error status when the unload call fails."""
+    mock_status.return_value = True
+    mock_running.return_value = [{'name': 'llama2:latest'}]
+    mock_post.return_value = MagicMock(
+        status_code=500,
+        text='internal server error',
+        json=MagicMock(return_value={'error': 'internal server error'}),
+    )
 
-    memory_freed = memory_before - memory_after
-    vram_freed = vram_before - vram_after
-    print(f"\n   Memory freed: {memory_freed / (1024**3):.2f} GB")
-    print(f"   VRAM freed: {vram_freed / (1024**3):.2f} GB")
+    resp = client.post('/api/models/stop/llama2:latest')
+    assert resp.status_code == 500
+    data = resp.get_json()
+    assert data['success'] is False
 
-    # 10. Final verdict
-    print("\n" + "=" * 60)
-    assert not model_still_running, f"Model '{model_name}' is still in running list after stop"
-    print(f"✅ SUCCESS: Model '{model_name}' was successfully unloaded!")
-    print(f"   - Model removed from running list")
-    if memory_freed > 0:
-        print(f"   - Memory freed: {memory_freed / (1024**3):.2f} GB")
-    if vram_freed > 0:
-        print(f"   - VRAM freed: {vram_freed / (1024**3):.2f} GB")
 
-if __name__ == '__main__':
-    try:
-        test_stop_model_comprehensive()
-        print("=" * 60)
-    except Exception as e:
-        print(f"\n❌ Test ERROR: {str(e)}")
-        import traceback
-        traceback.print_exc()
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+
+def test_stop_model_invalid_name(client):
+    """Returns 400 for a model name that exceeds the 255-char limit."""
+    # Use 256 'a' chars — passes URL routing but fails InputValidator's length check
+    long_name = 'a' * 256
+    resp = client.post(f'/api/models/stop/{long_name}')
+    assert resp.status_code == 400
+    data = resp.get_json()
+    assert data['success'] is False
+
+
+# ---------------------------------------------------------------------------
+# Backward-compat stub for external references
+# ---------------------------------------------------------------------------
+
+def test_stop_model_comprehensive():
+    """Backward-compat entry point — kept as a no-op stub.
+    The real coverage lives in the parameterised test functions above."""

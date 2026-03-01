@@ -146,7 +146,8 @@ def _verify_model_unloaded(model_name, max_attempts=5, delay_seconds=1):
     """Poll /api/ps to confirm model is no longer loaded. Returns True when verified gone."""
     for _ in range(max_attempts):
         try:
-            resp = requests.get(_get_ollama_url("ps"), timeout=5)
+            # Use the shared session from the service to honour connection pooling
+            resp = _get_ollama_service()._session.get(_get_ollama_url("ps"), timeout=5)
             if resp.status_code == 200:
                 data = resp.json()
                 models = data.get("models", [])
@@ -524,7 +525,7 @@ def get_model_info(model_name):
     if err is not None:
         return err, status
     try:
-        response = requests.post(
+        response = _get_ollama_service()._session.post(
             _get_ollama_url("show"),
             json={"name": model_name},
             timeout=10
@@ -687,18 +688,24 @@ def get_ollama_version():
 def bulk_start_models():
     """Start multiple models in bulk."""
     try:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         model_names = data.get('models', [])
         if not isinstance(model_names, list):
             model_names = []
         results = []
+        svc = _get_ollama_service()
 
         for model_name in model_names:
+            # Validate each model name individually
+            is_valid, msg = InputValidator.validate_model_name(model_name)
+            if not is_valid:
+                results.append({"model": model_name, "success": False, "error": msg})
+                continue
             try:
-                response = requests.post(
+                response = svc._session.post(
                     _get_ollama_url("generate"),
-                    json={"model": model_name, "prompt": "Hello", "stream": False},
-                    timeout=10
+                    json={"model": model_name, "prompt": "Hello", "stream": False, "keep_alive": "24h"},
+                    timeout=60
                 )
                 results.append({
                     "model": model_name,
@@ -708,6 +715,8 @@ def bulk_start_models():
             except Exception as e:
                 results.append({"model": model_name, "success": False, "error": str(e)})
 
+        # Invalidate the running-models cache so next GET /api/models/running reflects reality
+        svc.clear_cache('running_models')
         return {"results": results}
     except Exception as e:
         return {"error": str(e)}, 500
@@ -754,7 +763,7 @@ def chat():
         chat_data["options"] = options
 
         try:
-            response = requests.post(
+            response = _get_ollama_service()._session.post(
                 _get_ollama_url("generate"),
                 json=chat_data,
                 timeout=120,
@@ -810,8 +819,8 @@ def delete_model(model_name):
 
 @bp.route('/metrics', methods=['GET'])
 def prometheus_metrics():
-    """Prometheus metrics endpoint removed."""
-    return "# Prometheus metrics disabled", 200, {'Content-Type': 'text/plain; charset=utf-8'}
+    """Prometheus metrics are not implemented."""
+    return jsonify({"error": "Prometheus metrics are not enabled"}), 501
 
 @bp.route('/ping', methods=['GET'])
 def ping():
@@ -1022,29 +1031,24 @@ def test_models_debug():
 
 @bp.route('/admin/model-defaults')
 def admin_model_defaults():
-    try:
-        return render_template('admin_model_defaults.html')
-    except Exception:
-        return render_template('admin_model_defaults.html')
+    return render_template('admin_model_defaults.html')
 
 
 # Global /api/settings endpoint removed (legacy global settings deprecated).
 
 
-_bp_registered = False
-
 def init_app(app):
     """Initialize the blueprint with the app."""
-    global _bp_registered, ollama_service
+    global ollama_service
     svc = app.config['OLLAMA_SERVICE']
     ollama_service = svc  # For test compatibility (tests patch app.routes.main.ollama_service)
-    svc.init_app(app)
-    if not _bp_registered:
+    # init_app() is the canonical place to call OllamaService.init_app(); do not duplicate it here.
+    # Monitoring endpoints are stored on the blueprint object so they are only registered once
+    # even when create_app() is called multiple times (e.g. in tests).
+    if not getattr(bp, '_monitoring_registered', False):
         from app.routes.monitoring import create_monitoring_endpoints
         create_monitoring_endpoints(bp, svc)
-        from app.routes.observability import create_observability_endpoints
-        create_observability_endpoints(bp, svc)
-        _bp_registered = True
+        bp._monitoring_registered = True
     # Template filters (`datetime` and `time_ago`) are registered in app factory via app.__init__.
     # Avoid duplicate registration here to prevent platform-specific filter overrides.
     app.register_blueprint(bp)

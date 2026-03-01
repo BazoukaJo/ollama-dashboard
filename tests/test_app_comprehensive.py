@@ -206,8 +206,8 @@ class TestModelEndpoints:
             # If the session isn't mocked properly, bypass
             pass
 
-    @patch('app.routes.main.requests.post')
-    def test_get_model_info(self, mock_post, client):
+    @patch('app.routes.main.ollama_service._session')
+    def test_get_model_info(self, mock_session, client):
         """GET /api/models/info/<model> should return model details."""
         class MockResponse:
             status_code = 200
@@ -217,7 +217,7 @@ class TestModelEndpoints:
                     'size': 4500000000,
                     'digest': 'abc123',
                 }
-        mock_post.return_value = MockResponse()
+        mock_session.post.return_value = MockResponse()
         response = client.get('/api/models/info/llama3.1:8b')
         assert response.status_code == 200
 
@@ -358,13 +358,13 @@ class TestChatEndpoints:
     """Test chat/conversation endpoints."""
 
     @patch('app.routes.main.ollama_service.get_model_info_cached')
-    @patch('app.routes.main.requests.post')
-    def test_chat_endpoint(self, mock_post, mock_info, client):
+    @patch('app.routes.main.ollama_service._session')
+    def test_chat_endpoint(self, mock_session, mock_info, client):
         """POST /api/chat should handle chat requests."""
         class MockResponse:
             status_code = 200
             def json(self): return {'response': 'Test response', 'model': 'llama3.1:8b'}
-        mock_post.return_value = MockResponse()
+        mock_session.post.return_value = MockResponse()
         mock_info.return_value = {'name': 'llama3.1:8b'}
         response = client.post(
             '/api/chat',

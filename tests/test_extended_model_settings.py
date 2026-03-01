@@ -84,7 +84,8 @@ def test_chat_includes_advanced_keys(tmp_path):
         called['json'] = json
         return FakeResponse()
 
-    with patch('app.routes.main.requests.post', side_effect=fake_post):
+    with patch('app.routes.main.ollama_service._session') as mock_session:
+        mock_session.post.side_effect = fake_post
         with patch('app.routes.main.ollama_service.get_model_info_cached', return_value={'name':'chat-model'}):
             resp = client.post('/api/chat', json={'model': 'chat-model', 'prompt': 'Hello'})
     assert resp.status_code == 200
