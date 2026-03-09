@@ -1048,10 +1048,6 @@ function updateRunningModelsDisplay(models) {
       typeof escapeHtml === "function" ? escapeHtml(String(name)) : String(name);
 
     const hasCustom = !!model?.has_custom_settings;
-    const activityState =
-      typeof model?.activity_state === "string"
-        ? model.activity_state
-        : "running";
     const details = model?.details || {};
     const family = details?.family || "Unknown";
     const parameterSize =
@@ -1099,9 +1095,7 @@ function updateRunningModelsDisplay(models) {
             </div>
             <div class="model-meta">
               <span class="status-indicator running">
-                <i class="fas fa-circle"></i>${
-                  activityState === "loaded" ? "Loaded" : "Running"
-                }
+                <i class="fas fa-circle"></i>Loaded
               </span>
             </div>
           </div>
@@ -1717,11 +1711,11 @@ async function updateCombinedModelStates() {
 
         let label = "";
         if (statusEl.classList.contains("running")) {
-          // Running section: always running; optionally clarify install state
-          label = isAvail ? "Running (installed)" : "Running (ephemeral)";
+          // Running section: models are loaded in Ollama memory
+          label = isAvail ? "Loaded (installed)" : "Loaded (ephemeral)";
         } else if (statusEl.classList.contains("available")) {
           if (isRunning) {
-            label = "Available · Running";
+            label = "Available · Loaded";
           } else if (isAvail) {
             label = "Available";
           } else {

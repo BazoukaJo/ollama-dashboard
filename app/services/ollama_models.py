@@ -315,48 +315,6 @@ class OllamaServiceModels:
                 # Metadata enrichment is best-effort only
                 pass
 
-            # Capture previous running model names so we can detect newly
-            # appeared models and give them an initial "running" state.
-            previous = self._get_cached('running_models', ttl_seconds=3600) or []
-            previous_names = {
-                m.get('name') for m in previous if isinstance(m, dict) and m.get('name')
-            }
-            now = datetime.now()
-
-            # Derive activity_state for each running model:
-            # - "running": model has recent activity (chat/generate) or is newly appeared
-            # - "loaded": model is in memory but idle beyond the activity window
-            activity_window_seconds = 30
-            for entry in current_models:
-                name = entry.get('name')
-                if not name:
-                    continue
-                # If this is a newly seen running model, treat it as active now
-                if name not in previous_names and hasattr(self._ollama_core, "record_model_activity"):
-                    try:
-                        self._ollama_core.record_model_activity(name)
-                    except Exception:
-                        pass
-                last_ts = getattr(self._ollama_core, "_model_last_activity", {}).get(name)
-                if last_ts is None:
-                    state = "loaded"
-                else:
-                    try:
-                        delta = (now - last_ts).total_seconds()
-                    except Exception:
-                        delta = activity_window_seconds + 1
-                    state = "running" if delta <= activity_window_seconds else "loaded"
-                entry["activity_state"] = state
-
-            # Prune stale entries from last-activity map so it doesn't grow unbounded
-            try:
-                current_names = {m.get("name") for m in current_models if isinstance(m, dict) and m.get("name")}
-                last_map = getattr(self._ollama_core, "_model_last_activity", {})
-                stale_names = [n for n in last_map.keys() if n not in current_names]
-                for n in stale_names:
-                    last_map.pop(n, None)
-            except Exception:
-                pass
             # Debug logging to help diagnose inconsistencies between running models and UI
             try:
                 if self.logger:

@@ -173,9 +173,8 @@
                                             <i class="fas fa-brain model-icon-main"></i>
                                         </div>
                                         <div class="model-meta">
-                                            {% set activity_state = model.activity_state if model.activity_state is defined else 'running' %}
                                             <span class="status-indicator running">
-                                                <i class="fas fa-circle"></i>{{ 'Loaded' if activity_state == 'loaded' else 'Running' }}
+                                                <i class="fas fa-circle"></i>Loaded
                                             </span>
                                         </div>
                                     </div>
