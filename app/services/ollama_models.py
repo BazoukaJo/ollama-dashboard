@@ -1,6 +1,7 @@
 """Model management functionality for OllamaService: model operations, info retrieval, and capabilities."""
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from typing import Any, Protocol, Tuple
 
 import requests
@@ -251,6 +252,18 @@ class OllamaServiceModels:
                 if m.get('name') in ctx_by_name:
                     m['context_length'] = ctx_by_name[m['name']]
 
+            # Debug logging to help diagnose mismatches between Ollama and UI
+            try:
+                if self.logger:
+                    self.logger.debug(
+                        "Available models fetched from Ollama: count=%d names=%s",
+                        len(normalized),
+                        [m.get('name') for m in normalized],
+                    )
+            except Exception:
+                # Logging must never break the main code path
+                pass
+
             self._set_cached('available_models', normalized)
             return normalized
         except Exception as exc:
@@ -273,6 +286,89 @@ class OllamaServiceModels:
             data = response.json()
             models = data.get('models', [])
             current_models = [self._format_running_model_entry(m) for m in models]
+
+            # Enrich running models with static metadata (family, parameter_size, etc.)
+            # from the available models list when possible, so UI fields like
+            # "Parameters" don't show as Unknown for running cards.
+            try:
+                available = self.get_available_models() or []
+                by_name = {
+                    m.get('name'): m for m in available
+                    if isinstance(m, dict) and m.get('name')
+                }
+                for entry in current_models:
+                    name = entry.get('name')
+                    if not name:
+                        continue
+                    src = by_name.get(name)
+                    if not isinstance(src, dict):
+                        continue
+                    src_details = src.get('details') or {}
+                    dst_details = entry.get('details') or {}
+                    # Prefer existing running-model details but fill missing fields
+                    if 'family' not in dst_details and 'family' in src_details:
+                        dst_details['family'] = src_details.get('family')
+                    if 'parameter_size' not in dst_details and 'parameter_size' in src_details:
+                        dst_details['parameter_size'] = src_details.get('parameter_size')
+                    entry['details'] = dst_details
+            except Exception:
+                # Metadata enrichment is best-effort only
+                pass
+
+            # Capture previous running model names so we can detect newly
+            # appeared models and give them an initial "running" state.
+            previous = self._get_cached('running_models', ttl_seconds=3600) or []
+            previous_names = {
+                m.get('name') for m in previous if isinstance(m, dict) and m.get('name')
+            }
+            now = datetime.now()
+
+            # Derive activity_state for each running model:
+            # - "running": model has recent activity (chat/generate) or is newly appeared
+            # - "loaded": model is in memory but idle beyond the activity window
+            activity_window_seconds = 30
+            for entry in current_models:
+                name = entry.get('name')
+                if not name:
+                    continue
+                # If this is a newly seen running model, treat it as active now
+                if name not in previous_names and hasattr(self._ollama_core, "record_model_activity"):
+                    try:
+                        self._ollama_core.record_model_activity(name)
+                    except Exception:
+                        pass
+                last_ts = getattr(self._ollama_core, "_model_last_activity", {}).get(name)
+                if last_ts is None:
+                    state = "loaded"
+                else:
+                    try:
+                        delta = (now - last_ts).total_seconds()
+                    except Exception:
+                        delta = activity_window_seconds + 1
+                    state = "running" if delta <= activity_window_seconds else "loaded"
+                entry["activity_state"] = state
+
+            # Prune stale entries from last-activity map so it doesn't grow unbounded
+            try:
+                current_names = {m.get("name") for m in current_models if isinstance(m, dict) and m.get("name")}
+                last_map = getattr(self._ollama_core, "_model_last_activity", {})
+                stale_names = [n for n in last_map.keys() if n not in current_names]
+                for n in stale_names:
+                    last_map.pop(n, None)
+            except Exception:
+                pass
+            # Debug logging to help diagnose inconsistencies between running models and UI
+            try:
+                if self.logger:
+                    self.logger.debug(
+                        "Running models fetched from Ollama: count=%d names=%s force_refresh=%s",
+                        len(current_models),
+                        [m.get('name') for m in current_models],
+                        force_refresh,
+                    )
+            except Exception:
+                # Logging must never break the main code path
+                pass
             self._set_cached('running_models', current_models)
             return current_models
         except requests.exceptions.ConnectionError as exc:

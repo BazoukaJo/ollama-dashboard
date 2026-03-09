@@ -2096,7 +2096,8 @@ body:not(.compact-mode) .models-management.mt-4 {
 
 body:not(.compact-mode) .models-management > div,
 body:not(.compact-mode) .models-management > div.mb-4 {
-  margin-bottom: 1rem !important;
+  /* Increase space *after* each cards list (between sections) */
+  margin-bottom: 1.25rem !important;
 }
 
 body:not(.compact-mode) .models-management > div:last-child {
@@ -2106,7 +2107,8 @@ body:not(.compact-mode) .models-management > div:last-child {
 body:not(.compact-mode) .models-management .d-flex.align-items-center.justify-content-between.mb-3,
 body:not(.compact-mode) .models-management .d-flex.align-items-center.gap-2.mb-3,
 body:not(.compact-mode) .models-management .d-flex.align-items-center.gap-2 {
-  margin-bottom: var(--space-section) !important;
+  /* Restore comfortable gap (20px) between section title and cards list */
+  margin-bottom: var(--space-lg) !important;
 }
 
 body:not(.compact-mode) #runningModelsContainer.row.g-3,

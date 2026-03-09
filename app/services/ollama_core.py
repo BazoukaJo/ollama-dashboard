@@ -107,6 +107,10 @@ class OllamaServiceCore:
         self._consecutive_ps_failures = 0
         self._last_background_error = None
         self._model_update_counter = 0
+        # Track last activity per model so we can distinguish
+        # between actively used models ("running") and models
+        # that are merely loaded in memory ("loaded").
+        self._model_last_activity = {}
         # Retry metrics for monitoring
         self._total_retry_attempts = 0
         self._successful_retries = 0
@@ -238,36 +242,54 @@ class OllamaServiceCore:
                 self._model_update_counter += 1
                 # Running models: fetched on-demand by API (force_refresh) for accuracy, not here
                 if self._model_update_counter >= 15:
-                        try:
+                    # Track whether this cycle successfully talked to Ollama;
+                    # if so, we clear any previous background error so /api/health
+                    # can recover after Ollama restarts.
+                    cycle_had_error = False
+                    host = None
+                    port = None
+                    try:
+                        host, port = self._get_ollama_host_port()
+                        tags_url = f"http://{host}:{port}/api/tags"
+                        response = self._session.get(tags_url, timeout=10)
+                        if response.status_code == 200:
+                            models = response.json().get('models', [])
+                            models = [self._normalize_available_model_entry(m) for m in models]  # In OllamaServiceModels
+                            with self._stats_lock:
+                                self._cache['available_models'] = models
+                                self._cache_timestamps['available_models'] = datetime.now()
+                        else:
+                            cycle_had_error = True
+                            self._last_background_error = f"tags status {response.status_code}"
+                    except Exception as e:
+                        cycle_had_error = True
+                        self.logger.exception("Background available models collection error: %s", e)
+                        self._last_background_error = self._sanitize_error_message(e)
+                    try:
+                        if host is None or port is None:
                             host, port = self._get_ollama_host_port()
-                            tags_url = f"http://{host}:{port}/api/tags"
-                            response = self._session.get(tags_url, timeout=10)
-                            if response.status_code == 200:
-                                models = response.json().get('models', [])
-                                models = [self._normalize_available_model_entry(m) for m in models]  # In OllamaServiceModels
-                                with self._stats_lock:
-                                    self._cache['available_models'] = models
-                                    self._cache_timestamps['available_models'] = datetime.now()
-                            else:
-                                self._last_background_error = f"tags status {response.status_code}"
-                        except Exception as e:
-                            self.logger.exception("Background available models collection error: %s", e)
-                            self._last_background_error = self._sanitize_error_message(e)
-                        try:
-                            version_url = f"http://{host}:{port}/api/version"
-                            response = self._session.get(version_url, timeout=5)
-                            if response.status_code == 200:
-                                data = response.json()
-                                version = data.get('version', 'Unknown')
-                                with self._stats_lock:
-                                    self._cache['ollama_version'] = version
-                                    self._cache_timestamps['ollama_version'] = datetime.now()
-                            else:
-                                self._last_background_error = f"version status {response.status_code}"
-                        except Exception as e:
-                            self.logger.exception("Background version collection error: %s", e)
-                            self._last_background_error = self._sanitize_error_message(e)
-                        self._model_update_counter = 0
+                        version_url = f"http://{host}:{port}/api/version"
+                        response = self._session.get(version_url, timeout=5)
+                        if response.status_code == 200:
+                            data = response.json()
+                            version = data.get('version', 'Unknown')
+                            with self._stats_lock:
+                                self._cache['ollama_version'] = version
+                                self._cache_timestamps['ollama_version'] = datetime.now()
+                        else:
+                            cycle_had_error = True
+                            self._last_background_error = f"version status {response.status_code}"
+                    except Exception as e:
+                        cycle_had_error = True
+                        self.logger.exception("Background version collection error: %s", e)
+                        self._last_background_error = self._sanitize_error_message(e)
+
+                    # If this cycle completed without any Ollama errors, clear any
+                    # previous background error so health can transition back to healthy.
+                    if not cycle_had_error:
+                        self._last_background_error = None
+
+                    self._model_update_counter = 0
             except Exception as e:
                 self.logger.exception("Background updates error: %s", e)
                 self._last_background_error = self._sanitize_error_message(e)
@@ -287,6 +309,20 @@ class OllamaServiceCore:
         """Cache a value with current timestamp."""
         self._cache[key] = value
         self._cache_timestamps[key] = datetime.now()
+
+    def record_model_activity(self, model_name):
+        """Record that a model had recent activity (chat/generate).
+
+        This is used to derive a higher-level activity_state for running
+        models: "running" (recent activity) vs "loaded" (idle in memory).
+        """
+        try:
+            if not model_name:
+                return
+            self._model_last_activity[model_name] = datetime.now()
+        except Exception:
+            # Activity tracking must never break core behavior
+            pass
 
     def _get_ollama_host_port(self):
         """Get Ollama host and port with proper fallbacks."""

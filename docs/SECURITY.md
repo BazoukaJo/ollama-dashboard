@@ -529,25 +529,6 @@ Please report security vulnerabilities responsibly:
 
 ---
 
-## Security Checklist for Production
-
-- [ ] Generate strong API keys (32-byte random)
-- [ ] Set `CORS_ORIGINS` to trusted domains only
-- [ ] Enable HTTPS with valid TLS certificate
-- [ ] Configure firewall rules (block direct port 5000)
-- [ ] Enable audit logging (`AUDIT_LOG_FILE`)
-- [ ] Set up log rotation
-- [ ] Run dependency vulnerability scan (`pip audit`)
-- [ ] Run static analysis (`bandit`, `pylint`, `mypy`)
-- [ ] Test authentication/authorization
-- [ ] Test rate limiting
-- [ ] Monitor logs regularly
-- [ ] Plan API key rotation schedule
-- [ ] Document incident response procedures
-- [ ] Regular security updates (monthly)
-
----
-
 ## Additional Resources
 
 - [OWASP Top 10](https://owasp.org/Top10/)

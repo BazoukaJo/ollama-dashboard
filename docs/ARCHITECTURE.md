@@ -410,32 +410,6 @@ Exported at `/metrics` endpoint:
 
 ---
 
-## Future Improvements
-
-1. **Async/Await (FastAPI)**
-   - Replace Flask with FastAPI
-   - Use asyncio instead of threads
-   - Non-blocking I/O throughout
-
-2. **Database Backend**
-   - MongoDB for settings (currently JSON)
-   - PostgreSQL for audit logs (currently file)
-   - Redis for distributed caching
-
-3. **Advanced Features**
-   - Multi-Ollama instance support
-   - Model versioning & rollback
-   - Scheduled model start/stop
-   - Advanced scheduling
-
-4. **Enterprise Features**
-   - Multi-tenant isolation
-   - SAML/OAuth authentication
-   - Fine-grained RBAC
-   - Compliance reporting
-
----
-
 ## Quick Reference
 
 ### Starting the App

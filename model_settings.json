@@ -44,7 +44,7 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-03-01T19:25:08.137098+00:00"
+    "last_updated": "2026-03-09T18:42:01.789361+00:00"
   },
   "gpt-oss:120b-cloud": {
     "settings": {
@@ -206,7 +206,7 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-03-01T19:25:08.136107+00:00"
+    "last_updated": "2026-03-09T18:42:01.786853+00:00"
   },
   "Qwen3-vl:latest": {
     "settings": {
@@ -413,7 +413,7 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-03-01T19:25:08.138615+00:00"
+    "last_updated": "2026-03-09T18:42:01.791874+00:00"
   },
   "glm-ocr:latest": {
     "settings": {
@@ -436,7 +436,7 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-03-01T19:25:08.140624+00:00"
+    "last_updated": "2026-03-09T18:42:01.796194+00:00"
   },
   "qwen3.5:27b": {
     "settings": {
@@ -459,7 +459,30 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-03-01T19:25:08.139633+00:00"
+    "last_updated": "2026-03-09T18:42:01.794380+00:00"
+  },
+  "qwen3.5:latest": {
+    "settings": {
+      "temperature": 0.65,
+      "top_k": 20,
+      "top_p": 0.9,
+      "num_ctx": 4096,
+      "seed": 0,
+      "num_predict": 320,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.1,
+      "presence_penalty": 0.0,
+      "frequency_penalty": 0.0,
+      "stop": [],
+      "min_p": 0.05,
+      "typical_p": 1.0,
+      "penalize_newline": false,
+      "mirostat": 0,
+      "mirostat_tau": 5.0,
+      "mirostat_eta": 0.1
+    },
+    "source": "recommended",
+    "last_updated": "2026-03-09T18:42:01.784297+00:00"
   },
   "test-model": {
     "settings": {
@@ -482,6 +505,6 @@
       "mirostat_eta": 0.1
     },
     "source": "recommended",
-    "last_updated": "2026-03-01T19:25:08.513897+00:00"
+    "last_updated": "2026-03-09T18:42:02.012432+00:00"
   }
 }

@@ -173,8 +173,9 @@
                                             <i class="fas fa-brain model-icon-main"></i>
                                         </div>
                                         <div class="model-meta">
+                                            {% set activity_state = model.activity_state if model.activity_state is defined else 'running' %}
                                             <span class="status-indicator running">
-                                                <i class="fas fa-circle"></i>Running
+                                                <i class="fas fa-circle"></i>{{ 'Loaded' if activity_state == 'loaded' else 'Running' }}
                                             </span>
                                         </div>
                                     </div>
@@ -211,7 +212,7 @@
                                                 </div>
                                                 <div class="spec-content">
                                                     <div class="spec-label">Parameters</div>
-                                                    <div class="spec-value">{{ model.parameter_size|default('Unknown') }}</div>
+                                                    <div class="spec-value">{{ model.details.parameter_size if model.details is defined and model.details.parameter_size is defined else 'Unknown' }}</div>
                                                 </div>
                                             </div>
                                         </div>

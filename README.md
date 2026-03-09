@@ -453,25 +453,6 @@ Contributions welcome! Please:
 
 ---
 
-## 🗺️ Roadmap
-
-- [x] Model management (CRUD)
-- [x] System monitoring (CPU, RAM, VRAM, disk)
-- [x] Chat interface with history
-- [x] Per-model settings persistence
-- [x] Enterprise security (auth, RBAC, audit logging)
-- [x] Comprehensive observability (metrics, logging, tracing)
-- [x] Kubernetes deployment ready
-- [ ] Async/FastAPI migration (Phase 3)
-- [ ] Multi-Ollama instance support
-- [ ] Model versioning & rollback
-- [ ] Scheduled model operations
-- [ ] Multi-tenant isolation
-- [ ] Advanced RBAC (fine-grained permissions)
-- [ ] SAML/OAuth authentication
-
----
-
 ## 🎉 Acknowledgments
 
 Built with ❤️ for the Ollama community.

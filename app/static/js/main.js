@@ -1009,6 +1009,15 @@ async function updateModelData() {
     console.log("Failed to update model memory usage:", error);
   }
 
+  // Update combined installed/running state badges (best-effort)
+  try {
+    if (typeof updateCombinedModelStates === "function") {
+      await updateCombinedModelStates();
+    }
+  } catch (error) {
+    console.log("Failed to update combined model states:", error);
+  }
+
   resetRefreshCountdown();
 }
 
@@ -1024,114 +1033,191 @@ function updateRunningModelsDisplay(models) {
     countEl.textContent = models.length;
   }
 
-  // Get current model names from DOM
-  const currentCards = runningModelsContainer.querySelectorAll(".model-card");
-  const currentModelNames = Array.from(currentCards)
-    .map((card) =>
-      card.dataset && card.dataset.modelName
-        ? card.dataset.modelName.trim()
-        : "",
-    )
-    .filter((name) => name)
-    .sort();
-
-  // Get new model names from API response
-  const newModelNames = models
-    .map((m) => m.name)
-    .filter((name) => name)
-    .sort();
-
-  // Compare model names to detect any changes (not just count)
-  const namesChanged =
-    currentModelNames.length !== newModelNames.length ||
-    currentModelNames.some((name, idx) => name !== newModelNames[idx]);
-
-  if (namesChanged) {
-    // Models changed (loaded, unloaded, or replaced), trigger a page reload to get fresh data
-    location.reload();
+  // Rebuild the running models list from the latest API payload
+  if (!models || models.length === 0) {
+    runningModelsContainer.innerHTML = "";
+    applyCapabilityFilters("runningModelsContainer");
     return;
   }
 
-  // Update individual model cards with new data
-  models.forEach((model) => {
-    // Find model card by model data attribute for robust and reliable lookup
-    let modelCard = runningModelsContainer.querySelector(
-      `.model-card[data-model-name="${cssEscape(model.name)}"]`,
-    );
-    // Fallback: compare dataset values for safety
-    if (!modelCard) {
-      const cards = runningModelsContainer.querySelectorAll(".model-card");
-      for (let i = 0; i < cards.length; i++) {
-        const dataName =
-          cards[i].dataset && cards[i].dataset.modelName
-            ? cards[i].dataset.modelName.trim()
-            : "";
-        if (dataName === model.name) {
-          modelCard = cards[i];
-          break;
-        }
-      }
-    }
-    if (modelCard) {
-      // Update expiration time if it exists
-      const expiresEl = modelCard.querySelector(".model-expires");
-      if (expiresEl && model.expires_at) {
-        expiresEl.textContent =
-          model.expires_at.relative || model.expires_at.local || "";
-      }
+  const buildRunningModelCardHTML = (model, index) => {
+    const name = model?.name || "Unknown";
+    const safeNameText =
+      typeof escapeHtml === "function" ? escapeHtml(String(name)) : String(name);
+    const safeDataName =
+      typeof escapeHtml === "function" ? escapeHtml(String(name)) : String(name);
 
-      // Update size if it changed
-      const sizeEl = modelCard.querySelector(".model-size");
-      if (sizeEl && model.formatted_size) {
-        sizeEl.textContent = model.formatted_size;
-      }
+    const hasCustom = !!model?.has_custom_settings;
+    const activityState =
+      typeof model?.activity_state === "string"
+        ? model.activity_state
+        : "running";
+    const details = model?.details || {};
+    const family = details?.family || "Unknown";
+    const parameterSize =
+      (details && details.parameter_size != null && details.parameter_size !== "")
+        ? details.parameter_size
+        : model?.parameter_size != null && model.parameter_size !== ""
+          ? model.parameter_size
+          : "Unknown";
+    const formattedSize =
+      model?.formatted_size != null && model.formatted_size !== ""
+        ? model.formatted_size
+        : model?.size != null
+          ? String(model.size)
+          : "Unknown";
 
-      // Update capability icons (reasoning, vision, tools): enabled=green, disabled=grey, unknown=yellow
-      try {
-        const caps = modelCard.querySelectorAll(".capability-icon");
-        if (caps && caps.length >= 3) {
-          const [reasoningEl, visionEl, toolsEl] = caps;
-          for (const [el, val, label] of [
-            [reasoningEl, model.has_reasoning, "Reasoning"],
-            [visionEl, model.has_vision, "Image Processing"],
-            [toolsEl, model.has_tools, "Tool Usage"],
-          ]) {
-            const state = val === true ? "enabled" : val === false ? "disabled" : "unknown";
-            const title = val === true ? `${label}: Available` : val === false ? `${label}: Not available` : `${label}: Unknown`;
-            el.classList.remove("enabled", "disabled", "unknown");
-            el.classList.add(state);
-            el.setAttribute("title", title);
+    const size = typeof model?.size === "number" ? model.size : 0;
+    const sizeVram = typeof model?.size_vram === "number" ? model.size_vram : 0;
+    const formattedSizeVram =
+      model?.formatted_size_vram != null && model.formatted_size_vram !== ""
+        ? model.formatted_size_vram
+        : "0 B";
+
+    const contextLength =
+      model?.context_length ??
+      (details && details.context_length != null
+        ? details.context_length
+        : "Unknown");
+
+    const expires = model?.expires_at || {};
+    const expiresLabel = expires.relative || expires.local || "";
+
+    const gpuPercent =
+      size > 0 && sizeVram > 0 ? ((sizeVram / size) * 100).toFixed(1) : "0.0";
+
+    const capabilityIcons = getCapabilitiesHTML(model);
+
+    const cardIndex = index + 1;
+
+    return `
+      <div class="col-md-6 col-lg-4">
+        <div class="model-card h-100" data-model-name="${safeDataName}">
+          <div class="model-header">
+            <div class="model-icon-wrapper">
+              <i class="fas fa-brain model-icon-main"></i>
+            </div>
+            <div class="model-meta">
+              <span class="status-indicator running">
+                <i class="fas fa-circle"></i>${
+                  activityState === "loaded" ? "Loaded" : "Running"
+                }
+              </span>
+            </div>
+          </div>
+          <div class="model-title">${safeNameText}${
+            hasCustom
+              ? '<span class="badge bg-info text-dark ms-2" title="Custom settings configured">⚙️</span>'
+              : ""
+          }</div>
+          <div class="model-capabilities">
+            ${capabilityIcons}
+          </div>
+          <div class="model-specs">
+            <div class="spec-row compact-hide">
+              <div class="spec-item">
+                <div class="spec-icon">
+                  <i class="fas fa-cogs"></i>
+                </div>
+                <div class="spec-content">
+                  <div class="spec-label">Family</div>
+                  <div class="spec-value">${
+                    typeof escapeHtml === "function"
+                      ? escapeHtml(String(family))
+                      : String(family)
+                  }</div>
+                </div>
+              </div>
+              <div class="spec-item">
+                <div class="spec-icon">
+                  <i class="fas fa-weight"></i>
+                </div>
+                <div class="spec-content">
+                  <div class="spec-label">Parameters</div>
+                  <div class="spec-value">${
+                    typeof escapeHtml === "function"
+                      ? escapeHtml(String(parameterSize))
+                      : String(parameterSize)
+                  }</div>
+                </div>
+              </div>
+            </div>
+            <div class="spec-row compact-hide">
+              <div class="spec-item">
+                <div class="spec-icon">
+                  <i class="fas fa-hdd"></i>
+                </div>
+                <div class="spec-content">
+                  <div class="spec-label">Size</div>
+                  <div class="spec-value text-nowrap model-size">${
+                    typeof escapeHtml === "function"
+                      ? escapeHtml(String(formattedSize))
+                      : String(formattedSize)
+                  }</div>
+                </div>
+              </div>
+              <div class="spec-item">
+                <div class="spec-icon">
+                  <i class="fas fa-microchip"></i>
+                </div>
+                <div class="spec-content">
+                  <div class="spec-label text-nowrap">GPU Allocation</div>
+                  <div class="spec-value text-nowrap" id="model-gpu-${cardIndex}">
+                    ${gpuPercent}% (${formattedSizeVram})
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="spec-row compact-hide">
+              <div class="spec-item">
+                <div class="spec-icon">
+                  <i class="fas fa-align-left"></i>
+                </div>
+                <div class="spec-content">
+                  <div class="spec-label">Context</div>
+                  <div class="spec-value" id="model-context-${cardIndex}">${
+                    contextLength != null && contextLength !== ""
+                      ? String(contextLength)
+                      : "Unknown"
+                  }</div>
+                </div>
+              </div>
+              <div class="spec-item opacity-0">
+                <div class="spec-content">
+                  <div class="spec-label">&nbsp;</div>
+                  <div class="spec-value">&nbsp;</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="model-actions">
+            <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information">
+              <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
+            </button>
+            <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings">
+              <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
+            </button>
+            <button class="btn btn-primary" onclick="restartModel(this.closest('.model-card').dataset.modelName)" title="Restart model">
+              <i class="fas fa-redo"></i> <span class="d-none d-sm-inline">Restart</span>
+            </button>
+            <button class="btn btn-warning" onclick="stopModel(this.closest('.model-card').dataset.modelName)" title="Stop model">
+              <i class="fas fa-stop"></i> <span class="d-none d-sm-inline">Stop</span>
+            </button>
+          </div>
+          ${
+            expiresLabel
+              ? `<div class="model-expires text-muted small mt-1">${expiresLabel}</div>`
+              : ""
           }
-        }
-      } catch (err) {
-        console.log(
-          "Failed to update capability icons for running model",
-          model.name,
-          err,
-        );
-      }
+        </div>
+      </div>
+    `;
+  };
 
-      // Update Live Metrics: GPU Allocation and Context
-      try {
-        const gpuEl = modelCard.querySelector(`[id^="model-gpu-"]`);
-        const contextEl = modelCard.querySelector(`[id^="model-context-"]`);
+  const cardsHtml = models.map((m, idx) => buildRunningModelCardHTML(m, idx)).join("");
+  runningModelsContainer.innerHTML = cardsHtml;
 
-        if (gpuEl && model.size_vram !== undefined && model.size > 0) {
-          const vramPercent = ((model.size_vram / model.size) * 100).toFixed(1);
-          const vramFormatted = model.formatted_size_vram || "0 B";
-          gpuEl.textContent = `${vramPercent}% (${vramFormatted})`;
-        }
-
-        if (contextEl) {
-          const ctx = model.context_length ?? (model.details || {}).context_length;
-          contextEl.textContent = ctx != null && ctx !== "" ? String(ctx) : "Unknown";
-        }
-      } catch (err) {
-        console.log("Failed to update live metrics for", model.name, err);
-      }
-    }
-  });
-  // Re-apply filters after update
+  // Re-apply filters after update so new/removed models respect the current filter state
   applyCapabilityFilters("runningModelsContainer");
 }
 
@@ -1533,13 +1619,19 @@ function applyCapabilityFilters(containerId) {
     `.filter-btn[data-capability="tools"]`,
   );
 
-  const reasoningActive =
-    firstReasoningBtn?.classList.contains("active") ?? true;
-  const visionActive = firstVisionBtn?.classList.contains("active") ?? true;
-  const toolsActive = firstToolsBtn?.classList.contains("active") ?? true;
+  const reasoningRequired =
+    firstReasoningBtn?.classList.contains("active") ?? false;
+  const visionRequired =
+    firstVisionBtn?.classList.contains("active") ?? false;
+  const toolsRequired = firstToolsBtn?.classList.contains("active") ?? false;
 
-  // If all filters are active, show all models
-  if (reasoningActive && visionActive && toolsActive) {
+  // If no capabilities are required OR all are required, show all models
+  // This preserves the previous behavior where the default "all active"
+  // state does not hide any models.
+  if (
+    (!reasoningRequired && !visionRequired && !toolsRequired) ||
+    (reasoningRequired && visionRequired && toolsRequired)
+  ) {
     const cards = container.querySelectorAll(".model-card");
     cards.forEach((card) => {
       const column = card.closest(".col-md-6, .col-lg-4, .col-12");
@@ -1557,14 +1649,16 @@ function applyCapabilityFilters(containerId) {
       const hasVision = caps[1].classList.contains("enabled");
       const hasTools = caps[2].classList.contains("enabled");
 
-      let shouldShow = true;
-      if (hasReasoning && !reasoningActive) shouldShow = false;
-      if (hasVision && !visionActive) shouldShow = false;
-      if (hasTools && !toolsActive) shouldShow = false;
+      // Show models that have at least one of the selected capabilities.
+      // This is easier to understand than strict "must have all" logic.
+      let matches = false;
+      if (reasoningRequired && hasReasoning) matches = true;
+      if (visionRequired && hasVision) matches = true;
+      if (toolsRequired && hasTools) matches = true;
 
       const column = card.closest(".col-md-6, .col-lg-4, .col-12");
       if (column) {
-        column.style.display = shouldShow ? "" : "none";
+        column.style.display = matches ? "" : "none";
       }
     }
   });
@@ -1572,3 +1666,81 @@ function applyCapabilityFilters(containerId) {
 
 // Global exposure
 window.toggleCapabilityFilter = toggleCapabilityFilter;
+
+/**
+ * Best-effort enhancement that decorates model cards with both
+ * "installed" (available) and "running" (loaded in memory) state
+ * using the /api/models/combined endpoint.
+ */
+async function updateCombinedModelStates() {
+  try {
+    const response = await fetch("/api/models/combined");
+    if (!response.ok) return;
+    const data = await response.json();
+    const models = Array.isArray(data.models) ? data.models : [];
+    if (!models.length) return;
+
+    const byName = new Map();
+    models.forEach((m) => {
+      if (m && typeof m.name === "string" && m.name.trim()) {
+        byName.set(m.name.trim(), m);
+      }
+    });
+
+    const normalizeName = (n) =>
+      typeof n === "string" ? n.trim() : "";
+
+    const decorateContainer = (containerId) => {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const cards = container.querySelectorAll(".model-card");
+      cards.forEach((card) => {
+        const rawName =
+          (card.dataset && card.dataset.modelName) ||
+          (card.querySelector(".model-title") || {}).textContent ||
+          "";
+        const name = normalizeName(rawName);
+        if (!name) return;
+        const combined = byName.get(name);
+        if (!combined) return;
+
+        const statusEl = card.querySelector(".status-indicator");
+        if (!statusEl) return;
+
+        const isAvail = !!combined.is_available;
+        const isRunning = !!combined.is_running;
+
+        // Keep existing icon but clarify text label
+        const iconHtml = statusEl.querySelector("i")
+          ? statusEl.querySelector("i").outerHTML
+          : '<i class="fas fa-circle"></i>';
+
+        let label = "";
+        if (statusEl.classList.contains("running")) {
+          // Running section: always running; optionally clarify install state
+          label = isAvail ? "Running (installed)" : "Running (ephemeral)";
+        } else if (statusEl.classList.contains("available")) {
+          if (isRunning) {
+            label = "Available · Running";
+          } else if (isAvail) {
+            label = "Available";
+          } else {
+            label = "Not installed";
+          }
+        } else {
+          // Fallback: just show combined state
+          if (isRunning && isAvail) label = "Installed & running";
+          else if (isRunning) label = "Running";
+          else if (isAvail) label = "Installed";
+          else label = "Unknown state";
+        }
+
+        statusEl.innerHTML = `${iconHtml}${label}`;
+      });
+    };
+
+    decorateContainer("availableModelsContainer");
+  } catch (error) {
+    console.log("Failed to decorate combined model states:", error);
+  }
+}

@@ -231,6 +231,12 @@ def start_model(model_name):
                 )
 
                 if response.status_code == 200:
+                    # Record activity so the UI can distinguish actively used
+                    # models from those that are merely loaded in memory.
+                    try:
+                        _get_ollama_service().record_model_activity(model_name)
+                    except Exception:
+                        pass
                     return {"success": True, "response": response}
 
                 # Check if it's a transient error - check both text and JSON
@@ -550,6 +556,15 @@ def get_available_models():
     """Get list of all available models."""
     try:
         models = _get_ollama_service().get_available_models()
+        try:
+            current_app.logger.debug(
+                "[models.available] count=%d names=%s",
+                len(models),
+                [m.get('name') for m in models],
+            )
+        except Exception:
+            # Logging should never break the endpoint
+            pass
         # Add has_custom_settings flag for each model (to be used in UI)
         for m in models:
             m['has_custom_settings'] = _get_ollama_service().has_custom_model_settings(m.get('name'))
@@ -563,9 +578,105 @@ def get_running_models():
     """Get list of currently running models. Always fetches fresh from Ollama for accuracy."""
     try:
         models = _get_ollama_service().get_running_models(force_refresh=True)
+        try:
+            current_app.logger.debug(
+                "[models.running] count=%d names=%s",
+                len(models),
+                [m.get('name') for m in models],
+            )
+        except Exception:
+            # Logging should never break the endpoint
+            pass
         return {"models": models}
     except Exception as e:
         return {"error": str(e), "models": []}, 500
+
+
+@bp.route('/api/models/combined')
+def get_combined_models():
+    """
+    Return one entry per model name with both availability and running state.
+
+    Shape:
+    {
+      "models": [
+        {
+          "name": "deepseek-r1:8b",
+          "is_available": true,
+          "is_running": true,
+          "has_custom_settings": false,
+          "available_info": {...},   # from available list when present
+          "running_info": {...}      # from running list when present
+        },
+        ...
+      ]
+    }
+    """
+    try:
+        svc = _get_ollama_service()
+        available = svc.get_available_models()
+        running = svc.get_running_models(force_refresh=True)
+
+        by_name = {}
+
+        # Merge available (installed) models
+        for model in available:
+            name = model.get('name')
+            if not name:
+                continue
+            if name not in by_name:
+                by_name[name] = {
+                    'name': name,
+                    'is_available': False,
+                    'is_running': False,
+                    'has_custom_settings': False,
+                }
+            entry = by_name[name]
+            entry['is_available'] = True
+            entry['available_info'] = model
+            # Prefer details from available list for display
+            if 'details' not in entry and isinstance(model.get('details'), dict):
+                entry['details'] = model.get('details') or {}
+            try:
+                entry['has_custom_settings'] = bool(
+                    svc.has_custom_model_settings(name)
+                )
+            except Exception:
+                # If settings lookup fails, leave flag at default
+                pass
+
+        # Merge running (loaded in memory) models
+        for model in running:
+            name = model.get('name')
+            if not name:
+                continue
+            if name not in by_name:
+                by_name[name] = {
+                    'name': name,
+                    'is_available': False,
+                    'is_running': False,
+                    'has_custom_settings': False,
+                }
+            entry = by_name[name]
+            entry['is_running'] = True
+            entry['running_info'] = model
+            # If we don't yet have details, prefer running model details
+            if 'details' not in entry and isinstance(model.get('details'), dict):
+                entry['details'] = model.get('details') or {}
+
+        # Optional debug logging to help diagnose UI vs backend mismatches
+        try:
+            current_app.logger.debug(
+                "[models.combined] total=%d names=%s",
+                len(by_name),
+                list(by_name.keys()),
+            )
+        except Exception:
+            pass
+
+        return {"models": list(by_name.values())}
+    except Exception as exc:
+        return {"error": str(exc), "models": []}, 500
 
 
 @bp.route('/api/models/settings/<model_name>')
@@ -775,6 +886,12 @@ def chat():
             return {"error": "Cannot connect to Ollama server. Please ensure Ollama is running."}, 503
 
         if response.status_code == 200:
+            # Record recent activity so the dashboard can show "running"
+            # for models that are actively handling chat traffic.
+            try:
+                _get_ollama_service().record_model_activity(model_name)
+            except Exception:
+                pass
             return (response.content, 200, {'Content-Type': 'text/plain'}) if stream else response.json()
 
         # Handle error responses
