@@ -236,7 +236,7 @@ class OllamaServiceModels:
             # Enrich with context_length from /api/show (parallel, non-blocking)
             ctx_by_name = {}
             try:
-                with ThreadPoolExecutor(max_workers=min(6, len(normalized) or 1)) as ex:
+                with ThreadPoolExecutor(max_workers=min(3, len(normalized) or 1)) as ex:
                     futures = {ex.submit(self._enrich_model_context_length, m): m for m in normalized}
                     for future in as_completed(futures, timeout=15):
                         try:

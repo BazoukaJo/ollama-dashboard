@@ -239,7 +239,7 @@ class OllamaServiceUtilities:
             host = self.app.config.get('OLLAMA_HOST', 'localhost')
             port = self.app.config.get('OLLAMA_PORT', 11434)
 
-            response = requests.post(
+            response = self._session.post(
                 f"http://{host}:{port}/api/generate",
                 json={
                     "model": model_name,

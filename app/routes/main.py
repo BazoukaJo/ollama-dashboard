@@ -224,7 +224,7 @@ def start_model(model_name):
             """
             try:
                 # Explicit timeout prevents hanging on unresponsive Ollama
-                response = requests.post(
+                response = _get_ollama_service()._session.post(
                     _get_ollama_url("generate"),
                     json={"model": model_name, "prompt": "Hello", "stream": False, "keep_alive": "24h"},
                     timeout=timeout
@@ -293,7 +293,7 @@ def start_model(model_name):
                 # Try to pull the model first, then generate
                 try:
                     # Pull timeout set to 10 minutes for large models
-                    pull_response = requests.post(
+                    pull_response = _get_ollama_service()._session.post(
                         _get_ollama_url("pull"),
                         json={"name": model_name, "stream": False},
                         timeout=600
@@ -354,7 +354,7 @@ def stop_model(model_name):
         # Gracefully unload the model using Ollama API
         # Per Ollama docs: empty prompt + keep_alive=0 (numeric) unloads immediately
         try:
-            unload_response = requests.post(
+            unload_response = _get_ollama_service()._session.post(
                 _get_ollama_url("generate"),
                 json={
                     "model": model_name,
@@ -417,7 +417,7 @@ def restart_model(model_name):
         # Step 1: Stop the model if it's running
         if is_running:
             try:
-                unload_response = requests.post(
+                unload_response = _get_ollama_service()._session.post(
                     _get_ollama_url("generate"),
                     json={
                         "model": model_name,
@@ -455,7 +455,7 @@ def restart_model(model_name):
         for attempt in range(max_retries):
             try:
                 # Warm start with extended keep_alive
-                start_response = requests.post(
+                start_response = _get_ollama_service()._session.post(
                     _get_ollama_url("generate"),
                     json={
                         "model": model_name,
@@ -476,7 +476,7 @@ def restart_model(model_name):
                     if attempt == 0:
                         current_app.logger.info(f"Model {model_name} not found, attempting to pull")
                         try:
-                            pull_response = requests.post(
+                            pull_response = _get_ollama_service()._session.post(
                                 _get_ollama_url("pull"),
                                 json={"name": model_name},
                                 timeout=600

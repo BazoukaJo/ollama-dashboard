@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict
 
 import requests
+from requests.adapters import HTTPAdapter
 
 # Note: load_model_settings is used indirectly via OllamaServiceUtilities mixin
 
@@ -96,7 +97,11 @@ class OllamaServiceCore:
         self._cache = {}
         self._cache_timestamps = {}
         # Store session in __dict__ directly to avoid property conflicts during init
-        self.__dict__['_session'] = requests.Session()
+        session = requests.Session()
+        adapter = HTTPAdapter(pool_connections=1, pool_maxsize=20)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        self.__dict__['_session'] = session
         self._background_stats = None
         self._stats_lock = threading.Lock()
         # Store logger in __dict__ directly to avoid property conflicts during init
