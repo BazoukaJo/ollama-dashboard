@@ -163,7 +163,7 @@
     modal.show();
   }
 
-  function init(){ updateHealthStatus(); setInterval(updateHealthStatus,15000); }
+  function init(){ updateHealthStatus(); }
 
   window.serviceControl = { updateHealthStatus, updateServiceControlButtons, startOllamaService, stopOllamaService, restartOllamaService, showRestartConfirm, init };
   // Expose legacy globals for existing inline onclick handlers

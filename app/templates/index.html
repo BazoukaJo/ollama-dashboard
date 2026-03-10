@@ -55,6 +55,31 @@
             </div>
         </div>
 
+        <!-- Find Model modal -->
+        <div class="modal fade" id="findModelModal" tabindex="-1" aria-labelledby="findModelModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content bg-dark text-light">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="findModelModalLabel">Find & Download Model</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted mb-3">Enter a model name from the <a href="https://ollama.com/library" target="_blank" class="text-info">Ollama library</a> to download it.</p>
+                        <div class="input-group">
+                            <span class="input-group-text bg-secondary border-secondary text-light"><i class="fas fa-cube"></i></span>
+                            <input type="text" class="form-control bg-dark text-light border-secondary" id="findModelInput" placeholder="e.g. llama3, mistral, gemma2:2b" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button id="confirmFindModelBtn" type="button" class="btn btn-info" onclick="confirmFindModel()">
+                            <i class="fas fa-download me-1"></i>Download
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Health Status Indicator and Service Controls -->
         <div class="d-flex justify-content-center mb-2 align-items-center gap-2">
             <div id="healthStatus" class="badge bg-secondary health-status-badge">
@@ -290,6 +315,9 @@
                                 <span class="badge bg-primary text-white ms-2" id="availableModelsCount">{{ available_models|length }}</span>
                             </div>
                             <div class="d-flex align-items-center gap-3">
+                                <button class="btn btn-sm btn-outline-info" title="Find and download a model by name" onclick="openFindModelModal()">
+                                    <i class="fas fa-search me-1"></i><span class="d-none d-sm-inline">Find</span>
+                                </button>
                                 <small class="text-muted d-none d-sm-block">{{ available_models|length }} model{{ available_models|length != 1 and 's' or '' }} ready</small>
                                 {% if available_models and not models %}
                                 <div class="capability-filters d-flex gap-1" id="availableModelsFilters">

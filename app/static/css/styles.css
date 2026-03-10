@@ -2014,11 +2014,11 @@ body.compact-mode .models-management.mt-4 {
 
 body.compact-mode .models-management > div,
 body.compact-mode .models-management > div.mb-4 {
-  margin-bottom: 0.5rem !important;
+  margin-bottom: 1.1rem !important;
 }
 
 body.compact-mode .models-management > div:last-child {
-  margin-bottom: 0.5rem !important;
+  margin-bottom: 1.1rem !important;
 }
 
 body.compact-mode .models-management .d-flex.align-items-center.justify-content-between.mb-3,
@@ -2096,8 +2096,7 @@ body:not(.compact-mode) .models-management.mt-4 {
 
 body:not(.compact-mode) .models-management > div,
 body:not(.compact-mode) .models-management > div.mb-4 {
-  /* Increase space *after* each cards list (between sections) */
-  margin-bottom: 1.25rem !important;
+  margin-bottom: 2.5rem !important;
 }
 
 body:not(.compact-mode) .models-management > div:last-child {

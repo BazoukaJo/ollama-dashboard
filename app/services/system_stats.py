@@ -1,3 +1,4 @@
+import atexit
 import os
 import platform
 import psutil
@@ -7,20 +8,48 @@ try:
 except ImportError:
     GPUtil = None
 try:
-    # Try nvidia-ml-py (official replacement) which provides pynvml module
     import pynvml # pyright: ignore[reportMissingImports]
 except ImportError:
     pynvml = None
 
-# System stats helper functions extracted from OllamaService.
+# Persistent NVML handle — avoids expensive nvmlInit/nvmlShutdown on every call.
+_nvml_handle = None
+_nvml_available = None
+
+def _get_nvml_handle():
+    global _nvml_handle, _nvml_available
+    if _nvml_available is False:
+        return None
+    if _nvml_handle is not None:
+        return _nvml_handle
+    if pynvml is None:
+        _nvml_available = False
+        return None
+    try:
+        pynvml.nvmlInit()
+        _nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        atexit.register(_shutdown_nvml)
+        _nvml_available = True
+        return _nvml_handle
+    except Exception:
+        _nvml_available = False
+        return None
+
+def _shutdown_nvml():
+    global _nvml_handle
+    if _nvml_handle is not None:
+        try:
+            pynvml.nvmlShutdown()
+        except Exception:
+            pass
+        _nvml_handle = None
+
 
 def get_vram_info():
     try:
-        if pynvml:
-            pynvml.nvmlInit()
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        handle = _get_nvml_handle()
+        if handle is not None:
             info = pynvml.nvmlDeviceGetMemoryInfo(handle)
-            pynvml.nvmlShutdown()
             return {
                 'total': info.total,
                 'used': info.used,
@@ -94,16 +123,16 @@ def get_disk_info():
 def collect_system_stats():
     try:
         vram_info = get_vram_info()
-        # Ensure all required keys are present
         for k in ['total', 'used', 'free', 'percent']:
             if k not in vram_info:
                 vram_info[k] = 0
+        mem = psutil.virtual_memory()
         return {
-            'cpu_percent': psutil.cpu_percent(interval=0.1),
+            'cpu_percent': psutil.cpu_percent(interval=None),
             'memory': {
-                'total': psutil.virtual_memory().total,
-                'available': psutil.virtual_memory().available,
-                'percent': psutil.virtual_memory().percent
+                'total': mem.total,
+                'available': mem.available,
+                'percent': mem.percent
             },
             'vram': vram_info,
             'disk': get_disk_info()

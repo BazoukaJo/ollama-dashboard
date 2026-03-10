@@ -122,7 +122,6 @@ async function startModel(modelName) {
     const result = await response.json();
     if (result.success) {
       showNotification(result.message, "success");
-      refreshDashboardData();
       await pollForModelStatus(modelName, true);
     } else {
       showNotification(result.message, "error");
@@ -188,7 +187,6 @@ async function stopModel(modelName) {
         result.message || `Model ${modelName} stopped successfully`,
         "success",
       );
-      refreshDashboardData();
       await pollForModelStatus(modelName, false);
     } else {
       showNotification(
@@ -242,7 +240,6 @@ async function restartModel(modelName) {
 
     if (result.success) {
       showNotification(result.message, "success");
-      refreshDashboardData();
       await pollForModelStatus(modelName, true);
     } else {
       showNotification(result.message, "error");
@@ -962,60 +959,58 @@ async function updateSystemStats() {
   }
 }
 
+let _versionPollCounter = 0;
+const VERSION_POLL_EVERY_N = 12; // ~60s at 5s interval
+
 // Model data update function
 async function updateModelData() {
-  // Update running models
+  let runningModels = null;
+  let availableModels = null;
+
+  // Fetch running + available models in parallel
   try {
-    const runningResponse = await fetch("/api/models/running");
+    const [runningResponse, availableResponse] = await Promise.all([
+      fetch("/api/models/running"),
+      fetch("/api/models/available"),
+    ]);
+
     if (runningResponse.ok) {
       const runningData = await runningResponse.json();
-      const runningModels = Array.isArray(runningData.models) ? runningData.models : [];
+      runningModels = Array.isArray(runningData.models) ? runningData.models : [];
       updateRunningModelsDisplay(runningModels);
     }
-  } catch (error) {
-    console.log("Failed to update running models:", error);
-  }
 
-  // Update available models (less frequently)
-  try {
-    const availableResponse = await fetch("/api/models/available");
     if (availableResponse.ok) {
-      const availableModels = await availableResponse.json();
-      updateAvailableModelsDisplay(availableModels.models || []);
+      const availableData = await availableResponse.json();
+      availableModels = availableData.models || [];
+      updateAvailableModelsDisplay(availableModels);
     }
   } catch (error) {
-    console.log("Failed to update available models:", error);
+    console.log("Failed to update models:", error);
   }
 
-  // Update Ollama version
-  try {
-    const versionResponse = await fetch("/api/version");
-    if (versionResponse.ok) {
-      const versionData = await versionResponse.json();
-      updateVersionDisplay(versionData.version || "Unknown");
+  // Version changes rarely; only fetch every ~60s
+  _versionPollCounter++;
+  if (_versionPollCounter >= VERSION_POLL_EVERY_N) {
+    _versionPollCounter = 0;
+    try {
+      const versionResponse = await fetch("/api/version");
+      if (versionResponse.ok) {
+        const versionData = await versionResponse.json();
+        updateVersionDisplay(versionData.version || "Unknown");
+      }
+    } catch (error) {
+      console.log("Failed to update Ollama version:", error);
     }
-  } catch (error) {
-    console.log("Failed to update Ollama version:", error);
   }
 
-  // Update model memory usage
-  try {
-    const memoryResponse = await fetch("/api/models/memory/usage");
-    if (memoryResponse.ok) {
-      const memoryData = await memoryResponse.json();
-      updateModelMemoryDisplay(memoryData);
+  // Decorate combined state badges client-side (no extra HTTP call)
+  if (runningModels && availableModels) {
+    try {
+      decorateCombinedStates(runningModels, availableModels);
+    } catch (error) {
+      console.log("Failed to decorate combined model states:", error);
     }
-  } catch (error) {
-    console.log("Failed to update model memory usage:", error);
-  }
-
-  // Update combined installed/running state badges (best-effort)
-  try {
-    if (typeof updateCombinedModelStates === "function") {
-      await updateCombinedModelStates();
-    }
-  } catch (error) {
-    console.log("Failed to update combined model states:", error);
   }
 
   resetRefreshCountdown();
@@ -1273,10 +1268,7 @@ function updateVersionDisplay(version) {
   }
 }
 
-function updateModelMemoryDisplay(memoryData) {
-  // Logic removed as redundant system info was removed from model cards.
-  // System-wide stats are already handled by updateSystemStats().
-}
+// updateModelMemoryDisplay removed (was already a no-op; call eliminated from polling)
 
 // Service management functions moved to serviceControl.js
 
@@ -1424,6 +1416,36 @@ function renderDownloadableModels(models) {
   // Apply current filters to the newly rendered models
   applyCapabilityFilters("downloadableModelsContainer");
 }
+
+function openFindModelModal() {
+  const input = document.getElementById("findModelInput");
+  if (input) input.value = "";
+  const modal = new bootstrap.Modal(document.getElementById("findModelModal"));
+  modal.show();
+  setTimeout(() => input && input.focus(), 200);
+}
+
+function confirmFindModel() {
+  const input = document.getElementById("findModelInput");
+  const name = (input ? input.value : "").trim();
+  if (!name) {
+    showNotification("Please enter a model name.", "error");
+    return;
+  }
+  const modalEl = document.getElementById("findModelModal");
+  const modal = bootstrap.Modal.getInstance(modalEl);
+  if (modal) modal.hide();
+  pullModel(name);
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const input = document.getElementById("findModelInput");
+  if (input) {
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") confirmFindModel();
+    });
+  }
+});
 
 async function pullModel(modelName) {
   const card = document.querySelector(
@@ -1662,79 +1684,62 @@ function applyCapabilityFilters(containerId) {
 window.toggleCapabilityFilter = toggleCapabilityFilter;
 
 /**
- * Best-effort enhancement that decorates model cards with both
- * "installed" (available) and "running" (loaded in memory) state
- * using the /api/models/combined endpoint.
+ * Decorate model cards with combined installed/running state labels
+ * using data already fetched by updateModelData() — no extra HTTP call.
  */
-async function updateCombinedModelStates() {
-  try {
-    const response = await fetch("/api/models/combined");
-    if (!response.ok) return;
-    const data = await response.json();
-    const models = Array.isArray(data.models) ? data.models : [];
-    if (!models.length) return;
+function decorateCombinedStates(runningModels, availableModels) {
+  const runningNames = new Set(
+    runningModels.map((m) => (m.name || "").trim()).filter(Boolean),
+  );
+  const availableNames = new Set(
+    availableModels.map((m) => (m.name || "").trim()).filter(Boolean),
+  );
 
-    const byName = new Map();
-    models.forEach((m) => {
-      if (m && typeof m.name === "string" && m.name.trim()) {
-        byName.set(m.name.trim(), m);
-      }
-    });
+  const normalizeName = (n) => (typeof n === "string" ? n.trim() : "");
 
-    const normalizeName = (n) =>
-      typeof n === "string" ? n.trim() : "";
+  const decorateContainer = (containerId) => {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const cards = container.querySelectorAll(".model-card");
+    cards.forEach((card) => {
+      const rawName =
+        (card.dataset && card.dataset.modelName) ||
+        (card.querySelector(".model-title") || {}).textContent ||
+        "";
+      const name = normalizeName(rawName);
+      if (!name) return;
 
-    const decorateContainer = (containerId) => {
-      const container = document.getElementById(containerId);
-      if (!container) return;
-      const cards = container.querySelectorAll(".model-card");
-      cards.forEach((card) => {
-        const rawName =
-          (card.dataset && card.dataset.modelName) ||
-          (card.querySelector(".model-title") || {}).textContent ||
-          "";
-        const name = normalizeName(rawName);
-        if (!name) return;
-        const combined = byName.get(name);
-        if (!combined) return;
+      const statusEl = card.querySelector(".status-indicator");
+      if (!statusEl) return;
 
-        const statusEl = card.querySelector(".status-indicator");
-        if (!statusEl) return;
+      const isAvail = availableNames.has(name);
+      const isRunning = runningNames.has(name);
 
-        const isAvail = !!combined.is_available;
-        const isRunning = !!combined.is_running;
+      const iconHtml = statusEl.querySelector("i")
+        ? statusEl.querySelector("i").outerHTML
+        : '<i class="fas fa-circle"></i>';
 
-        // Keep existing icon but clarify text label
-        const iconHtml = statusEl.querySelector("i")
-          ? statusEl.querySelector("i").outerHTML
-          : '<i class="fas fa-circle"></i>';
-
-        let label = "";
-        if (statusEl.classList.contains("running")) {
-          // Running section: models are loaded in Ollama memory
-          label = isAvail ? "Loaded (installed)" : "Loaded (ephemeral)";
-        } else if (statusEl.classList.contains("available")) {
-          if (isRunning) {
-            label = "Available · Loaded";
-          } else if (isAvail) {
-            label = "Available";
-          } else {
-            label = "Not installed";
-          }
+      let label = "";
+      if (statusEl.classList.contains("running")) {
+        label = isAvail ? "Loaded (installed)" : "Loaded (ephemeral)";
+      } else if (statusEl.classList.contains("available")) {
+        if (isRunning) {
+          label = "Available \u00b7 Loaded";
+        } else if (isAvail) {
+          label = "Available";
         } else {
-          // Fallback: just show combined state
-          if (isRunning && isAvail) label = "Installed & running";
-          else if (isRunning) label = "Running";
-          else if (isAvail) label = "Installed";
-          else label = "Unknown state";
+          label = "Not installed";
         }
+      } else {
+        if (isRunning && isAvail) label = "Installed & running";
+        else if (isRunning) label = "Running";
+        else if (isAvail) label = "Installed";
+        else label = "Unknown state";
+      }
 
-        statusEl.innerHTML = `${iconHtml}${label}`;
-      });
-    };
+      statusEl.innerHTML = `${iconHtml}${label}`;
+    });
+  };
 
-    decorateContainer("availableModelsContainer");
-  } catch (error) {
-    console.log("Failed to decorate combined model states:", error);
-  }
+  decorateContainer("availableModelsContainer");
 }

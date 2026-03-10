@@ -1,11 +1,11 @@
 (function () {
-  // Track the model polling interval so we can pause/resume it
   var _modelPollInterval = null;
+  var _statsPollInterval = null;
+  var _healthPollInterval = null;
 
   function startModelPolling() {
     if (_modelPollInterval) clearInterval(_modelPollInterval);
     if (typeof updateModelData === "function") {
-      // Refresh immediately when polling resumes (catches changes made while tab was hidden)
       updateModelData();
       _modelPollInterval = setInterval(updateModelData, 5000);
     }
@@ -18,36 +18,65 @@
     }
   }
 
-  function init() {
-    if (typeof updateTimes === "function") updateTimes();
-    if (typeof updateSystemStats === "function") updateSystemStats();
-    if (typeof initializeCompactMode === "function") initializeCompactMode();
-    if (window.serviceControl && window.serviceControl.init)
-      window.serviceControl.init();
-    if (typeof loadDownloadableModels === "function") loadDownloadableModels();
-    // Intervals
-    if (typeof updateSystemStats === "function")
-      setInterval(updateSystemStats, 1000);
-    // Start model polling (also handles the first updateModelData call)
-    startModelPolling();
-    // Health interval handled inside serviceControl.init()
+  function startStatsPolling() {
+    if (_statsPollInterval) clearInterval(_statsPollInterval);
+    if (typeof updateSystemStats === "function") {
+      updateSystemStats();
+      _statsPollInterval = setInterval(updateSystemStats, 1000);
+    }
   }
 
-  // Page Visibility API: when the tab becomes visible again, immediately refresh
-  // model status and restart the 5-second interval.  This prevents stale state
-  // when Ollama models are loaded/unloaded by external apps while the tab is hidden
-  // (browsers throttle setInterval to ~1 minute for inactive tabs).
+  function stopStatsPolling() {
+    if (_statsPollInterval) {
+      clearInterval(_statsPollInterval);
+      _statsPollInterval = null;
+    }
+  }
+
+  function startHealthPolling() {
+    if (_healthPollInterval) clearInterval(_healthPollInterval);
+    if (window.serviceControl && window.serviceControl.updateHealthStatus) {
+      window.serviceControl.updateHealthStatus();
+      _healthPollInterval = setInterval(
+        window.serviceControl.updateHealthStatus,
+        15000,
+      );
+    }
+  }
+
+  function stopHealthPolling() {
+    if (_healthPollInterval) {
+      clearInterval(_healthPollInterval);
+      _healthPollInterval = null;
+    }
+  }
+
+  function init() {
+    if (typeof updateTimes === "function") updateTimes();
+    if (typeof initializeCompactMode === "function") initializeCompactMode();
+    if (typeof loadDownloadableModels === "function") loadDownloadableModels();
+
+    startModelPolling();
+    startStatsPolling();
+    startHealthPolling();
+  }
+
+  // Pause all polling when tab is hidden to avoid wasted requests;
+  // resume and immediately refresh when tab becomes visible again.
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") {
       startModelPolling();
+      startStatsPolling();
+      startHealthPolling();
     } else {
       stopModelPolling();
+      stopStatsPolling();
+      stopHealthPolling();
     }
   });
 
   document.addEventListener("DOMContentLoaded", init);
   window.bootstrapInit = init;
-  // Expose for use by serviceControl and other modules that manage polling lifecycle
   window.startModelPolling = startModelPolling;
   window.stopModelPolling = stopModelPolling;
 })();
