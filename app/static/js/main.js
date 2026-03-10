@@ -7,10 +7,10 @@ function getPollIntervalSec() {
   const el = document.querySelector(".refresh-indicator");
   const val = el && el.dataset.pollInterval;
   const n = parseInt(val, 10);
-  return Number.isFinite(n) && n > 0 ? n : 5;
+  return Number.isFinite(n) && n > 0 ? n : 10;
 }
 
-let refreshCountdown = 5;
+let refreshCountdown = 10;
 
 function resetRefreshCountdown() {
   refreshCountdown = getPollIntervalSec();

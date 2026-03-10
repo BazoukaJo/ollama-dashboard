@@ -7,7 +7,7 @@
     if (_modelPollInterval) clearInterval(_modelPollInterval);
     if (typeof updateModelData === "function") {
       updateModelData();
-      _modelPollInterval = setInterval(updateModelData, 5000);
+      _modelPollInterval = setInterval(updateModelData, 10000);
     }
   }
 
@@ -22,7 +22,7 @@
     if (_statsPollInterval) clearInterval(_statsPollInterval);
     if (typeof updateSystemStats === "function") {
       updateSystemStats();
-      _statsPollInterval = setInterval(updateSystemStats, 1000);
+      _statsPollInterval = setInterval(updateSystemStats, 10000);
     }
   }
 
