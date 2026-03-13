@@ -1,6 +1,6 @@
 flask==3.0.0
 flask-cors==4.0.0
-gunicorn==21.2.0
+waitress==3.0.2
 pytz==2023.3
 pytest==7.4.3
 requests==2.31.0

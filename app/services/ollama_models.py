@@ -133,9 +133,9 @@ class OllamaServiceModels:
 
         # Normalize vram
         if 'vram' not in stats or not isinstance(stats['vram'], dict):
-            stats['vram'] = {'total': 0, 'used': 0, 'free': 0, 'percent': 0}
+            stats['vram'] = {'total': 0, 'used': 0, 'free': 0, 'percent': 0, 'gpu_3d': 0}
         else:
-            for key in ['total', 'used', 'free', 'percent']:
+            for key in ['total', 'used', 'free', 'percent', 'gpu_3d']:
                 if key not in stats['vram'] or stats['vram'][key] is None:
                     stats['vram'][key] = 0
 
@@ -147,13 +147,9 @@ class OllamaServiceModels:
                 if key not in stats['memory'] or stats['memory'][key] is None:
                     stats['memory'][key] = 0
 
-        # Normalize disk
-        if 'disk' not in stats or not isinstance(stats['disk'], dict):
-            stats['disk'] = {'percent': 0, 'total': 0, 'used': 0, 'free': 0}
-        else:
-            for key in ['percent', 'total', 'used', 'free']:
-                if key not in stats['disk'] or stats['disk'][key] is None:
-                    stats['disk'][key] = 0
+        # Remove disk info if present
+        if 'disk' in stats:
+            stats.pop('disk', None)
 
         return stats
 
@@ -215,9 +211,12 @@ class OllamaServiceModels:
         except Exception:
             return name, None
 
-    def get_available_models(self):
+    def get_available_models(self, force_refresh=False):
         """Get list of available models from the Ollama server."""
-        # Always fetch fresh to avoid stale capability flags and to honor test monkeypatching
+        if not force_refresh:
+            cached = self._get_cached('available_models', ttl_seconds=10)
+            if cached is not None:
+                return cached
         try:
             host, port = self._ollama_core.get_ollama_host_port()
             tags_url = f"http://{host}:{port}/api/tags"
@@ -290,8 +289,9 @@ class OllamaServiceModels:
             # Enrich running models with static metadata (family, parameter_size, etc.)
             # from the available models list when possible, so UI fields like
             # "Parameters" don't show as Unknown for running cards.
+            # Use cached available models to avoid expensive re-fetch on every poll.
             try:
-                available = self.get_available_models() or []
+                available = self._get_cached('available_models', ttl_seconds=60) or []
                 by_name = {
                     m.get('name'): m for m in available
                     if isinstance(m, dict) and m.get('name')

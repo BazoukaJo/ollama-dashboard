@@ -10,7 +10,7 @@ try:
         data = response.json()
         print('API Response:')
         print(json.dumps(data, indent=2))
-        print(f'Disk percent: {data.get("disk", {}).get("percent", "N/A")}')
+        print(f'GPU 3D usage: {data.get("vram", {}).get("gpu_3d", "N/A")}%')
     else:
         print(f'Error: {response.text}')
 except requests.exceptions.ConnectionError:

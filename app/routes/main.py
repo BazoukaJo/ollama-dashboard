@@ -79,8 +79,7 @@ def index():
         empty_stats = {
             'cpu_percent': 0,
             'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0},
-            'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0},
-            'disk': {'percent': 0, 'total': 0, 'used': 0, 'free': 0},
+            'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0, 'gpu_3d': 0},
         }
         return render_template(
             'index.html',
@@ -201,7 +200,7 @@ def start_model(model_name):
         return err, status
     try:
         # Check if model is already running
-        running_models = _get_ollama_service().get_running_models()
+        running_models = _get_ollama_service().get_running_models(force_refresh=True)
         if any(model['name'] == model_name for model in running_models):
             return {"success": True, "message": f"Model {model_name} is already running"}
 
@@ -347,7 +346,7 @@ def stop_model(model_name):
             return {"success": False, "message": "Ollama service is not running"}, 503
 
         # Check if model is currently running
-        running_models = _get_ollama_service().get_running_models()
+        running_models = _get_ollama_service().get_running_models(force_refresh=True)
         if not any(m.get('name') == model_name for m in running_models):
             return {"success": False, "message": f"Model {model_name} is not currently running"}, 400
 
@@ -366,7 +365,14 @@ def stop_model(model_name):
             )
 
             if unload_response.status_code == 200:
-                _verify_model_unloaded(model_name)
+                try:
+                    body = unload_response.json()
+                    if body.get("error"):
+                        return {"success": False, "message": f"Ollama error: {body['error']}"}, 500
+                except Exception:
+                    pass
+                if not _verify_model_unloaded(model_name):
+                    return {"success": False, "message": f"Model {model_name} may still be loaded. Unload was requested but not confirmed."}, 504
                 _get_ollama_service().clear_cache('running_models')
                 try:
                     _get_ollama_service().get_running_models(force_refresh=True)
@@ -411,7 +417,7 @@ def restart_model(model_name):
             return {"success": False, "message": "Ollama service is not running"}, 503
 
         # Check if model is currently running
-        running_models = _get_ollama_service().get_running_models()
+        running_models = _get_ollama_service().get_running_models(force_refresh=True)
         is_running = any(m.get('name') == model_name for m in running_models)
 
         # Step 1: Stop the model if it's running
@@ -555,7 +561,7 @@ def get_system_stats():
 def get_available_models():
     """Get list of all available models."""
     try:
-        models = _get_ollama_service().get_available_models()
+        models = _get_ollama_service().get_available_models(force_refresh=True)
         try:
             current_app.logger.debug(
                 "[models.available] count=%d names=%s",
@@ -902,6 +908,20 @@ def chat():
         return {"error": f"Unexpected error: {str(e)}"}, 500
 
 
+def _verify_model_deleted(model_name, max_attempts=5, delay_seconds=1):
+    """Poll /api/tags to confirm model is no longer in the list. Returns True when verified gone."""
+    for _ in range(max_attempts):
+        try:
+            available = _get_ollama_service().get_available_models(force_refresh=True)
+            names = [m.get("name") for m in available if m.get("name")]
+            if not any(n == model_name or n.startswith(model_name + ":") for n in names):
+                return True
+        except Exception:
+            pass
+        time.sleep(delay_seconds)
+    return False
+
+
 @bp.route('/api/models/delete/<model_name>', methods=['DELETE'])
 def delete_model(model_name):
     """Delete a model and its settings."""
@@ -909,21 +929,39 @@ def delete_model(model_name):
     if err is not None:
         return err, status
     try:
+        svc = _get_ollama_service()
+        # Unload model first if it is running (Ollama may refuse or fail to delete loaded models)
+        running_models = svc.get_running_models(force_refresh=True)
+        if any(m.get("name") == model_name for m in running_models):
+            try:
+                svc._session.post(
+                    _get_ollama_url("generate"),
+                    json={"model": model_name, "prompt": "", "stream": False, "keep_alive": 0},
+                    timeout=30,
+                )
+                _verify_model_unloaded(model_name)
+            except Exception as e:
+                current_app.logger.warning("Unload before delete failed: %s", e)
+
         # Attempt to delete model from Ollama backend
-        host, port = _get_ollama_service().get_ollama_host_port()
+        host, port = svc.get_ollama_host_port()
         url = f"http://{host}:{port}/api/delete"
-        response = _get_ollama_service()._session.delete(url, json={"name": model_name}, timeout=30)
+        response = svc._session.delete(url, json={"name": model_name}, timeout=30)
         if response.status_code != 200:
             try:
                 err_json = response.json()
                 error_msg = err_json.get("error") or err_json.get("message") or response.text
             except Exception:
                 error_msg = response.text
-            return jsonify({"success": False, "message": f"Failed to delete model: {error_msg}"}), 400
+            return jsonify({"success": False, "message": f"Failed to delete model: {error_msg}"}), response.status_code if response.status_code >= 400 else 400
+
+        # Verify model is gone from Ollama
+        if not _verify_model_deleted(model_name):
+            return jsonify({"success": False, "message": f"Model '{model_name}' delete was requested but model may still be present."}), 504
 
         # Remove model settings
         from app.services.model_settings_helpers import delete_model_settings_entry
-        settings_deleted = delete_model_settings_entry(_get_ollama_service(), model_name)
+        settings_deleted = delete_model_settings_entry(svc, model_name)
 
         return jsonify({
             "success": True,

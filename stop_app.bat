@@ -1,17 +1,21 @@
 @echo off
 echo Stopping Ollama Dashboard...
 
-REM Find and kill Python processes running OllamaDashboard.py
-for /f "tokens=2" %%i in ('tasklist /FI "IMAGENAME eq python.exe" /FO LIST ^| findstr /C:"PID:"') do (
-    for /f "tokens=*" %%j in ('wmic process where "ProcessId=%%i" get CommandLine /format:list ^| findstr /C:"OllamaDashboard.py"') do (
-        echo Terminating process %%i...
-        taskkill /PID %%i /F >nul 2>&1
-        if errorlevel 1 (
-            echo Failed to stop process %%i
-        ) else (
-            echo Dashboard stopped successfully.
-        )
+REM Find and kill the process listening on port 5000
+set "found=0"
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5000 ^| findstr LISTENING') do (
+    echo Terminating process %%a...
+    taskkill /PID %%a /F >nul 2>&1
+    if errorlevel 1 (
+        echo Failed to stop process %%a
+    ) else (
+        echo Dashboard stopped successfully.
+        set "found=1"
     )
+)
+
+if "%found%"=="0" (
+    echo No running dashboard found on port 5000.
 )
 
 echo.

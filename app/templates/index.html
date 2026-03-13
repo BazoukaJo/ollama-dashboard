@@ -64,7 +64,7 @@
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <p class="text-muted mb-3">Enter a model name from the <a href="https://ollama.com/library" target="_blank" class="text-info">Ollama library</a> to download it.</p>
+                        <p class="text-muted mb-3">Enter a model name from the <a href="https://ollama.com/library" target="_blank" rel="noopener" class="text-info">Ollama library</a> to download it.</p>
                         <div class="input-group">
                             <span class="input-group-text bg-secondary border-secondary text-light"><i class="fas fa-cube"></i></span>
                             <input type="text" class="form-control bg-dark text-light border-secondary" id="findModelInput" placeholder="e.g. llama3, mistral, gemma2:2b" autocomplete="off">
@@ -150,16 +150,16 @@
                             <canvas class="timeline-canvas" id="vramTimeline" width="200" height="20"></canvas>
                         </div>
 
-                        <!-- Disk -->
+                        <!-- GPU Utilization -->
                         <div class="compact-metric">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-1">
-                                    <i class="fas fa-hdd resource-icon resource-icon-disk"></i>
-                                    <span class="metric-label-compact">Disk</span>
+                                    <i class="fas fa-microchip resource-icon resource-icon-gpu"></i>
+                                    <span class="metric-label-compact">GPU Utilization</span>
                                 </div>
-                                <span class="metric-value-compact" id="diskPercent">{{ system_stats.disk.percent|round(1) }}%</span>
+                                <span class="metric-value-compact" id="gpu3dPercent">{{ system_stats.vram.gpu_3d|round(1) }}%</span>
                             </div>
-                            <canvas class="timeline-canvas" id="diskTimeline" width="200" height="20"></canvas>
+                            <canvas class="timeline-canvas" id="gpu3dTimeline" width="200" height="20"></canvas>
                         </div>
                     </div>
                 </div>
@@ -315,8 +315,8 @@
                                 <span class="badge bg-primary text-white ms-2" id="availableModelsCount">{{ available_models|length }}</span>
                             </div>
                             <div class="d-flex align-items-center gap-3">
-                                <button class="btn btn-sm btn-outline-info" title="Find and download a model by name" onclick="openFindModelModal()">
-                                    <i class="fas fa-search me-1"></i><span class="d-none d-sm-inline">Find</span>
+                                <button class="btn btn-sm btn-outline-primary" title="Find and download a model by name" onclick="openFindModelModal()">
+                                    <i class="fas fa-search me-1"></i>Find Model
                                 </button>
                                 <small class="text-muted d-none d-sm-block">{{ available_models|length }} model{{ available_models|length != 1 and 's' or '' }} ready</small>
                                 {% if available_models and not models %}

@@ -4,10 +4,13 @@
 **Purpose:** Guide AI agents to be immediately productive in this codebase. Follow established patterns; do not introduce new architectural layers.
 
 ## Architecture & Data Flow
-- Single Flask app (`OllamaDashboard.py`) with one blueprint (`app/routes/main.py`).
+- Single Flask app with one blueprint (`app/routes/main.py`).
 - Core logic in `OllamaService` (`app/services/ollama.py`): handles HTTP to Ollama, caching, capability detection, per-model settings, atomic JSON persistence, health reporting.
-- Background thread in service updates caches (system≈2s, running≈10s, available≈30s, version≈300s). Restart process after service/capability/JS edits to clear stale caches.
-- API routes: input validation → service method → standardized JSON response.
+- Background thread in service updates caches (system~2s, running~10s, available~30s, version~300s). Restart process after service/capability/JS edits to clear stale caches.
+- API routes: input validation -> service method -> standardized JSON response.
+- **Windows production**: Waitress WSGI server via `start_app.bat`.
+- **Docker/Linux production**: Gunicorn via `wsgi.py`.
+- **Development**: `python OllamaDashboard.py` (Flask dev server).
 
 ## Key Patterns & Conventions
 - Always call `ollama_service.init_app(app)` after `create_app()` (see `app/__init__.py`).
@@ -24,7 +27,7 @@
 - Do not mutate flags in routes or JS; UI reads backend booleans passively.
 
 ## Per-Model Settings
-- Stored in `model_settings.json` (atomic write: `.tmp` → `os.replace`).
+- Stored in `model_settings.json` (atomic write: `.tmp` -> `os.replace`).
 - No global settings. Defaults auto-created via `_recommend_settings_for_model` (size/capability heuristics).
 - All mutations guarded by `_model_settings_lock`. Never write JSON directly in routes.
 
@@ -33,10 +36,10 @@
 - Start/stop/restart logic in `OllamaService` only; routes wrap and return JSON.
 
 ## Persistence Files
-- `history.json` (capped by `MAX_HISTORY`), `chat_history.json` (bounded 100 sessions), `model_settings.json` (per-model defaults). All use atomic write pattern.
+- `chat_history.json` (bounded 100 sessions), `model_settings.json` (per-model defaults), `system_stats_history.json`. All use atomic write pattern.
 
 ## Model Lists & Aliases
-- Curated lists in `get_best_models`/`get_all_downloadable_models` include aliases (e.g. `llava`, `moondream`) for capability tests. Preserve/extend aliases when adding models.
+- Curated lists in `get_best_models`/`get_all_downloadable_models` (in `app/services/model_catalog.py`). Live models fetched from ollama.com/library via `model_fetcher.py`.
 
 ## Frontend Patterns
 - Select cards via `[data-model-name]`; never use raw names in inline onclick. Escape dynamic HTML/selectors. Capability icons rely on backend booleans only.
@@ -45,8 +48,7 @@
 - Run all tests: `python -m pytest -q`
 - Targeted test: `python -m pytest tests/test_start_model_pytest.py::test_start_model_success -q`
 - Coverage: `python -m pytest --cov=app --cov-report=html`
-- Playwright UI: install dev deps, then `python -m playwright install --with-deps`
-- After editing service/routes/capability logic or `main.js`: restart (`Ctrl+C`, `python wsgi.py`)
+- After editing service/routes/capability logic or `main.js`: restart the app.
 
 ## Health & Reliability
 - Use `/api/health` and `get_component_health()` to inspect `background_thread_alive`, cache ages, failure counters.
@@ -60,10 +62,11 @@
 - Avoid: direct Ollama HTTP in routes/JS, extra threads in request handlers, bypassing warm start logic, non-atomic JSON writes.
 
 ## Quick Commands
-- Install & run: `pip install -r requirements.txt` then `python OllamaDashboard.py`
-- Docker: `./scripts/build.sh`
-- Example targeted test: `python -m pytest tests/test_capabilities_pytest.py::test_all_downloadable_models_include_vision_flags -q`
+- Install & run (Windows): `pip install -r requirements.txt` then `start_app.bat`
+- Install & run (dev): `pip install -r requirements.txt` then `python OllamaDashboard.py`
+- Docker: `docker-compose up -d`
 
-**Entrypoint:** Use `OllamaDashboard.py` (not `wsgi.py`).
-
-**Feedback:** If any section is unclear or incomplete, specify which to refine.
+**Entrypoints:**
+- Windows production: `start_app.bat` (Waitress)
+- Docker/Linux production: `wsgi.py` (Gunicorn)
+- Development: `OllamaDashboard.py` (Flask dev server)

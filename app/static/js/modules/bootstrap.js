@@ -1,82 +1,65 @@
 (function () {
-  var _modelPollInterval = null;
-  var _statsPollInterval = null;
-  var _healthPollInterval = null;
+  var _pollActive = false;
+  var _pollTimer = null;
+  var _healthTimer = null;
+  var _fetching = false;
+  var POLL_INTERVAL = 10000;
+  var HEALTH_INTERVAL = 15000;
 
-  function startModelPolling() {
-    if (_modelPollInterval) clearInterval(_modelPollInterval);
-    if (typeof updateModelData === "function") {
-      updateModelData();
-      _modelPollInterval = setInterval(updateModelData, 10000);
+  async function pollCycle() {
+    if (_fetching) return;
+    _fetching = true;
+    try {
+      var p1 = typeof updateModelData === "function" ? updateModelData() : Promise.resolve();
+      var p2 = typeof updateSystemStats === "function" ? updateSystemStats() : Promise.resolve();
+      await Promise.all([p1, p2]);
+    } catch (e) {
+      console.log("Poll cycle error:", e);
+    } finally {
+      _fetching = false;
     }
   }
 
-  function stopModelPolling() {
-    if (_modelPollInterval) {
-      clearInterval(_modelPollInterval);
-      _modelPollInterval = null;
-    }
-  }
+  function startPolling() {
+    if (_pollActive) return;
+    _pollActive = true;
+    pollCycle();
+    if (_pollTimer) clearInterval(_pollTimer);
+    _pollTimer = setInterval(pollCycle, POLL_INTERVAL);
 
-  function startStatsPolling() {
-    if (_statsPollInterval) clearInterval(_statsPollInterval);
-    if (typeof updateSystemStats === "function") {
-      updateSystemStats();
-      _statsPollInterval = setInterval(updateSystemStats, 10000);
-    }
-  }
-
-  function stopStatsPolling() {
-    if (_statsPollInterval) {
-      clearInterval(_statsPollInterval);
-      _statsPollInterval = null;
-    }
-  }
-
-  function startHealthPolling() {
-    if (_healthPollInterval) clearInterval(_healthPollInterval);
+    if (_healthTimer) clearInterval(_healthTimer);
     if (window.serviceControl && window.serviceControl.updateHealthStatus) {
       window.serviceControl.updateHealthStatus();
-      _healthPollInterval = setInterval(
+      _healthTimer = setInterval(
         window.serviceControl.updateHealthStatus,
-        15000,
+        HEALTH_INTERVAL,
       );
     }
   }
 
-  function stopHealthPolling() {
-    if (_healthPollInterval) {
-      clearInterval(_healthPollInterval);
-      _healthPollInterval = null;
-    }
+  function stopPolling() {
+    _pollActive = false;
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    if (_healthTimer) { clearInterval(_healthTimer); _healthTimer = null; }
   }
 
   function init() {
     if (typeof updateTimes === "function") updateTimes();
     if (typeof initializeCompactMode === "function") initializeCompactMode();
     if (typeof loadDownloadableModels === "function") loadDownloadableModels();
-
-    startModelPolling();
-    startStatsPolling();
-    startHealthPolling();
+    startPolling();
   }
 
-  // Pause all polling when tab is hidden to avoid wasted requests;
-  // resume and immediately refresh when tab becomes visible again.
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") {
-      startModelPolling();
-      startStatsPolling();
-      startHealthPolling();
+      startPolling();
     } else {
-      stopModelPolling();
-      stopStatsPolling();
-      stopHealthPolling();
+      stopPolling();
     }
   });
 
   document.addEventListener("DOMContentLoaded", init);
   window.bootstrapInit = init;
-  window.startModelPolling = startModelPolling;
-  window.stopModelPolling = stopModelPolling;
+  window.startModelPolling = startPolling;
+  window.stopModelPolling = stopPolling;
 })();

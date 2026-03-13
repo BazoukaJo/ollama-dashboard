@@ -33,9 +33,8 @@ function Test-OllamaRunning {
 
 function Test-DashboardRunning {
     try {
-        $pythonProcesses = Get-Process -Name "python" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -like "*OllamaDashboard.py*" }
-        return $pythonProcesses.Count -gt 0
+        $listener = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
+        return $null -ne $listener
     }
     catch {
         return $false
@@ -45,9 +44,17 @@ function Test-DashboardRunning {
 function Start-Dashboard {
     try {
         $dashboardDir = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-        Push-Location $dashboardDir
+        $venvPython = Join-Path $dashboardDir ".venv\Scripts\python.exe"
+        $waitress = Join-Path $dashboardDir ".venv\Scripts\waitress-serve.exe"
 
-        $process = Start-Process -FilePath "python" -ArgumentList "OllamaDashboard.py" -WorkingDirectory $dashboardDir -NoNewWindow -PassThru
+        if (-not (Test-Path $waitress)) {
+            Write-Log "waitress-serve not found at $waitress"
+            return $false
+        }
+
+        $process = Start-Process -FilePath $waitress `
+            -ArgumentList "--call", "--host=0.0.0.0", "--port=5000", "--threads=8", "app:create_app" `
+            -WorkingDirectory $dashboardDir -NoNewWindow -PassThru
         Write-Log "Dashboard started (PID: $($process.Id))"
         return $true
     }
@@ -55,20 +62,16 @@ function Start-Dashboard {
         Write-Log "Failed to start dashboard: $_"
         return $false
     }
-    finally {
-        Pop-Location
-    }
 }
 
 function Stop-Dashboard {
     try {
-        $pythonProcesses = Get-Process -Name "python" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -like "*OllamaDashboard.py*" }
-
         $stopped = 0
-        foreach ($process in $pythonProcesses) {
-            Stop-Process -Id $process.Id -Force
-            Write-Log "Stopped dashboard process (PID: $($process.Id))"
+        $listeners = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
+        foreach ($conn in $listeners) {
+            $pid = $conn.OwningProcess
+            Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+            Write-Log "Stopped dashboard process (PID: $pid)"
             $stopped++
         }
 

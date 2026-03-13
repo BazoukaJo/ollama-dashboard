@@ -235,8 +235,7 @@ class TestSystemEndpoints:
         mock_stats.return_value = {
             'cpu': {'percent': 25.5},
             'memory': {'percent': 40.2, 'total': 16000000000, 'used': 6400000000},
-            'vram': {'total': 8000000000, 'used': 3200000000, 'free': 4800000000},
-            'disk': {'percent': 45.0, 'total': 1000000000000, 'used': 450000000000},
+            'vram': {'total': 8000000000, 'used': 3200000000, 'free': 4800000000, 'gpu_3d': 55},
         }
         response = client.get('/api/system/stats')
         assert response.status_code == 200

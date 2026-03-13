@@ -76,11 +76,12 @@ function refreshDashboardData() {
  * @param {boolean} shouldBeRunning - True if we expect the model to be running, false if stopped
  */
 async function pollForModelStatus(modelName, shouldBeRunning) {
-  const maxAttempts = 10; // Maximum 5 seconds (10 * 500ms)
-  let attempts = 0;
+  const maxAttempts = 20;
+  const delays = [500, 500, 1000, 1000, 1000, 1500, 1500, 2000, 2000, 2000];
 
-  while (attempts < maxAttempts) {
-    attempts++;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const delay = delays[Math.min(attempt, delays.length - 1)];
+    await new Promise((resolve) => setTimeout(resolve, delay));
 
     try {
       const response = await fetch("/api/models/running");
@@ -89,7 +90,6 @@ async function pollForModelStatus(modelName, shouldBeRunning) {
         const runningModels = Array.isArray(data.models) ? data.models : [];
         const isRunning = runningModels.some((m) => m.name === modelName);
 
-        // Check if the expected state matches
         if (isRunning === shouldBeRunning) {
           refreshDashboardData();
           return;
@@ -98,14 +98,38 @@ async function pollForModelStatus(modelName, shouldBeRunning) {
     } catch (error) {
       console.log("Error polling model status:", error);
     }
-
-    // Wait 500ms before next check
-    await new Promise((resolve) => setTimeout(resolve, 500));
   }
 
-  // If we've exhausted attempts, refresh anyway
-  console.log(`Status polling timeout for ${modelName}, refreshing anyway`);
   refreshDashboardData();
+}
+
+/**
+ * Poll until the model is no longer in the available list, then return.
+ * Caller should reload the page. Times out after maxAttempts to avoid waiting forever.
+ */
+async function pollForModelDeleted(
+  modelName,
+  maxAttempts = 15,
+  delayMs = 1000,
+) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    try {
+      const response = await fetch("/api/models/available");
+      if (response.ok) {
+        const data = await response.json();
+        const models = Array.isArray(data.models) ? data.models : [];
+        const stillPresent = models.some(
+          (m) =>
+            m.name === modelName ||
+            (m.name && m.name.startsWith(modelName + ":")),
+        );
+        if (!stillPresent) return;
+      }
+    } catch (error) {
+      console.log("Error polling for deleted model:", error);
+    }
+  }
 }
 
 async function startModel(modelName) {
@@ -238,11 +262,13 @@ async function restartModel(modelName) {
     );
     const result = await response.json();
 
-    if (result.success) {
+    if (!response.ok) {
+      showNotification(result.message || `HTTP ${response.status}`, "error");
+    } else if (result.success) {
       showNotification(result.message, "success");
       await pollForModelStatus(modelName, true);
     } else {
-      showNotification(result.message, "error");
+      showNotification(result.message || "Restart failed", "error");
     }
   } catch (error) {
     showNotification("Failed to restart model: " + error.message, "error");
@@ -292,13 +318,18 @@ async function deleteModel(modelName) {
     try {
       result = await response.json();
     } catch (jsonErr) {
-      // Non-JSON response (likely error)
-      result = { success: false, message: await response.text() };
+      result = {
+        success: false,
+        message: await response.text().catch(() => "Unknown error"),
+      };
     }
 
-    if (result.success) {
+    if (!response.ok) {
+      showNotification(result.message || `HTTP ${response.status}`, "error");
+    } else if (result.success) {
       showNotification(result.message, "success");
-      setTimeout(() => location.reload(), 2000);
+      await pollForModelDeleted(modelName);
+      location.reload();
     } else {
       showNotification(result.message || "Failed to delete model.", "error");
     }
@@ -363,11 +394,14 @@ async function showModelInfo(modelName) {
         }
         if (!flagsFromCards && runningResp.ok) {
           const runningJson = await runningResp.json();
-          const runningList = Array.isArray(runningJson.models) ? runningJson.models : [];
-          const rmatch = runningList.find((m) => {
-            const rn = normalizeName(m?.name || m?.model || "");
-            return equalsLoose(rn, target);
-          }) || null;
+          const runningList = Array.isArray(runningJson.models)
+            ? runningJson.models
+            : [];
+          const rmatch =
+            runningList.find((m) => {
+              const rn = normalizeName(m?.name || m?.model || "");
+              return equalsLoose(rn, target);
+            }) || null;
           if (rmatch) flagsFromCards = getCapabilityFlags(rmatch);
         }
       } catch (e) {
@@ -567,7 +601,9 @@ function formatDate(value) {
 }
 
 function renderCapabilityBadges(info) {
-  const r = info?.has_reasoning, v = info?.has_vision, t = info?.has_tools;
+  const r = info?.has_reasoning,
+    v = info?.has_vision,
+    t = info?.has_tools;
   const badges = [
     { label: "Reasoning", icon: "fa-brain", val: r },
     { label: "Vision", icon: "fa-eye", val: v },
@@ -575,16 +611,14 @@ function renderCapabilityBadges(info) {
   ];
 
   return badges
-    .map(
-      (badge) => {
-        const state = capState(badge.val);
-        const title = capTitle(badge.val, badge.label);
-        return `<span class="capability-pill ${state}" title="${title}">
+    .map((badge) => {
+      const state = capState(badge.val);
+      const title = capTitle(badge.val, badge.label);
+      return `<span class="capability-pill ${state}" title="${title}">
           <i class="fas ${badge.icon}"></i>
           <span>${badge.label}</span>
         </span>`;
-      },
-    )
+    })
     .join("");
 }
 
@@ -616,9 +650,9 @@ function jsonToTable(json, level = 0) {
 
   if (typeof json === "string") {
     if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(json)) {
-      return `<span class="text-info">${escapeHtml(new Date(
-        json,
-      ).toLocaleString())}</span>`;
+      return `<span class="text-info">${escapeHtml(
+        new Date(json).toLocaleString(),
+      )}</span>`;
     }
     const maxLength = 100;
     if (json.length > maxLength) {
@@ -690,10 +724,13 @@ function jsonToTable(json, level = 0) {
 
 function showNotification(message, type) {
   const notification = document.createElement("div");
-  const isError = type === "error" || type === "danger" || type !== "success";
-  notification.className = `alert alert-${
-    type === "success" ? "success" : "danger"
-  } alert-dismissible fade show position-fixed`;
+  const isError = type === "error" || type === "danger";
+  const alertClass = isError
+    ? "danger"
+    : type === "success"
+      ? "success"
+      : "info";
+  notification.className = `alert alert-${alertClass} alert-dismissible fade show position-fixed`;
   notification.style.cssText =
     "top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 500px;";
 
@@ -824,7 +861,7 @@ const timelineData = {
   cpu: [],
   memory: [],
   vram: [],
-  disk: [],
+  gpu3d: [],
 };
 
 const MAX_TIMELINE_POINTS = 60; // 60 seconds of data
@@ -907,7 +944,7 @@ async function updateSystemStats() {
       const cpuPercentEl = document.getElementById("cpuPercent");
       const memoryPercentEl = document.getElementById("memoryPercent");
       const vramPercentEl = document.getElementById("vramPercent");
-      const diskPercentEl = document.getElementById("diskPercent");
+      const gpu3dPercentEl = document.getElementById("gpu3dPercent");
 
       if (cpuPercentEl)
         cpuPercentEl.textContent = `${stats.cpu_percent.toFixed(1)}%`;
@@ -918,8 +955,11 @@ async function updateSystemStats() {
           stats.vram && stats.vram.total > 0
             ? `${stats.vram.percent.toFixed(1)}%`
             : "--%";
-      if (diskPercentEl)
-        diskPercentEl.textContent = `${stats.disk.percent.toFixed(1)}%`;
+      if (gpu3dPercentEl)
+        gpu3dPercentEl.textContent =
+          stats.vram && typeof stats.vram.gpu_3d === "number"
+            ? `${stats.vram.gpu_3d.toFixed(1)}%`
+            : "--%";
 
       // Store historical data
       timelineData.cpu.push(stats.cpu_percent);
@@ -927,27 +967,31 @@ async function updateSystemStats() {
       timelineData.vram.push(
         stats.vram && stats.vram.total > 0 ? stats.vram.percent : 0,
       );
-      timelineData.disk.push(stats.disk.percent);
+      timelineData.gpu3d.push(
+        stats.vram && typeof stats.vram.gpu_3d === "number"
+          ? stats.vram.gpu_3d
+          : 0,
+      );
 
       // Limit data points
       if (timelineData.cpu.length > MAX_TIMELINE_POINTS) {
         timelineData.cpu.shift();
         timelineData.memory.shift();
         timelineData.vram.shift();
-        timelineData.disk.shift();
+        timelineData.gpu3d.shift();
       }
 
       // Update timelines
       const cpuCanvas = document.getElementById("cpuTimeline");
       const memoryCanvas = document.getElementById("memoryTimeline");
       const vramCanvas = document.getElementById("vramTimeline");
-      const diskCanvas = document.getElementById("diskTimeline");
+      const gpu3dCanvas = document.getElementById("gpu3dTimeline");
 
       if (cpuCanvas) drawTimeline(cpuCanvas, timelineData.cpu, "#0d6efd");
       if (memoryCanvas)
         drawTimeline(memoryCanvas, timelineData.memory, "#198754");
       if (vramCanvas) drawTimeline(vramCanvas, timelineData.vram, "#0dcaf0");
-      if (diskCanvas) drawTimeline(diskCanvas, timelineData.disk, "#ffc107");
+      if (gpu3dCanvas) drawTimeline(gpu3dCanvas, timelineData.gpu3d, "#f39c12");
 
       // Update last update time
       const lastUpdateTimeEl = document.getElementById("lastUpdateTime");
@@ -976,7 +1020,9 @@ async function updateModelData() {
 
     if (runningResponse.ok) {
       const runningData = await runningResponse.json();
-      runningModels = Array.isArray(runningData.models) ? runningData.models : [];
+      runningModels = Array.isArray(runningData.models)
+        ? runningData.models
+        : [];
       updateRunningModelsDisplay(runningModels);
     }
 
@@ -1038,15 +1084,19 @@ function updateRunningModelsDisplay(models) {
   const buildRunningModelCardHTML = (model, index) => {
     const name = model?.name || "Unknown";
     const safeNameText =
-      typeof escapeHtml === "function" ? escapeHtml(String(name)) : String(name);
+      typeof escapeHtml === "function"
+        ? escapeHtml(String(name))
+        : String(name);
     const safeDataName =
-      typeof escapeHtml === "function" ? escapeHtml(String(name)) : String(name);
+      typeof escapeHtml === "function"
+        ? escapeHtml(String(name))
+        : String(name);
 
     const hasCustom = !!model?.has_custom_settings;
     const details = model?.details || {};
     const family = details?.family || "Unknown";
     const parameterSize =
-      (details && details.parameter_size != null && details.parameter_size !== "")
+      details && details.parameter_size != null && details.parameter_size !== ""
         ? details.parameter_size
         : model?.parameter_size != null && model.parameter_size !== ""
           ? model.parameter_size
@@ -1203,11 +1253,103 @@ function updateRunningModelsDisplay(models) {
     `;
   };
 
-  const cardsHtml = models.map((m, idx) => buildRunningModelCardHTML(m, idx)).join("");
+  const cardsHtml = models
+    .map((m, idx) => buildRunningModelCardHTML(m, idx))
+    .join("");
   runningModelsContainer.innerHTML = cardsHtml;
 
   // Re-apply filters after update so new/removed models respect the current filter state
   applyCapabilityFilters("runningModelsContainer");
+}
+
+function buildAvailableModelCardHTML(model) {
+  const name = model?.name || "Unknown";
+  const safeName =
+    typeof escapeHtml === "function" ? escapeHtml(String(name)) : String(name);
+  const hasCustom = !!model?.has_custom_settings;
+  const details = model?.details || {};
+  const family = details.family != null ? String(details.family) : "Unknown";
+  const parameterSize =
+    details.parameter_size != null ? String(details.parameter_size) : "Unknown";
+  const sizeStr = model?.size != null ? String(model.size) : "Unknown";
+  const contextVal =
+    model?.context_length ?? details.context_length ?? "Unknown";
+  const capabilityIcons = getCapabilitiesHTML(model);
+  return `
+    <div class="col-md-6 col-lg-4">
+      <div class="model-card h-100" data-model-name="${safeName}">
+        <div class="model-header">
+          <div class="model-icon-wrapper">
+            <i class="fas fa-box model-icon-main"></i>
+          </div>
+          <div class="model-meta">
+            <span class="status-indicator available">
+              <i class="fas fa-circle"></i>Available
+            </span>
+          </div>
+        </div>
+        <div class="model-title">${safeName}${
+          hasCustom
+            ? '<span class="badge bg-info text-dark ms-2" title="Custom settings configured">⚙️</span>'
+            : ""
+        }</div>
+        <div class="model-capabilities">
+          ${capabilityIcons}
+        </div>
+        <div class="model-specs">
+          <div class="spec-row compact-hide">
+            <div class="spec-item">
+              <div class="spec-icon"><i class="fas fa-cogs"></i></div>
+              <div class="spec-content">
+                <div class="spec-label">Family</div>
+                <div class="spec-value">${typeof escapeHtml === "function" ? escapeHtml(family) : family}</div>
+              </div>
+            </div>
+            <div class="spec-item">
+              <div class="spec-icon"><i class="fas fa-weight"></i></div>
+              <div class="spec-content">
+                <div class="spec-label">Parameters</div>
+                <div class="spec-value">${typeof escapeHtml === "function" ? escapeHtml(parameterSize) : parameterSize}</div>
+              </div>
+            </div>
+          </div>
+          <div class="spec-row spec-row-size-context compact-hide">
+            <div class="spec-item">
+              <div class="spec-icon"><i class="fas fa-hdd"></i></div>
+              <div class="spec-content">
+                <div class="spec-label">Size</div>
+                <div class="spec-value">${typeof escapeHtml === "function" ? escapeHtml(sizeStr) : sizeStr}</div>
+              </div>
+            </div>
+            <div class="spec-item">
+              <div class="spec-icon"><i class="fas fa-align-left"></i></div>
+              <div class="spec-content">
+                <div class="spec-label">Context</div>
+                <div class="spec-value">${typeof escapeHtml === "function" ? escapeHtml(String(contextVal)) : String(contextVal)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="model-actions">
+          <button class="btn btn-success" onclick="startModel(this.closest('.model-card').dataset.modelName)" title="Start model" aria-label="Start model">
+            <i class="fas fa-play"></i> <span class="d-none d-sm-inline">Start</span>
+          </button>
+          <button class="btn btn-primary" onclick="restartModel(this.closest('.model-card').dataset.modelName)" title="Restart model" aria-label="Restart model">
+            <i class="fas fa-redo"></i> <span class="d-none d-sm-inline">Restart</span>
+          </button>
+          <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information" aria-label="View model information">
+            <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
+          </button>
+          <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings" aria-label="Settings">
+            <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
+          </button>
+          <button class="btn btn-danger" onclick="deleteModel(this.closest('.model-card').dataset.modelName)" title="Delete model" aria-label="Delete model">
+            <i class="fas fa-trash"></i> <span class="d-none d-sm-inline">Delete</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function updateAvailableModelsDisplay(models) {
@@ -1216,28 +1358,48 @@ function updateAvailableModelsDisplay(models) {
   );
   if (!availableModelsContainer) return;
 
-  // Update the count display
   const countEl = document.getElementById("availableModelsCount");
   if (countEl) {
-    countEl.textContent = models.length;
+    countEl.textContent = (models && models.length) || 0;
   }
 
-  // Update capability icons for available models in the DOM
+  const newNames = new Set(
+    (models || []).map((m) => (m.name || "").trim()).filter(Boolean),
+  );
+  const currentCards = availableModelsContainer.querySelectorAll(
+    ".model-card[data-model-name]",
+  );
+  const currentNames = new Set(
+    Array.from(currentCards).map((c) => (c.dataset.modelName || "").trim()),
+  );
+
+  const namesChanged =
+    newNames.size !== currentNames.size ||
+    [...newNames].some((n) => !currentNames.has(n));
+
+  if (namesChanged) {
+    if (!models || models.length === 0) {
+      availableModelsContainer.innerHTML = "";
+    } else {
+      availableModelsContainer.innerHTML = models
+        .map((m) => buildAvailableModelCardHTML(m))
+        .join("");
+    }
+    applyCapabilityFilters("availableModelsContainer");
+    return;
+  }
+
   try {
-    const availableCards = document.querySelectorAll(
-      "#availableModelsContainer .model-card",
-    );
-    availableCards.forEach((card) => {
-      const titleEl = card.querySelector(".model-title");
-      // Prefer dataset attribute if present
-      const name =
+    currentCards.forEach((card) => {
+      const name = (
         card.dataset && card.dataset.modelName
           ? card.dataset.modelName.trim()
-          : titleEl
-            ? titleEl.textContent.trim()
-            : null;
+          : (card.querySelector(".model-title") || {}).textContent || ""
+      ).trim();
       if (!name) return;
-      const matching = models.find((m) => m.name && m.name.trim() === name);
+      const matching = (models || []).find(
+        (m) => m.name && m.name.trim() === name,
+      );
       if (!matching) return;
       const caps = card.querySelectorAll(".capability-icon");
       if (caps && caps.length >= 3) {
@@ -1247,8 +1409,14 @@ function updateAvailableModelsDisplay(models) {
           [visionEl, matching.has_vision, "Image Processing"],
           [toolsEl, matching.has_tools, "Tool Usage"],
         ]) {
-          const state = val === true ? "enabled" : val === false ? "disabled" : "unknown";
-          const title = val === true ? `${label}: Available` : val === false ? `${label}: Not available` : `${label}: Unknown`;
+          const state =
+            val === true ? "enabled" : val === false ? "disabled" : "unknown";
+          const title =
+            val === true
+              ? `${label}: Available`
+              : val === false
+                ? `${label}: Not available`
+                : `${label}: Unknown`;
           el.classList.remove("enabled", "disabled", "unknown");
           el.classList.add(state);
           el.setAttribute("title", title);
@@ -1372,8 +1540,10 @@ async function toggleExtendedModels() {
   }
 }
 
-// Initialize when page loads
-// Initialization handled by modules/bootstrap.js
+// --- System stats polling interval: update every 1s ---
+document.addEventListener("DOMContentLoaded", function () {
+  setInterval(updateSystemStats, 1000);
+});
 
 // Downloadable models functionality
 async function loadDownloadableModels() {
@@ -1637,8 +1807,7 @@ function applyCapabilityFilters(containerId) {
 
   const reasoningRequired =
     firstReasoningBtn?.classList.contains("active") ?? false;
-  const visionRequired =
-    firstVisionBtn?.classList.contains("active") ?? false;
+  const visionRequired = firstVisionBtn?.classList.contains("active") ?? false;
   const toolsRequired = firstToolsBtn?.classList.contains("active") ?? false;
 
   // If no capabilities are required OR all are required, show all models

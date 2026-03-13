@@ -50,46 +50,52 @@ def get_vram_info():
         handle = _get_nvml_handle()
         if handle is not None:
             info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            utilization = pynvml.nvmlDeviceGetUtilizationRates(handle).gpu if hasattr(pynvml, 'nvmlDeviceGetUtilizationRates') else 0
             return {
                 'total': info.total,
                 'used': info.used,
                 'free': info.free,
-                'percent': (info.used / info.total) * 100 if info.total > 0 else 0
+                'percent': (info.used / info.total) * 100 if info.total > 0 else 0,
+                'gpu_3d': utilization
             }
         if GPUtil:
             gpus = GPUtil.getGPUs()
             if gpus:
                 gpu = gpus[0]
+                utilization = getattr(gpu, 'load', 0) * 100 if hasattr(gpu, 'load') else 0
                 return {
                     'total': gpu.memoryTotal * 1024 * 1024,
                     'used': gpu.memoryUsed * 1024 * 1024,
                     'free': gpu.memoryFree * 1024 * 1024,
-                    'percent': gpu.memoryUtil * 100
+                    'percent': gpu.memoryUtil * 100,
+                    'gpu_3d': utilization
                 }
         try:
             import subprocess
             result = subprocess.run(
-                ['nvidia-smi', '--query-gpu=memory.total,memory.used,memory.free', '--format=csv,noheader,nounits'],
+                ['nvidia-smi', '--query-gpu=memory.total,memory.used,memory.free,utilization.gpu', '--format=csv,noheader,nounits'],
                 capture_output=True, text=True, timeout=5, check=False)
             if result.returncode == 0:
                 lines = result.stdout.strip().split('\n')
                 if lines:
                     parts = lines[0].split(',')
-                    if len(parts) >= 3:
+                    if len(parts) >= 4:
                         total = int(parts[0].strip()) * 1024 * 1024
                         used = int(parts[1].strip()) * 1024 * 1024
                         free = int(parts[2].strip()) * 1024 * 1024
+                        utilization = int(parts[3].strip())
                         return {
                             'total': total,
                             'used': used,
                             'free': free,
-                            'percent': (used / total) * 100 if total > 0 else 0
+                            'percent': (used / total) * 100 if total > 0 else 0,
+                            'gpu_3d': utilization
                         }
         except (OSError, subprocess.SubprocessError, ValueError):
             pass
     except (OSError, ValueError):
         pass
-    return {'total': 0, 'used': 0, 'free': 0, 'percent': 0}
+    return {'total': 0, 'used': 0, 'free': 0, 'percent': 0, 'gpu_3d': 0}
 
 
 def get_disk_info():
@@ -123,7 +129,7 @@ def get_disk_info():
 def collect_system_stats():
     try:
         vram_info = get_vram_info()
-        for k in ['total', 'used', 'free', 'percent']:
+        for k in ['total', 'used', 'free', 'percent', 'gpu_3d']:
             if k not in vram_info:
                 vram_info[k] = 0
         mem = psutil.virtual_memory()
@@ -134,15 +140,13 @@ def collect_system_stats():
                 'available': mem.available,
                 'percent': mem.percent
             },
-            'vram': vram_info,
-            'disk': get_disk_info()
+            'vram': vram_info
         }
     except (OSError, ValueError):
         return {
             'cpu_percent': 0,
             'memory': {'total': 0, 'available': 0, 'percent': 0},
-            'vram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0},
-            'disk': {'total': 0, 'free': 0, 'percent': 0, 'used': 0}
+            'vram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0, 'gpu_3d': 0}
         }
 
 
