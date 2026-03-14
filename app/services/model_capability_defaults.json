@@ -1,0 +1,49 @@
+{
+  "_comment": "Default model capability definitions. Sourced from Ollama docs and community (docs.ollama.com, ollama.com/search). Use when API capabilities are missing (e.g. uninstalled models, older Ollama).",
+  "api": {
+    "description": "Official capability strings returned by Ollama /api/show and /api/tags (Ollama 0.6.4+).",
+    "capabilities": ["completion", "vision", "tools"],
+    "capability_descriptions": {
+      "completion": "Standard text generation.",
+      "vision": "Image understanding / multimodal; accepts images alongside text.",
+      "tools": "Function calling / tool use; can invoke tools and use results in replies."
+    },
+    "reasoning_note": "Reasoning/thinking is not in Ollama's API yet; inferred from model name/family or catalog."
+  },
+  "api_to_flags": {
+    "description": "Map API capability string (or alias) -> our dashboard flags. Used by _caps_from_ollama_api.",
+    "has_vision": ["vision", "image", "multimodal"],
+    "has_tools": ["tools", "tool", "function", "function-calling", "tool-use"],
+    "has_reasoning": ["reasoning", "thinking", "think"]
+  },
+  "family_defaults": {
+    "description": "Model family or name-pattern defaults when API capabilities are absent. Keys are lowercase family/pattern hints; values are capability flags.",
+    "vision_families": [
+      "llava", "bakllava", "moondream", "qwen2.5-vl", "qwen3-vl", "qwen2.5vl",
+      "llama3.2-vision", "llama4", "gemma3", "minicpm-v", "granite3.2-vision",
+      "cogvlm", "yi-vl", "deepseek-vl", "paligemma", "fuyu", "idefics",
+      "ministral", "mistral-small3", "mistral-small3.1", "mistral-small3.2",
+      "deepseek-ocr", "glm-ocr"
+    ],
+    "tools_families": [
+      "llama3.1", "llama3.2", "llama3.3", "llama4",
+      "mistral", "mixtral", "mistral-nemo", "mistral-small", "mistral-large", "ministral",
+      "qwen2.5", "qwen3", "command-r", "command-r7b", "command-a",
+      "firefunction", "granite3", "hermes3", "nemotron", "aya", "phi3", "phi4",
+      "devstral", "smollm2", "gpt-oss", "cogito", "olmo2", "falcon3", "granite4", "qwq"
+    ],
+    "reasoning_families": [
+      "deepseek-r1", "deepseek-reasoning", "qwq", "qwen-qwq", "qwen-reasoning",
+      "o1", "o2", "o3", "marco-o1", "phi4-reasoning", "phi4-mini-reasoning",
+      "openthinker", "deepscaler"
+    ]
+  },
+  "sources": [
+    "https://docs.ollama.com/capabilities/vision",
+    "https://docs.ollama.com/capabilities/tool-calling",
+    "https://docs.ollama.com/api-reference/show-model-details",
+    "https://ollama.com/search?c=tools",
+    "https://ollama.com/search?c=vision",
+    "https://github.com/ollama/ollama/pull/10066"
+  ]
+}

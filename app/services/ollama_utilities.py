@@ -451,8 +451,25 @@ class OllamaServiceUtilities:
         return _get_all()
 
     def get_downloadable_models(self, category='best'):
-        """Get downloadable models filtered by category."""
-        return _get_dl(category)
+        """Get downloadable models filtered by category.
+        Enriches with context_length from the provider (Ollama /api/show) when the model is installed.
+        """
+        models = _get_dl(category)
+        if not models:
+            return models
+        try:
+            available = self.get_available_models()
+        except Exception:
+            available = []
+        by_name = {m.get('name'): m for m in available if isinstance(m, dict) and m.get('name')}
+        for entry in models:
+            name = entry.get('name')
+            if not name:
+                continue
+            src = by_name.get(name)
+            if isinstance(src, dict) and src.get('context_length') is not None:
+                entry['context_length'] = src['context_length']
+        return models
 
     def pull_model(self, model_name):
         """Pull a model from the Ollama library."""

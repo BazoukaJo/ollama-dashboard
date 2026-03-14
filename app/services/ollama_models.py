@@ -9,7 +9,9 @@ from app.services.system_stats import get_vram_info
 from app.services.system_stats import get_disk_info
 from app.services.capabilities import detect_capabilities
 from app.services.capabilities import ensure_capability_flags
+from app.services.capabilities import _caps_from_ollama_api
 from app.services.model_helpers import (_extract_context_length,
+                                        format_context_length,
                                         format_running_model_entry,
                                         normalize_available_model_entry)
 from app.services.system_stats import collect_system_stats, models_memory_usage
@@ -177,7 +179,9 @@ class OllamaServiceModels:
         return ensure_capability_flags(model)
 
     def get_detailed_model_info(self, model_name):
-        """Get detailed model information including capabilities."""
+        """Get detailed model information including capabilities.
+        Prefers Ollama API capabilities array when present; falls back to heuristics.
+        """
         try:
             response = self._session.post(
                 self.get_api_url().replace('/api/ps', '/api/show'),
@@ -187,10 +191,14 @@ class OllamaServiceModels:
             if response.status_code != 200:
                 return None
             data = response.json()
-            capabilities = self._detect_model_capabilities({
-                'name': model_name,
-                'details': data.get('details', {})
-            })
+            api_caps = _caps_from_ollama_api(data.get('capabilities'))
+            if api_caps is not None:
+                capabilities = api_caps
+            else:
+                capabilities = self._detect_model_capabilities({
+                    'name': model_name,
+                    'details': data.get('details', {})
+                })
             return {
                 **data,
                 **capabilities,
@@ -199,17 +207,24 @@ class OllamaServiceModels:
             self.logger.debug("Detailed info fetch failed for %s: %s", model_name, exc)
             return None
 
-    def _enrich_model_context_length(self, model):
-        """Fetch /api/show for a model and return context_length, or None on failure."""
+    def _enrich_model_from_show(self, model):
+        """Fetch /api/show for a model; return (name, context_length, capabilities_list).
+        Used to enrich available models with provider-authoritative context_length and capabilities.
+        """
         name = model.get('name')
         if not name:
-            return name, None
+            return name, None, None
         try:
             info = self.get_detailed_model_info(name)
-            ctx = _extract_context_length(info) if info else None
-            return name, ctx
+            if not info:
+                return name, None, None
+            ctx = _extract_context_length(info)
+            caps_list = info.get('capabilities')
+            if isinstance(caps_list, list):
+                return name, ctx, caps_list
+            return name, ctx, None
         except Exception:
-            return name, None
+            return name, None, None
 
     def get_available_models(self, force_refresh=False):
         """Get list of available models from the Ollama server."""
@@ -232,16 +247,19 @@ class OllamaServiceModels:
                 except Exception:
                     normalized = []
 
-            # Enrich with context_length from /api/show (parallel, non-blocking)
+            # Enrich with context_length and capabilities from /api/show (parallel, non-blocking)
             ctx_by_name = {}
+            caps_by_name = {}
             try:
                 with ThreadPoolExecutor(max_workers=min(3, len(normalized) or 1)) as ex:
-                    futures = {ex.submit(self._enrich_model_context_length, m): m for m in normalized}
+                    futures = {ex.submit(self._enrich_model_from_show, m): m for m in normalized}
                     for future in as_completed(futures, timeout=15):
                         try:
-                            name, ctx = future.result()
+                            name, ctx, caps_list = future.result()
                             if name and ctx is not None:
                                 ctx_by_name[name] = ctx
+                            if name and caps_list is not None:
+                                caps_by_name[name] = caps_list
                         except Exception:
                             pass
             except Exception:
@@ -249,7 +267,11 @@ class OllamaServiceModels:
 
             for m in normalized:
                 if m.get('name') in ctx_by_name:
-                    m['context_length'] = ctx_by_name[m['name']]
+                    raw = ctx_by_name[m['name']]
+                    m['context_length'] = format_context_length(raw) or raw
+                if m.get('name') in caps_by_name:
+                    m['capabilities'] = caps_by_name[m['name']]
+                    ensure_capability_flags(m)
 
             # Debug logging to help diagnose mismatches between Ollama and UI
             try:
@@ -310,6 +332,10 @@ class OllamaServiceModels:
                         dst_details['family'] = src_details.get('family')
                     if 'parameter_size' not in dst_details and 'parameter_size' in src_details:
                         dst_details['parameter_size'] = src_details.get('parameter_size')
+                    if 'context_length' not in dst_details and src.get('context_length') is not None:
+                        dst_details['context_length'] = src.get('context_length')
+                    if entry.get('context_length') is None and src.get('context_length') is not None:
+                        entry['context_length'] = src.get('context_length')
                     entry['details'] = dst_details
             except Exception:
                 # Metadata enrichment is best-effort only

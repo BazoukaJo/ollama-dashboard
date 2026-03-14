@@ -17,7 +17,8 @@ def get_best_models():
             "size": "4.9GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "qwen3:14b",
@@ -26,7 +27,8 @@ def get_best_models():
             "size": "8.7GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "qwen3:32b",
@@ -35,7 +37,8 @@ def get_best_models():
             "size": "19GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "llama3.3:70b",
@@ -44,7 +47,8 @@ def get_best_models():
             "size": "40GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llama3.2:3b",
@@ -53,7 +57,8 @@ def get_best_models():
             "size": "2.0GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llama3.1:8b",
@@ -62,7 +67,8 @@ def get_best_models():
             "size": "4.7GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llama3.1:70b",
@@ -71,7 +77,8 @@ def get_best_models():
             "size": "40GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "gemma3:4b",
@@ -80,7 +87,8 @@ def get_best_models():
             "size": "3.3GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "gemma3:12b",
@@ -89,7 +97,8 @@ def get_best_models():
             "size": "8.1GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "gemma3:27b",
@@ -98,7 +107,8 @@ def get_best_models():
             "size": "17GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "deepseek-r1:8b",
@@ -107,7 +117,8 @@ def get_best_models():
             "size": "4.7GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "deepseek-r1:14b",
@@ -116,7 +127,8 @@ def get_best_models():
             "size": "8.1GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "deepseek-r1:32b",
@@ -125,7 +137,8 @@ def get_best_models():
             "size": "19GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "mistral:7b",
@@ -134,7 +147,8 @@ def get_best_models():
             "size": "4.1GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "qwen2.5:7b",
@@ -143,7 +157,8 @@ def get_best_models():
             "size": "4.4GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "qwen2.5:14b",
@@ -152,7 +167,8 @@ def get_best_models():
             "size": "8.2GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "phi4:14b",
@@ -161,7 +177,8 @@ def get_best_models():
             "size": "8.4GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "gpt-oss:20b",
@@ -170,7 +187,8 @@ def get_best_models():
             "size": "12GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "mixtral:8x7b",
@@ -179,7 +197,8 @@ def get_best_models():
             "size": "26GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         # ── Vision models ────────────────────────────────────────────────
         {
@@ -189,7 +208,8 @@ def get_best_models():
             "size": "4.5GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "qwen2.5-vl:7b",
@@ -198,7 +218,8 @@ def get_best_models():
             "size": "7.9GB",
             "has_vision": True,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llama3.2-vision:11b",
@@ -207,7 +228,8 @@ def get_best_models():
             "size": "7.9GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llava-llama3:8b",
@@ -216,7 +238,8 @@ def get_best_models():
             "size": "5.5GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "moondream:1.8b",
@@ -225,7 +248,8 @@ def get_best_models():
             "size": "1.7GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "minicpm-v:8b",
@@ -234,7 +258,8 @@ def get_best_models():
             "size": "5.6GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         # ── Coding models ────────────────────────────────────────────────
         {
@@ -244,7 +269,8 @@ def get_best_models():
             "size": "4.4GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "qwen3-coder:30b",
@@ -253,7 +279,8 @@ def get_best_models():
             "size": "18GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         # ── Lightweight models ───────────────────────────────────────────
         {
@@ -263,7 +290,8 @@ def get_best_models():
             "size": "2.4GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "phi3:mini",
@@ -272,7 +300,8 @@ def get_best_models():
             "size": "2.3GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "gemma2:2b",
@@ -281,7 +310,8 @@ def get_best_models():
             "size": "1.3GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "smollm2:1.7b",
@@ -290,7 +320,8 @@ def get_best_models():
             "size": "1.0GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         # ── Alias entries (required by tests — keep plain names) ─────────
         {
@@ -300,7 +331,8 @@ def get_best_models():
             "size": "1.7GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llava",
@@ -309,7 +341,8 @@ def get_best_models():
             "size": "4.5GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llava-llama3",
@@ -318,7 +351,8 @@ def get_best_models():
             "size": "5.5GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llava-phi3",
@@ -327,7 +361,8 @@ def get_best_models():
             "size": "2.9GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
     ]
 
@@ -343,7 +378,8 @@ def get_all_downloadable_models():
             "size": "0.4GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "qwen3:4b",
@@ -352,7 +388,8 @@ def get_all_downloadable_models():
             "size": "2.6GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "qwen3:30b",
@@ -361,7 +398,8 @@ def get_all_downloadable_models():
             "size": "18GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "qwen3:235b",
@@ -370,7 +408,8 @@ def get_all_downloadable_models():
             "size": "140GB+",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "llama3.2:1b",
@@ -379,7 +418,8 @@ def get_all_downloadable_models():
             "size": "0.7GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "gemma3:1b",
@@ -388,7 +428,8 @@ def get_all_downloadable_models():
             "size": "0.8GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "deepseek-r1:1.5b",
@@ -397,7 +438,8 @@ def get_all_downloadable_models():
             "size": "1.1GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "deepseek-r1:70b",
@@ -406,7 +448,8 @@ def get_all_downloadable_models():
             "size": "40GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "deepseek-r1:671b",
@@ -415,7 +458,8 @@ def get_all_downloadable_models():
             "size": "400GB+",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "gpt-oss:120b",
@@ -424,7 +468,8 @@ def get_all_downloadable_models():
             "size": "72GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "mistral-nemo:12b",
@@ -433,7 +478,8 @@ def get_all_downloadable_models():
             "size": "7.1GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "mistral-small:24b",
@@ -442,7 +488,8 @@ def get_all_downloadable_models():
             "size": "14GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "mistral-large:123b",
@@ -451,7 +498,8 @@ def get_all_downloadable_models():
             "size": "72GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "magistral:24b",
@@ -460,7 +508,8 @@ def get_all_downloadable_models():
             "size": "14GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "command-r:35b",
@@ -469,7 +518,8 @@ def get_all_downloadable_models():
             "size": "20GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "command-r7b:7b",
@@ -478,7 +528,8 @@ def get_all_downloadable_models():
             "size": "4.4GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "command-a:111b",
@@ -487,7 +538,8 @@ def get_all_downloadable_models():
             "size": "66GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "aya:8b",
@@ -496,7 +548,8 @@ def get_all_downloadable_models():
             "size": "4.7GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "hermes3:8b",
@@ -505,7 +558,8 @@ def get_all_downloadable_models():
             "size": "4.7GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "cogito:8b",
@@ -514,7 +568,8 @@ def get_all_downloadable_models():
             "size": "4.9GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "cogito:14b",
@@ -523,7 +578,8 @@ def get_all_downloadable_models():
             "size": "8.7GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "olmo2:7b",
@@ -532,7 +588,8 @@ def get_all_downloadable_models():
             "size": "4.4GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "falcon3:7b",
@@ -541,7 +598,8 @@ def get_all_downloadable_models():
             "size": "4.1GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "gemma:7b",
@@ -550,7 +608,8 @@ def get_all_downloadable_models():
             "size": "4.8GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "gemma2:9b",
@@ -559,7 +618,8 @@ def get_all_downloadable_models():
             "size": "5.4GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "gemma3n:e4b",
@@ -568,7 +628,8 @@ def get_all_downloadable_models():
             "size": "3.1GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "granite3.3:8b",
@@ -577,7 +638,8 @@ def get_all_downloadable_models():
             "size": "4.9GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "granite4:3b",
@@ -586,7 +648,8 @@ def get_all_downloadable_models():
             "size": "1.9GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         # ── Vision models ────────────────────────────────────────────────
         {
@@ -596,7 +659,8 @@ def get_all_downloadable_models():
             "size": "5.6GB",
             "has_vision": True,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "qwen3-vl:32b",
@@ -605,7 +669,8 @@ def get_all_downloadable_models():
             "size": "19GB",
             "has_vision": True,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "qwen2.5-vl:14b",
@@ -614,7 +679,8 @@ def get_all_downloadable_models():
             "size": "14GB",
             "has_vision": True,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "qwen2.5vl:7b",
@@ -623,7 +689,8 @@ def get_all_downloadable_models():
             "size": "5.1GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llama3.2-vision:90b",
@@ -632,7 +699,8 @@ def get_all_downloadable_models():
             "size": "54GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llama4:16x17b",
@@ -641,7 +709,8 @@ def get_all_downloadable_models():
             "size": "55GB",
             "has_vision": True,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "mistral-small3.2:24b",
@@ -650,7 +719,8 @@ def get_all_downloadable_models():
             "size": "14GB",
             "has_vision": True,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "mistral-small3.1:24b",
@@ -659,7 +729,8 @@ def get_all_downloadable_models():
             "size": "14GB",
             "has_vision": True,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "granite3.2-vision:2b",
@@ -668,7 +739,8 @@ def get_all_downloadable_models():
             "size": "1.8GB",
             "has_vision": True,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "bakllava:7b",
@@ -677,7 +749,8 @@ def get_all_downloadable_models():
             "size": "4.5GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "bakllava",
@@ -686,7 +759,8 @@ def get_all_downloadable_models():
             "size": "4.5GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llava-phi3:mini",
@@ -695,7 +769,8 @@ def get_all_downloadable_models():
             "size": "2.9GB",
             "has_vision": True,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         # ── Reasoning models ─────────────────────────────────────────────
         {
@@ -705,7 +780,8 @@ def get_all_downloadable_models():
             "size": "19GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "phi4-reasoning:14b",
@@ -714,7 +790,8 @@ def get_all_downloadable_models():
             "size": "8.4GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "phi4-mini-reasoning:3.8b",
@@ -723,7 +800,8 @@ def get_all_downloadable_models():
             "size": "2.4GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "deepscaler:1.5b",
@@ -732,7 +810,8 @@ def get_all_downloadable_models():
             "size": "1.1GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "openthinker:7b",
@@ -741,7 +820,8 @@ def get_all_downloadable_models():
             "size": "4.5GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "exaone-deep:7.8b",
@@ -750,7 +830,8 @@ def get_all_downloadable_models():
             "size": "4.7GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "marco-o1:7b",
@@ -759,7 +840,8 @@ def get_all_downloadable_models():
             "size": "4.5GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         # ── Coding models ────────────────────────────────────────────────
         {
@@ -769,7 +851,8 @@ def get_all_downloadable_models():
             "size": "8.2GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "qwen2.5-coder:32b",
@@ -778,7 +861,8 @@ def get_all_downloadable_models():
             "size": "19GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "codestral:22b",
@@ -787,7 +871,8 @@ def get_all_downloadable_models():
             "size": "12GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "devstral:24b",
@@ -796,7 +881,8 @@ def get_all_downloadable_models():
             "size": "14GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "deepcoder:14b",
@@ -805,7 +891,8 @@ def get_all_downloadable_models():
             "size": "8.2GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "deepcoder:1.5b",
@@ -814,7 +901,8 @@ def get_all_downloadable_models():
             "size": "1.1GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": True
+            "has_reasoning": True,
+            "context_length": "128K"
         },
         {
             "name": "codellama:7b",
@@ -823,7 +911,8 @@ def get_all_downloadable_models():
             "size": "3.8GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "deepseek-coder:6.7b",
@@ -832,7 +921,8 @@ def get_all_downloadable_models():
             "size": "3.9GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "deepseek-coder-v2:16b",
@@ -841,7 +931,8 @@ def get_all_downloadable_models():
             "size": "8.9GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "codegemma:7b",
@@ -850,7 +941,8 @@ def get_all_downloadable_models():
             "size": "4.8GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "starcoder2:7b",
@@ -859,7 +951,8 @@ def get_all_downloadable_models():
             "size": "4.1GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         # ── Classic / legacy models ──────────────────────────────────────
         {
@@ -869,7 +962,8 @@ def get_all_downloadable_models():
             "size": "4.7GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "llama2:7b",
@@ -878,7 +972,8 @@ def get_all_downloadable_models():
             "size": "3.8GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "deepseek-v3:671b",
@@ -887,7 +982,8 @@ def get_all_downloadable_models():
             "size": "400GB+",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         # ── Lightweight / edge models ────────────────────────────────────
         {
@@ -897,7 +993,8 @@ def get_all_downloadable_models():
             "size": "0.6GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "phi3:medium",
@@ -906,7 +1003,8 @@ def get_all_downloadable_models():
             "size": "7.9GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "phi3.5:3.8b",
@@ -915,7 +1013,8 @@ def get_all_downloadable_models():
             "size": "2.3GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "gemma2:27b",
@@ -924,7 +1023,8 @@ def get_all_downloadable_models():
             "size": "16GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         # ── Specialized / uncensored models ──────────────────────────────
         {
@@ -934,7 +1034,8 @@ def get_all_downloadable_models():
             "size": "4.7GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "dolphin-mixtral:8x7b",
@@ -943,7 +1044,8 @@ def get_all_downloadable_models():
             "size": "26GB",
             "has_vision": False,
             "has_tools": True,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "wizardlm2:7b",
@@ -952,7 +1054,8 @@ def get_all_downloadable_models():
             "size": "4.1GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "yi:9b",
@@ -961,7 +1064,8 @@ def get_all_downloadable_models():
             "size": "5.4GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
         {
             "name": "glm4:9b",
@@ -970,7 +1074,8 @@ def get_all_downloadable_models():
             "size": "5.5GB",
             "has_vision": False,
             "has_tools": False,
-            "has_reasoning": False
+            "has_reasoning": False,
+            "context_length": "128K"
         },
     ]
     return best + additional

@@ -2,6 +2,25 @@
 from app.services.capabilities import ensure_capability_flags
 
 
+def format_context_length(ctx):
+    """Format context length from provider (number or string) for display (e.g. 128000 -> '128K')."""
+    if ctx is None:
+        return None
+    if isinstance(ctx, str) and ctx.strip():
+        return ctx.strip()
+    try:
+        n = int(ctx)
+    except (TypeError, ValueError):
+        return str(ctx) if ctx else None
+    if n <= 0:
+        return None
+    if n >= 1_000_000:
+        return f"{n // 1_000_000}M"
+    if n >= 1000:
+        return f"{n // 1000}K"
+    return str(n)
+
+
 def _extract_context_length(entry):
     """Extract context_length from entry (top-level, details, or model_info)."""
     if not isinstance(entry, dict):
@@ -23,6 +42,7 @@ def _extract_context_length(entry):
 def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflict=False):
     if not isinstance(entry, dict):
         return {'name': str(entry), 'has_vision': False, 'has_tools': False, 'has_reasoning': False}
+    raw_ctx = _extract_context_length(entry)
     model = {
         'name': entry.get('name', 'unknown'),
         'size': entry.get('size'),
@@ -30,7 +50,7 @@ def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflic
         'details': entry.get('details') if entry.get('details') is not None else {},
         'tags': entry.get('tags'),
         'digest': entry.get('digest'),
-        'context_length': _extract_context_length(entry),
+        'context_length': format_context_length(raw_ctx) if raw_ctx is not None else None,
     }
     if isinstance(model.get('size'), (int, float)):
         try:
@@ -66,7 +86,7 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
             'digest': model.get('digest') if isinstance(model, dict) else None,
             'tags': model.get('tags') if isinstance(model, dict) else None,
             'size_vram': model.get('size_vram') if isinstance(model, dict) else None,
-            'context_length': _extract_context_length(model) if isinstance(model, dict) else None,
+            'context_length': format_context_length(_extract_context_length(model)) if isinstance(model, dict) else None,
         }
 
         # Format VRAM size if present

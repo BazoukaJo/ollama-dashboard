@@ -392,7 +392,7 @@
                                                 </div>
                                                 <div class="spec-content">
                                                     <div class="spec-label">Size</div>
-                                                    <div class="spec-value">{{ model.size|filesizeformat if model.size else 'Unknown' }}</div>
+                                                    <div class="spec-value text-nowrap">{{ model.formatted_size|default(model.size|filesizeformat if model.size else 'Unknown') }}</div>
                                                 </div>
                                             </div>
                                             <div class="spec-item">

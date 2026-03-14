@@ -2,12 +2,44 @@
 
 Separated from ollama.py to reduce file length. Keep heuristics identical
 so tests relying on existing behavior continue to pass.
+
+Accuracy / priority (highest first):
+  1. Ollama API capabilities array (from /api/show or /api/tags) — definitive when present.
+  2. Explicit bool flags (catalog, live fetcher) — used when API has no capabilities.
+  3. Heuristics (name + families patterns) — used when API and explicit are missing; can be wrong.
+
+Note: Ollama returns capabilities as list of strings (e.g. ["completion", "vision", "tools"]).
+Reasoning/thinking is not in Ollama's capability list yet; we infer it from heuristics or catalog.
+
+Default API→flags mapping is loaded from model_capability_defaults.json when present.
 """
 from __future__ import annotations
-import re
+import json
 import logging
+import re
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Path to default capability definition file (sourced from Ollama docs and community)
+_CAPABILITY_DEFAULTS_PATH = Path(__file__).resolve().parent / "model_capability_defaults.json"
+_capability_defaults_cache = None
+
+
+def load_capability_defaults():
+    """Load model_capability_defaults.json. Returns dict (empty if missing or invalid). Cached."""
+    global _capability_defaults_cache
+    if _capability_defaults_cache is not None:
+        return _capability_defaults_cache
+    try:
+        if _CAPABILITY_DEFAULTS_PATH.is_file():
+            with open(_CAPABILITY_DEFAULTS_PATH, encoding="utf-8") as f:
+                _capability_defaults_cache = json.load(f)
+            return _capability_defaults_cache
+    except (OSError, json.JSONDecodeError) as e:
+        logger.debug("Could not load capability defaults from %s: %s", _CAPABILITY_DEFAULTS_PATH, e)
+    _capability_defaults_cache = {}
+    return _capability_defaults_cache
 
 # Vision model name patterns
 _VISION_PATTERNS = [
@@ -30,10 +62,11 @@ _TOOL_PATTERNS = [
 ]
 
 # Exclusions for tool patterns (older / unsupported variants)
+# Note: mistral:7b v0.3+ has tool support; do not exclude by size.
 _TOOL_EXCLUDE_PATTERNS = [
     r'llama3\.0', r'llama2',
     r'qwen2\.0', r'qwen.*2\.0',
-    r'hermes2', r'hermes.*2', r'qwen.*1\.*', r'mistral.*7b'
+    r'hermes2', r'hermes.*2', r'qwen.*1\.*',
 ]
 
 # Reasoning model patterns
@@ -113,19 +146,30 @@ def detect_capabilities(model_name: str, families) -> dict:
 def _caps_from_ollama_api(caps_list: list) -> dict | None:
     """Map Ollama API capabilities array to has_vision, has_tools, has_reasoning.
     Returns dict with True/False when we have definitive API data, else None.
+    Uses api_to_flags from model_capability_defaults.json when available.
     """
     if not caps_list or not isinstance(caps_list, list):
         return None
-    caps_lower = [str(c).lower() for c in caps_list]
+    caps_lower = [str(c).lower().strip() for c in caps_list]
+    defaults = load_capability_defaults()
+    api_to_flags = (defaults or {}).get("api_to_flags") or {}
+    vision_aliases = api_to_flags.get("has_vision") or ["vision", "image", "multimodal"]
+    tools_aliases = api_to_flags.get("has_tools") or [
+        "tools", "tool", "function", "function-calling", "tool-use"
+    ]
+    reasoning_aliases = api_to_flags.get("has_reasoning") or ["reasoning", "thinking", "think"]
     return {
-        'has_vision': 'vision' in caps_lower or 'image' in caps_lower,
-        'has_tools': any(x in caps_lower for x in ('tools', 'tool', 'function', 'function-calling')),
-        'has_reasoning': any(x in caps_lower for x in ('reasoning', 'thinking', 'think')),
+        "has_vision": any(x in caps_lower for x in vision_aliases),
+        "has_tools": any(x in caps_lower for x in tools_aliases),
+        "has_reasoning": any(x in caps_lower for x in reasoning_aliases),
     }
 
 
 def ensure_capability_flags(model: dict, prefer_heuristics_on_conflict: bool = False) -> dict:
     """Normalize capability flags: True (supported), False (known not supported), None (undefined).
+
+    Priority for each flag (first wins): (1) Ollama API capabilities array, (2) explicit bool on model,
+    (3) heuristics from name/families. API is always authoritative when present.
 
     - Green: True = feature supported
     - Grey: False = known to be not functional

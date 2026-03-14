@@ -20,7 +20,26 @@ if (!window.getCapabilitiesHTML) {
 (function () {
   const escapeHtml = window.escapeHtml || ((s) => s);
   const getCapabilitiesHTML = window.getCapabilitiesHTML;
+
+  function familyFromModel(model) {
+    if (model.family != null && model.family !== "") return String(model.family);
+    const details = model.details || {};
+    if (details.family != null && details.family !== "") return String(details.family);
+    const name = model.name;
+    if (!name || typeof name !== "string") return "Unknown";
+    const colon = name.indexOf(":");
+    return colon > 0 ? name.slice(0, colon).trim() : name.trim() || "Unknown";
+  }
+
+  function contextFromModel(model) {
+    const val = model.context_length ?? (model.details && model.details.context_length);
+    if (val != null && val !== "") return String(val);
+    return "—";
+  }
+
   function buildDownloadableModelCardHTML(model) {
+    const family = familyFromModel(model);
+    const contextVal = contextFromModel(model);
     return `
         <div class="col-md-6 col-lg-4">
           <div class="model-card h-100" data-model-name="${escapeHtml(model.name)}">
@@ -44,7 +63,7 @@ if (!window.getCapabilitiesHTML) {
                             </div>
                             <div class="spec-content">
                                 <div class="spec-label">Family</div>
-                                <div class="spec-value">${model.family || "Unknown"}</div>
+                                <div class="spec-value">${escapeHtml(family)}</div>
                             </div>
                         </div>
                         <div class="spec-item">
@@ -53,7 +72,7 @@ if (!window.getCapabilitiesHTML) {
                             </div>
                             <div class="spec-content">
                                 <div class="spec-label">Parameters</div>
-                                <div class="spec-value">${model.parameter_size || "Unknown"}</div>
+                                <div class="spec-value">${model.parameter_size != null && model.parameter_size !== "" ? escapeHtml(String(model.parameter_size)) : "Unknown"}</div>
                             </div>
                         </div>
                     </div>
@@ -64,7 +83,7 @@ if (!window.getCapabilitiesHTML) {
                             </div>
                             <div class="spec-content">
                                 <div class="spec-label">Size</div>
-                                <div class="spec-value">${model.size || "Unknown"}</div>
+                                <div class="spec-value">${model.size != null && model.size !== "" ? escapeHtml(String(model.size)) : "Unknown"}</div>
                             </div>
                         </div>
                         <div class="spec-item">
@@ -73,7 +92,7 @@ if (!window.getCapabilitiesHTML) {
                             </div>
                             <div class="spec-content">
                                 <div class="spec-label">Context</div>
-                                <div class="spec-value">${model.context_length ?? "Unknown"}</div>
+                                <div class="spec-value">${escapeHtml(contextVal)}</div>
                             </div>
                         </div>
                     </div>

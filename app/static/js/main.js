@@ -1268,12 +1268,26 @@ function buildAvailableModelCardHTML(model) {
     typeof escapeHtml === "function" ? escapeHtml(String(name)) : String(name);
   const hasCustom = !!model?.has_custom_settings;
   const details = model?.details || {};
-  const family = details.family != null ? String(details.family) : "Unknown";
+  const family =
+    details.family != null && details.family !== ""
+      ? String(details.family)
+      : "Unknown";
   const parameterSize =
-    details.parameter_size != null ? String(details.parameter_size) : "Unknown";
-  const sizeStr = model?.size != null ? String(model.size) : "Unknown";
+    details.parameter_size != null && details.parameter_size !== ""
+      ? String(details.parameter_size)
+      : model?.parameter_size != null && model.parameter_size !== ""
+        ? String(model.parameter_size)
+        : "Unknown";
+  const formattedSize =
+    model?.formatted_size != null && model.formatted_size !== ""
+      ? model.formatted_size
+      : typeof model?.size === "number" && !Number.isNaN(model.size)
+        ? formatBytes(model.size)
+        : "Unknown";
   const contextVal =
     model?.context_length ?? details.context_length ?? "Unknown";
+  const contextStr =
+    contextVal != null && contextVal !== "" ? String(contextVal) : "Unknown";
   const capabilityIcons = getCapabilitiesHTML(model);
   return `
     <div class="col-md-6 col-lg-4">
@@ -1318,14 +1332,14 @@ function buildAvailableModelCardHTML(model) {
               <div class="spec-icon"><i class="fas fa-hdd"></i></div>
               <div class="spec-content">
                 <div class="spec-label">Size</div>
-                <div class="spec-value">${typeof escapeHtml === "function" ? escapeHtml(sizeStr) : sizeStr}</div>
+                <div class="spec-value text-nowrap">${typeof escapeHtml === "function" ? escapeHtml(formattedSize) : formattedSize}</div>
               </div>
             </div>
             <div class="spec-item">
               <div class="spec-icon"><i class="fas fa-align-left"></i></div>
               <div class="spec-content">
                 <div class="spec-label">Context</div>
-                <div class="spec-value">${typeof escapeHtml === "function" ? escapeHtml(String(contextVal)) : String(contextVal)}</div>
+                <div class="spec-value">${typeof escapeHtml === "function" ? escapeHtml(contextStr) : contextStr}</div>
               </div>
             </div>
           </div>
@@ -1474,34 +1488,16 @@ function initializeCompactMode() {
 
 // updateHealthStatus & updateServiceControlButtons moved to serviceControl.js
 
-// Downloadable models functionality - Global scope for onclick handlers
+// Downloadable models: fetched once on init, show first 12 then "View More"
+const INITIAL_DOWNLOADABLE_VISIBLE = 12;
+let cachedDownloadableModels = [];
 let extendedModelsLoaded = false;
 
-async function loadExtendedModels() {
-  const container = document.getElementById("extendedModelsContainer");
-  if (!container) return;
-
-  try {
-    const response = await fetch("/api/models/downloadable?category=all");
-    if (response.ok) {
-      const data = await response.json();
-      renderExtendedModels(data.models, container);
-      extendedModelsLoaded = true;
-    } else {
-      container.innerHTML =
-        '<div class="col-12 text-center text-danger">Failed to load extended models</div>';
-    }
-  } catch (error) {
-    console.error("Error loading extended models:", error);
-    container.innerHTML =
-      '<div class="col-12 text-center text-danger">Error loading models</div>';
-  }
-}
-
 function renderExtendedModels(models, container) {
+  if (!container) return;
   if (!models || models.length === 0) {
     container.innerHTML =
-      '<div class="col-12 text-center text-muted">No models available</div>';
+      '<div class="col-12 text-center text-muted">No more models</div>';
     return;
   }
   container.innerHTML = models
@@ -1511,9 +1507,17 @@ function renderExtendedModels(models, container) {
         : `<!-- modelCards module missing -->`,
     )
     .join("");
-
-  // Apply current filters to the newly rendered models
   applyCapabilityFilters("extendedModelsContainer");
+}
+
+function updateViewMoreButtonVisibility() {
+  const button = document.getElementById("viewMoreModelsBtn");
+  if (!button) return;
+  if (cachedDownloadableModels.length <= INITIAL_DOWNLOADABLE_VISIBLE) {
+    button.style.display = "none";
+  } else {
+    button.style.display = "";
+  }
 }
 
 async function toggleExtendedModels() {
@@ -1521,19 +1525,14 @@ async function toggleExtendedModels() {
   const button = document.getElementById("viewMoreModelsBtn");
 
   if (container.style.display === "none" || container.style.display === "") {
-    // Load extended models if not already loaded
     if (!extendedModelsLoaded) {
-      button.innerHTML =
-        '<i class="fas fa-spinner fa-spin me-2"></i>Loading...';
-      button.disabled = true;
-      await loadExtendedModels();
-      button.disabled = false;
+      const rest = cachedDownloadableModels.slice(INITIAL_DOWNLOADABLE_VISIBLE);
+      renderExtendedModels(rest, container);
+      extendedModelsLoaded = true;
     }
-    // Show extended models
     container.style.display = "flex";
     button.innerHTML = '<i class="fas fa-minus-circle me-2"></i>Show Less';
   } else {
-    // Hide extended models
     container.style.display = "none";
     button.innerHTML =
       '<i class="fas fa-plus-circle me-2"></i>View More Models';
@@ -1545,7 +1544,7 @@ document.addEventListener("DOMContentLoaded", function () {
   setInterval(updateSystemStats, 1000);
 });
 
-// Downloadable models functionality
+// Downloadable models: called only on app init, fetches best curated list from Ollama
 async function loadDownloadableModels() {
   const container = document.getElementById("downloadableModelsContainer");
   if (!container) return;
@@ -1554,7 +1553,11 @@ async function loadDownloadableModels() {
     const response = await fetch("/api/models/downloadable?category=best");
     if (response.ok) {
       const data = await response.json();
-      renderDownloadableModels(data.models);
+      const list = Array.isArray(data.models) ? data.models : [];
+      cachedDownloadableModels = list;
+      const initial = list.slice(0, INITIAL_DOWNLOADABLE_VISIBLE);
+      renderDownloadableModels(initial);
+      updateViewMoreButtonVisibility();
     } else {
       container.innerHTML =
         '<div class="col-12 text-center text-danger">Failed to load models</div>';
@@ -1582,8 +1585,6 @@ function renderDownloadableModels(models) {
         : `<!-- modelCards module missing -->`,
     )
     .join("");
-
-  // Apply current filters to the newly rendered models
   applyCapabilityFilters("downloadableModelsContainer");
 }
 
@@ -1618,9 +1619,32 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 async function pullModel(modelName) {
-  const card = document.querySelector(
+  let card = document.querySelector(
     `.model-card[data-model-name="${cssEscape(modelName)}"]`,
   );
+  // When downloading from search panel, no card exists yet — add one so the cards list shows download state
+  if (!card) {
+    const container = document.getElementById("downloadableModelsContainer");
+    if (container && window.modelCards && window.modelCards.buildDownloadableModelCardHTML) {
+      const placeholder = {
+        name: modelName,
+        family: "Unknown",
+        parameter_size: "Unknown",
+        size: "Unknown",
+        context_length: "Unknown",
+      };
+      const cardHtml = window.modelCards.buildDownloadableModelCardHTML(placeholder);
+      const wrapper = document.createElement("div");
+      wrapper.innerHTML = cardHtml.trim();
+      const col = wrapper.firstElementChild;
+      if (col) {
+        container.insertBefore(col, container.firstChild);
+        card = document.querySelector(
+          `.model-card[data-model-name="${cssEscape(modelName)}"]`,
+        );
+      }
+    }
+  }
   const button = card
     ? card.querySelector('button[title="Download model"]')
     : null;
@@ -1642,6 +1666,7 @@ async function pullModel(modelName) {
   }
 
   if (progressContainer) {
+    progressContainer.classList.remove("d-none");
     progressContainer.style.display = "block";
   }
 

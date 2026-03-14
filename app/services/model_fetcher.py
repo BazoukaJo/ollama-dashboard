@@ -182,6 +182,7 @@ def _merge_with_static(live_models: List[Dict], static_models: List[Dict]) -> Li
                     "has_vision": live.get("has_vision", False),
                     "has_tools": live.get("has_tools", False),
                     "has_reasoning": live.get("has_reasoning", False),
+                    "context_length": "32K",
                 }
                 merged.append(entry)
                 seen_names.add(qualified)
@@ -196,6 +197,7 @@ def _merge_with_static(live_models: List[Dict], static_models: List[Dict]) -> Li
                     "has_vision": live.get("has_vision", False),
                     "has_tools": live.get("has_tools", False),
                     "has_reasoning": live.get("has_reasoning", False),
+                    "context_length": "32K",
                 }
                 merged.append(entry)
                 seen_names.add(base_name)
@@ -336,6 +338,7 @@ def _build_best_from_live(live_models: List[Dict]) -> List[Dict]:
                 "has_vision": live.get("has_vision", False),
                 "has_tools": live.get("has_tools", False),
                 "has_reasoning": live.get("has_reasoning", False),
+                "context_length": "32K",
             }
 
         best.append(entry)
@@ -357,6 +360,7 @@ def _build_best_from_live(live_models: List[Dict]) -> List[Dict]:
                     "has_vision": True,
                     "has_tools": False,
                     "has_reasoning": False,
+                    "context_length": "32K",
                 })
             seen_names.add(alias)
 
