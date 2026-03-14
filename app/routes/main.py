@@ -328,7 +328,7 @@ def start_model(model_name):
         except requests.exceptions.ConnectionError as e:
             if _is_transient_error(str(e)):
                 return {"success": False, "message": "Model loading failed after 3 retries due to connection issues. This can happen with large models on first load. Please try again."}, 503
-            return {"success": False, "message": "Cannot connect to Ollama server. Please ensure Ollama is running."}, 503
+            return {"success": False, "message": "Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct."}, 503
 
     except Exception as e:
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
@@ -892,7 +892,7 @@ def chat():
         except requests.exceptions.Timeout:
             return {"error": "Request timed out. Try a smaller model."}, 408
         except requests.exceptions.ConnectionError:
-            return {"error": "Cannot connect to Ollama server. Please ensure Ollama is running."}, 503
+            return {"error": "Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct."}, 503
 
         if response.status_code == 200:
             # Record recent activity so the dashboard can show "running"

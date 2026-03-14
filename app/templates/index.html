@@ -22,7 +22,7 @@
                     <img src="{{ url_for('static', filename='ollama-logo.png') }}" alt="Ollama">
                 </div>
                 <h2 class="page-title-minimal mb-0">Ollama Dashboard</h2>
-                <small class="text-muted fw-light ms-2">v{{ dashboard_version|default('1.0') }}</small>
+                <small class="text-muted fw-light ms-2">v{{ dashboard_version|default('1.0001') }}</small>
                 {% if ollama_version != 'Unknown' %}
                 <small class="text-muted fw-light ms-2">Ollama v{{ ollama_version }}</small>
                 {% endif %}
@@ -151,12 +151,12 @@
                             <canvas class="timeline-canvas" id="vramTimeline" width="200" height="20"></canvas>
                         </div>
 
-                        <!-- GPU Utilization -->
+                        <!-- GPU -->
                         <div class="compact-metric">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-1">
                                     <i class="fas fa-microchip resource-icon resource-icon-gpu"></i>
-                                    <span class="metric-label-compact">GPU Utilization</span>
+                                    <span class="metric-label-compact">GPU</span>
                                 </div>
                                 <span class="metric-value-compact" id="gpu3dPercent">{{ system_stats.vram.gpu_3d|round(1) }}%</span>
                             </div>
@@ -439,7 +439,7 @@
                                         <i class="fas fa-tools"></i>
                                     </button>
                                 </div>
-                                <small class="text-muted d-none d-sm-block">Curated selection from Ollama library</small>
+                                <small class="text-muted d-none d-sm-block">Ollama library</small>
                             </div>
                         </div>
                         <div class="row g-3" id="downloadableModelsContainer">

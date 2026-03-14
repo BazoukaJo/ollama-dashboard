@@ -319,6 +319,15 @@ class OllamaServiceCore:
             # Ensure we have valid values
             if not host or not isinstance(host, str):
                 host = 'localhost'
+            # If host is "host:port" (one colon, port digits), strip port to avoid double port (e.g. 0.0.0.0:11434:11434)
+            if isinstance(host, str) and host.count(':') == 1:
+                host_part, _, port_part = host.partition(':')
+                if host_part and port_part and str(port_part).strip().isdigit():
+                    try:
+                        port = int(port_part)
+                        host = host_part
+                    except (ValueError, TypeError):
+                        pass
             if not port:
                 port = 11434
 
@@ -332,6 +341,11 @@ class OllamaServiceCore:
             if not 1 <= port <= 65535:
                 logger.warning("Invalid port %s, using default 11434", port)
                 port = 11434
+
+            # 0.0.0.0 / :: are bind addresses (listen on all interfaces), not valid for outbound
+            # connections. Use loopback so the dashboard on the same machine can connect.
+            if host in ('0.0.0.0', '::', '::0', '0:0:0:0:0:0:0:0'):
+                host = '127.0.0.1'
 
             return host, port
         except Exception as e:
@@ -355,7 +369,7 @@ class OllamaServiceCore:
             'no connection could be made', '/api/ps'
         ]
         if any(indicator in error_str for indicator in connection_indicators):
-            return "Cannot connect to Ollama server. Please ensure Ollama is running on localhost:11434."
+            return "Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct."
         return str(error)
 
     def get_component_health(self):

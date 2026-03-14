@@ -104,7 +104,7 @@ class OllamaServiceModels:
             return f"http://{host}:{port}/api/ps"
         except Exception as exc:
             raise ConnectionError(
-                f"Failed to connect to Ollama server: {exc}. Ensure Ollama is running and accessible."
+                f"Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct. ({exc})"
             ) from exc
 
     def get_ollama_version(self):
@@ -385,7 +385,7 @@ class OllamaServiceModels:
             return current_models
         except requests.exceptions.ConnectionError as exc:
             raise OllamaConnectionError(
-                "Could not connect to Ollama server. Please ensure it's running and accessible."
+                "Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct."
             ) from exc
         except requests.exceptions.Timeout as exc:
             raise OllamaConnectionError(

@@ -1,6 +1,6 @@
 # Ollama Dashboard
 
-## Version 1.0
+## Version 1.0001
 
 ![Ollama Dashboard](Screenshot.png)
 

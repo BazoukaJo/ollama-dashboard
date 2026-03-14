@@ -220,7 +220,7 @@ def fetch_library_models(timeout: int = 15) -> List[Dict]:
         try:
             logger.info("📡 Fetching latest model catalog from ollama.com/library …")
             resp = requests.get(_LIBRARY_URL, timeout=timeout, headers={
-                "User-Agent": "OllamaDashboard/1.0",
+                "User-Agent": "OllamaDashboard/1.0001",
                 "Accept": "text/html",
             })
             resp.raise_for_status()

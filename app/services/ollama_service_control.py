@@ -1,4 +1,5 @@
 """Service control functionality for OllamaService: start, stop, restart, and status checking."""
+# pylint: disable=broad-exception-caught,line-too-long  # intentional: must not crash on any error; long messages
 
 import os
 import platform
@@ -262,6 +263,22 @@ class OllamaServiceControl:
             pass
         return None, methods_tried
 
+    def _force_kill_ollama_process(self):
+        """Force-kill any Ollama process (Windows: taskkill /F, Unix: pkill -9). No graceful stop."""
+        try:
+            if platform.system() == 'Windows':
+                subprocess.run(
+                    ['taskkill', '/F', '/IM', 'ollama.exe'],
+                    capture_output=True, text=True, timeout=10, check=False
+                )
+            else:
+                subprocess.run(
+                    ['pkill', '-9', '-f', 'ollama'],
+                    capture_output=True, text=True, timeout=10, check=False
+                )
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
+            pass
+
     def _verify_ollama_api(self, max_retries=5, retry_delay=2):
         """Verify Ollama API is accessible with retry logic."""
         try:
@@ -376,8 +393,14 @@ class OllamaServiceControl:
                     api_ok, api_msg = self._verify_ollama_api(max_retries=3, retry_delay=1)
                     if api_ok:
                         return {"success": True, "message": "Ollama service is already running and API is accessible"}
-                    else:
-                        return {"success": False, "message": f"Ollama process is running but API is not accessible: {api_msg}. Try restarting the service."}
+                    # Process running but API not accessible: force kill and start fresh
+                    self.logger.info("Ollama process running but API not accessible; force-killing and starting")
+                    self._force_kill_ollama_process()
+                    for _ in range(15):
+                        if not self.get_service_status():
+                            break
+                        time.sleep(1)
+                    time.sleep(2)  # Allow port to be released
                 except Exception as e:
                     self.logger.warning("Error verifying API: %s", e)
                     return {"success": True, "message": "Ollama service appears to be running (API verification failed)"}
@@ -591,7 +614,7 @@ class OllamaServiceControl:
             return {"success": False, "message": f"Unexpected error stopping service: {str(e)}"}
 
     def restart_service(self):
-        """Restart the Ollama service."""
+        """Restart the Ollama service: force-kill completely first, then start."""
         try:
             # Stop background updates temporarily to avoid race conditions during restart
             try:
@@ -600,20 +623,22 @@ class OllamaServiceControl:
                     self._background_stats.join(timeout=5)
             except Exception:
                 pass
-            stop_result = self.stop_service()
-            # Poll until service is down (up to 10s); do not return early on stop "failure"
-            # - stop may report failure (e.g. sc stop fails) yet taskkill succeeded
-            for _ in range(10):
+            # Force-kill first so the process is completely gone before starting
+            self._force_kill_ollama_process()
+            time.sleep(2)
+            for _ in range(15):
                 if not self.get_service_status():
                     break
                 time.sleep(1)
-            else:
-                # Service still running after poll - hard failure
-                return stop_result if not stop_result["success"] else {
-                    "success": False,
-                    "message": "Ollama service could not be stopped (still running after stop attempts)."
-                }
-
+            # If still running, try full stop (sc stop + taskkill / pkill)
+            if self.get_service_status():
+                self.stop_service()
+                for _ in range(10):
+                    if not self.get_service_status():
+                        break
+                    time.sleep(1)
+            if self.get_service_status():
+                return {"success": False, "message": "Ollama service could not be stopped (still running after force kill)."}
             time.sleep(10)  # Allow port 11434 to be released before starting
 
             start_result = self.start_service()
