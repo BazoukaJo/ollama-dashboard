@@ -1,6 +1,10 @@
 # Ollama Dashboard
 
-A web dashboard for monitoring, controlling, and managing Ollama language models. Features real-time system monitoring, per-model settings, chat interface, and model discovery.
+## Version 1.0
+
+![Ollama Dashboard](Screenshot.png)
+
+A web dashboard for monitoring, controlling, and managing Ollama language models. Features real-time system monitoring, per-model settings and model discovery.
 
 ---
 
@@ -10,8 +14,7 @@ A web dashboard for monitoring, controlling, and managing Ollama language models
 
 - **Model Management**: Start, stop, restart, delete, and download Ollama models
 - **Per-Model Settings**: Temperature, top-k, penalties with atomic JSON persistence
-- **System Monitoring**: Real-time CPU, RAM, VRAM (GPU), and GPU 3D usage
-- **Chat Interface**: Streaming inference with conversation history
+- **System Monitoring**: Real-time CPU, RAM, VRAM (GPU), and GPU Utilization usage
 - **Service Control**: Start/stop/restart Ollama service (multi-platform)
 - **Model Discovery**: Browse and download from the Ollama library
 
@@ -36,7 +39,7 @@ A web dashboard for monitoring, controlling, and managing Ollama language models
 
 ```bash
 # Clone repository
-git clone https://github.com/poiley/ollama-dashboard.git
+git clone https://github.com/bazoukajo/ollama-dashboard.git
 cd ollama-dashboard
 
 # Create virtual environment and install
@@ -76,6 +79,10 @@ docker-compose up -d
 # Access at http://localhost:5000
 ```
 
+### Run at Windows startup
+
+To start the dashboard when Windows starts, copy `StartupFolder\Start Ollama Dashboard.bat` into the Startup folder. Open the folder with **Win+R** → `shell:startup` → Enter. See `StartupFolder\README.txt` for the exact path.
+
 ---
 
 ## Documentation
@@ -88,7 +95,7 @@ docker-compose up -d
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────────────────────────┐
 │         Ollama Dashboard                  │
 ├──────────────────────────────────────────┤
@@ -135,14 +142,14 @@ Create a `.env` file with your settings; defaults work out-of-the-box for local 
 
 ## Background Updates
 
-The service runs periodic background updates (separate thread):
+The service runs a background thread for:
 
-| Data             | Interval | TTL  |
-| ---------------- | -------- | ---- |
-| Running models   | ~10s     | 10s  |
-| Available models | ~30s     | 30s  |
-| System stats     | ~2s      | 5s   |
-| Ollama version   | ~300s    | 300s |
+| Data           | Interval | Notes                                                      |
+| -------------- | -------- | ----------------------------------------------------------- |
+| System stats   | 1s       | CPU, RAM, VRAM; cached for `/api/system/stats` (5s TTL)        |
+| Health ping    | ~15s     | Lightweight Ollama check for `/api/health` recovery            |
+
+**Model list** (running and available) is **not** polled in the background; it is fetched when you load the page or click **Refresh**. The frontend polls system stats every 1s and health every 15s.
 
 The background thread is automatically managed and restarts on crash.
 
@@ -176,10 +183,10 @@ python -m pytest --cov=app --cov-report=html
 
 ## Troubleshooting
 
-### Models show as "running" but shouldn't
+### Models show as "running" or "available" but list is wrong
 
-- Background cache is stale; wait 10-15 seconds
-- Restart the app
+- Click the **Refresh** button (next to "Available Models" or in the top bar) to refetch the model list
+- Reload the page if needed
 
 ### Settings changes not persisting
 
@@ -197,7 +204,7 @@ See [Architecture Guide](docs/ARCHITECTURE.md) for more troubleshooting.
 
 ## Dependencies
 
-```
+```text
 Flask==3.0.0           # Web framework
 flask-cors==4.0.0      # CORS support
 waitress==3.0.2        # Production WSGI server (Windows)
@@ -208,7 +215,7 @@ pytz==2023.3           # Timezone support
 
 Optional (for GPU monitoring):
 
-```
+```text
 nvidia-ml-py           # VRAM monitoring (NVIDIA GPUs)
 GPUtil                 # Alternative GPU stats
 ```
@@ -230,13 +237,13 @@ Contributions welcome! Please:
 1. Fork the repository
 2. Create feature branch: `git checkout -b feature/amazing-thing`
 3. Add tests for new functionality
-4. Ensure tests pass: `pytest -q`
+4. Ensure tests pass: `python -m pytest -q`
 5. Submit pull request
 
 ---
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/poiley/ollama-dashboard/issues)
+- **Issues**: [GitHub Issues](https://github.com/bazoukajo/ollama-dashboard/issues)
 - **Documentation**: [docs/](docs/)
 - **Community**: [Ollama Discord](https://discord.gg/ollama)

@@ -18,6 +18,7 @@ import psutil
 import requests
 from flask import Blueprint, Response, current_app, jsonify, render_template, request, stream_with_context
 
+from app import __version__ as DASHBOARD_VERSION
 from app.routes import bp
 from app.services.validators import InputValidator
 from app.services.error_handling import (
@@ -73,6 +74,7 @@ def index():
             error=None,
             timezone=_get_timezone_name(),
             ollama_version=version,
+            dashboard_version=DASHBOARD_VERSION,
             timestamp=int(time.time()),
         )
     except Exception as e:
@@ -89,6 +91,7 @@ def index():
             error=str(e),
             timezone=_get_timezone_name(),
             ollama_version='Unknown',
+            dashboard_version=DASHBOARD_VERSION,
             timestamp=int(time.time()),
         )
 

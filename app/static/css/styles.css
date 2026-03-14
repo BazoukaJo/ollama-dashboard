@@ -2038,48 +2038,48 @@ body.compact-mode .compact-system-resources.mb-2 {
   margin-bottom: 0.25rem !important;
 }
 
-/* ===== Page-level spacing - normal mode ===== */
+/* ===== Page-level spacing - normal mode (uncollapsed, reduced vertical spacing) ===== */
 body:not(.compact-mode) .container.py-3 {
-  padding-top: 0.5rem !important;
-  padding-bottom: 0.5rem !important;
+  padding-top: 0.35rem !important;
+  padding-bottom: 0.35rem !important;
 }
 
 body:not(.compact-mode) .title-container.mb-1 {
-  margin-bottom: 0.25rem !important;
+  margin-bottom: 0.2rem !important;
 }
 
 body:not(.compact-mode) .refresh-indicator.mb-2,
 body:not(.compact-mode) .refresh-indicator {
-  margin-bottom: 0.25rem !important;
+  margin-bottom: 0.2rem !important;
 }
 
 body:not(.compact-mode) .d-flex.justify-content-center.mb-2.align-items-center.gap-2 {
-  margin-bottom: 0.35rem !important;
+  margin-bottom: 0.25rem !important;
 }
 
 body:not(.compact-mode) .compact-system-resources {
-  padding: 0.5rem 0.75rem;
+  padding: 0.4rem 0.6rem;
   border-radius: 10px;
-  margin-bottom: 0.5rem !important;
+  margin-bottom: 0.35rem !important;
 }
 
 body:not(.compact-mode) .compact-system-resources .d-flex.justify-content-between.mb-1 {
-  margin-bottom: 0.4rem !important;
+  margin-bottom: 0.35rem !important;
 }
 
 body:not(.compact-mode) .compact-metrics-grid {
-  gap: 0.35rem;
-  margin-top: 0.25rem;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
 }
 
 body:not(.compact-mode) .compact-metric {
-  padding: 0.35rem 0.5rem;
+  padding: 0.3rem 0.4rem;
   border-radius: 6px;
 }
 
 body:not(.compact-mode) .timeline-canvas {
-  height: 16px;
-  margin-top: 0.15rem;
+  height: 14px;
+  margin-top: 0.1rem;
 }
 
 body:not(.compact-mode) .metric-label-compact {
@@ -2091,31 +2091,30 @@ body:not(.compact-mode) .metric-value-compact {
 }
 
 body:not(.compact-mode) .models-management.mt-4 {
-  margin-top: 1rem !important;
+  margin-top: 0.5rem !important;
 }
 
 body:not(.compact-mode) .models-management > div,
 body:not(.compact-mode) .models-management > div.mb-4 {
-  margin-bottom: 2.5rem !important;
+  margin-bottom: 1.25rem !important;
 }
 
 body:not(.compact-mode) .models-management > div:last-child {
-  margin-bottom: var(--space-lg) !important;
+  margin-bottom: 0.75rem !important;
 }
 
 body:not(.compact-mode) .models-management .d-flex.align-items-center.justify-content-between.mb-3,
 body:not(.compact-mode) .models-management .d-flex.align-items-center.gap-2.mb-3,
 body:not(.compact-mode) .models-management .d-flex.align-items-center.gap-2 {
-  /* Restore comfortable gap (20px) between section title and cards list */
-  margin-bottom: var(--space-lg) !important;
+  margin-bottom: 0.5rem !important;
 }
 
 body:not(.compact-mode) #runningModelsContainer.row.g-3,
 body:not(.compact-mode) #availableModelsContainer.row.g-3,
 body:not(.compact-mode) #downloadableModelsContainer.row.g-3,
 body:not(.compact-mode) .extended-models-container.row.g-3 {
-  --bs-gutter-x: var(--space-section);
-  --bs-gutter-y: var(--space-section);
+  --bs-gutter-x: 0.5rem;
+  --bs-gutter-y: 0.5rem;
 }
 
 /* Normal mode: use same card size as compact */
@@ -2172,11 +2171,11 @@ body:not(.compact-mode) .section-title-text {
 }
 
 body:not(.compact-mode) .extended-models-container.mt-2 {
-  margin-top: 0.35rem !important;
+  margin-top: 0.25rem !important;
 }
 
 body:not(.compact-mode) .text-center.mt-3 {
-  margin-top: 0.35rem !important;
+  margin-top: 0.25rem !important;
 }
 
 body:not(.compact-mode) .service-controls.d-flex.gap-2 {
@@ -2184,7 +2183,17 @@ body:not(.compact-mode) .service-controls.d-flex.gap-2 {
 }
 
 body:not(.compact-mode) .models-section {
-  margin-top: var(--space-section) !important;
+  margin-top: 0.5rem !important;
+}
+
+body:not(.compact-mode) .text-center.py-4 {
+  padding-top: 0.6rem !important;
+  padding-bottom: 0.6rem !important;
+}
+
+body:not(.compact-mode) .text-center.py-5 {
+  padding-top: 1rem !important;
+  padding-bottom: 1rem !important;
 }
 
 /* ===== Vertical Rhythm (base = compact-friendly) ===== */

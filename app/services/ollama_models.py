@@ -247,12 +247,30 @@ class OllamaServiceModels:
                 except Exception:
                     normalized = []
 
-            # Enrich with context_length and capabilities from /api/show (parallel, non-blocking)
+            # Enrich with context_length and capabilities from /api/show (parallel, non-blocking).
+            # Per-model show cache (5 min TTL) avoids recurring /api/show calls on every refresh.
+            SHOW_CACHE_TTL = 300
             ctx_by_name = {}
             caps_by_name = {}
+            for m in normalized:
+                name = m.get('name')
+                if not name:
+                    continue
+                cached = self._get_cached(f"show:{name}", ttl_seconds=SHOW_CACHE_TTL)
+                if cached is not None and isinstance(cached, (list, tuple)) and len(cached) >= 2:
+                    ctx, caps_list = cached[0], cached[1]
+                    if ctx is not None:
+                        ctx_by_name[name] = ctx
+                    if caps_list is not None:
+                        caps_by_name[name] = caps_list
+            # Only call /api/show for models missing context or capabilities in cache
+            need_enrich = [
+                m for m in normalized
+                if m.get('name') and (m['name'] not in ctx_by_name or m['name'] not in caps_by_name)
+            ]
             try:
-                with ThreadPoolExecutor(max_workers=min(3, len(normalized) or 1)) as ex:
-                    futures = {ex.submit(self._enrich_model_from_show, m): m for m in normalized}
+                with ThreadPoolExecutor(max_workers=min(3, len(need_enrich) or 1)) as ex:
+                    futures = {ex.submit(self._enrich_model_from_show, m): m for m in need_enrich}
                     for future in as_completed(futures, timeout=15):
                         try:
                             name, ctx, caps_list = future.result()
@@ -260,6 +278,8 @@ class OllamaServiceModels:
                                 ctx_by_name[name] = ctx
                             if name and caps_list is not None:
                                 caps_by_name[name] = caps_list
+                            if name:
+                                self._set_cached(f"show:{name}", (ctx, caps_list))
                         except Exception:
                             pass
             except Exception:
@@ -308,12 +328,14 @@ class OllamaServiceModels:
             models = data.get('models', [])
             current_models = [self._format_running_model_entry(m) for m in models]
 
-            # Enrich running models with static metadata (family, parameter_size, etc.)
-            # from the available models list when possible, so UI fields like
-            # "Parameters" don't show as Unknown for running cards.
-            # Use cached available models to avoid expensive re-fetch on every poll.
+            # Enrich running models with static metadata (family, parameter_size, capabilities)
+            # from the available models list when possible. If cache is empty (e.g. frontend
+            # called running and available in parallel), fetch available once so capabilities
+            # show correctly on running cards.
             try:
                 available = self._get_cached('available_models', ttl_seconds=60) or []
+                if current_models and not available:
+                    available = self.get_available_models(force_refresh=False) or []
                 by_name = {
                     m.get('name'): m for m in available
                     if isinstance(m, dict) and m.get('name')
@@ -337,6 +359,12 @@ class OllamaServiceModels:
                     if entry.get('context_length') is None and src.get('context_length') is not None:
                         entry['context_length'] = src.get('context_length')
                     entry['details'] = dst_details
+                    # Use capability flags from available list (enriched from /api/show)
+                    for key in ('has_reasoning', 'has_vision', 'has_tools'):
+                        if key in src and isinstance(src[key], bool):
+                            entry[key] = src[key]
+                        elif key in src:
+                            entry[key] = src[key]  # allow None for "unknown"
             except Exception:
                 # Metadata enrichment is best-effort only
                 pass

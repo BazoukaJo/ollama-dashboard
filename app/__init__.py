@@ -4,6 +4,8 @@ Initializes Flask app with configuration, services, and route blueprints.
 Single initialization point - ensures no duplicate service creation.
 """
 
+__version__ = "1.0"
+
 import os
 import sys
 import logging
@@ -59,11 +61,11 @@ def create_app(config_name='development'):
     app.config['MODEL_SETTINGS_FILE'] = os.getenv('MODEL_SETTINGS_FILE', 'model_settings.json')
     app.config['MAX_HISTORY'] = int(os.getenv('MAX_HISTORY', '50'))
 
-    logger.info(f"🔧 Configuring Ollama Dashboard in {config_name} mode")
-    logger.info(f"📁 Data directory: {app.config['DATA_DIR']}")
+    logger.info("🔧 Configuring Ollama Dashboard in %s mode", config_name)
+    logger.info("📁 Data directory: %s", app.config['DATA_DIR'])
 
     # ===== SERVICE INITIALIZATION =====
-    from app.services.ollama import OllamaService
+    from app.services.ollama import OllamaService  # pylint: disable=import-outside-toplevel
 
     # Create single service instance
     ollama_service = OllamaService()
@@ -84,13 +86,13 @@ def create_app(config_name='development'):
     # When ENABLE_AUTH=true, protects /api/force_kill and other admin routes with API key
     enable_auth = os.getenv('ENABLE_AUTH', 'false').lower() in ('true', '1', 'yes')
     if enable_auth:
-        from app.services.auth import AuthService
+        from app.services.auth import AuthService  # pylint: disable=import-outside-toplevel
         auth_service = AuthService()
         app.config['AUTH_SERVICE'] = auth_service
 
         @app.before_request
         def check_auth():
-            from flask import request, jsonify
+            from flask import request, jsonify  # pylint: disable=import-outside-toplevel
             path = request.path
             auth_svc = app.config.get('AUTH_SERVICE')
             if not auth_svc:
@@ -132,7 +134,7 @@ def create_app(config_name='development'):
     # ===== BLUEPRINT REGISTRATION =====
 
     # Single initialization path for all routes
-    from app.routes import init_app
+    from app.routes import init_app  # pylint: disable=import-outside-toplevel
 
     init_app(app)
     logger.info("✅ Routes registered (47 endpoints)")

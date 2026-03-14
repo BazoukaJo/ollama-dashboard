@@ -111,7 +111,6 @@ class OllamaServiceCore:
         self._stop_background = threading.Event()
         self._consecutive_ps_failures = 0
         self._last_background_error = None
-        self._model_update_counter = 0
         # Track last activity per model so we can distinguish
         # between actively used models ("running") and models
         # that are merely loaded in memory ("loaded").
@@ -232,69 +231,35 @@ class OllamaServiceCore:
             self.logger.exception("Error during Ollama auto-start (non-fatal): %s", e)
 
     def _background_updates_worker(self):
-        """Periodically collect system stats, running models, available models, and version info."""
+        """Update system stats every 1s; ping Ollama every ~15s for health recovery only (no model list)."""
+        _health_check_interval = 15
+        _cycle = 0
         while not self._stop_background.is_set():
             try:
-                # Check if _get_system_stats_raw is available (from OllamaServiceModels mixin)
+                # System stats every 1s (used by /api/system/stats)
                 if hasattr(self, '_get_system_stats_raw') and callable(getattr(self, '_get_system_stats_raw', None)):
-                    stats = getattr(self, '_get_system_stats_raw')() or {}  # Defined in OllamaServiceModels
+                    stats = getattr(self, '_get_system_stats_raw')() or {}
                 else:
-                    self.logger.warning("_get_system_stats_raw not available, skipping system stats update")
                     stats = {}
                 with self._stats_lock:
                     self._cache['system_stats'] = stats
                     self._cache_timestamps['system_stats'] = datetime.now()
-                self._model_update_counter += 1
-                # Running models: fetched on-demand by API (force_refresh) for accuracy, not here
-                if self._model_update_counter >= 15:
-                    # Track whether this cycle successfully talked to Ollama;
-                    # if so, we clear any previous background error so /api/health
-                    # can recover after Ollama restarts.
-                    cycle_had_error = False
-                    host = None
-                    port = None
+
+                _cycle += 1
+                if _cycle >= _health_check_interval:
+                    _cycle = 0
+                    # Lightweight Ollama ping so /api/health can recover when Ollama comes back
                     try:
                         host, port = self._get_ollama_host_port()
-                        tags_url = f"http://{host}:{port}/api/tags"
-                        response = self._session.get(tags_url, timeout=10)
-                        if response.status_code == 200:
-                            models = response.json().get('models', [])
-                            models = [self._normalize_available_model_entry(m) for m in models]  # In OllamaServiceModels
-                            with self._stats_lock:
-                                self._cache['available_models'] = models
-                                self._cache_timestamps['available_models'] = datetime.now()
-                        else:
-                            cycle_had_error = True
-                            self._last_background_error = f"tags status {response.status_code}"
-                    except Exception as e:
-                        cycle_had_error = True
-                        self.logger.exception("Background available models collection error: %s", e)
-                        self._last_background_error = self._sanitize_error_message(e)
-                    try:
-                        if host is None or port is None:
-                            host, port = self._get_ollama_host_port()
                         version_url = f"http://{host}:{port}/api/version"
                         response = self._session.get(version_url, timeout=5)
                         if response.status_code == 200:
-                            data = response.json()
-                            version = data.get('version', 'Unknown')
-                            with self._stats_lock:
-                                self._cache['ollama_version'] = version
-                                self._cache_timestamps['ollama_version'] = datetime.now()
+                            self._last_background_error = None
                         else:
-                            cycle_had_error = True
                             self._last_background_error = f"version status {response.status_code}"
                     except Exception as e:
-                        cycle_had_error = True
-                        self.logger.exception("Background version collection error: %s", e)
+                        self.logger.debug("Background health ping failed: %s", e)
                         self._last_background_error = self._sanitize_error_message(e)
-
-                    # If this cycle completed without any Ollama errors, clear any
-                    # previous background error so health can transition back to healthy.
-                    if not cycle_had_error:
-                        self._last_background_error = None
-
-                    self._model_update_counter = 0
             except Exception as e:
                 self.logger.exception("Background updates error: %s", e)
                 self._last_background_error = self._sanitize_error_message(e)

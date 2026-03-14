@@ -22,8 +22,9 @@
                     <img src="{{ url_for('static', filename='ollama-logo.png') }}" alt="Ollama">
                 </div>
                 <h2 class="page-title-minimal mb-0">Ollama Dashboard</h2>
+                <small class="text-muted fw-light ms-2">v{{ dashboard_version|default('1.0') }}</small>
                 {% if ollama_version != 'Unknown' %}
-                <small class="text-muted fw-light ms-2">v{{ ollama_version }}</small>
+                <small class="text-muted fw-light ms-2">Ollama v{{ ollama_version }}</small>
                 {% endif %}
             </div>
         </div>
@@ -175,19 +176,6 @@
                                 <span class="fw-semibold text-light section-title-text">Running Models</span>
                                 <span class="badge bg-primary text-white ms-2" id="runningModelsCount">{{ models|length }}</span>
                             </div>
-                            {% if models %}
-                            <div class="capability-filters d-flex gap-1" id="runningModelsFilters">
-                                <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" title="Toggle Reasoning" onclick="toggleCapabilityFilter('reasoning')">
-                                    <i class="fas fa-brain"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" title="Toggle Vision" onclick="toggleCapabilityFilter('vision')">
-                                    <i class="fas fa-image"></i>
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" title="Toggle Tool Usage" onclick="toggleCapabilityFilter('tools')">
-                                    <i class="fas fa-tools"></i>
-                                </button>
-                            </div>
-                            {% endif %}
                         </div>
                         <div class="row g-3" id="runningModelsContainer">
                             {% for model in models %}
@@ -310,17 +298,16 @@
                     <div class="mb-4">
                         <div class="d-flex align-items-center justify-content-between mb-3">
                             <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshModelsBtn" title="Refresh model list" onclick="refreshDashboardData()" aria-label="Refresh models">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
                                 <i class="fas fa-box text-primary section-icon"></i>
                                 <span class="fw-semibold text-light section-title-text">Available Models</span>
                                 <span class="badge bg-primary text-white ms-2" id="availableModelsCount">{{ available_models|length }}</span>
                             </div>
                             <div class="d-flex align-items-center gap-3">
-                                <button class="btn btn-sm btn-outline-primary" title="Find and download a model by name" onclick="openFindModelModal()">
-                                    <i class="fas fa-search me-1"></i>Find Model
-                                </button>
-                                <small class="text-muted d-none d-sm-block">{{ available_models|length }} model{{ available_models|length != 1 and 's' or '' }} ready</small>
-                                {% if available_models and not models %}
-                                <div class="capability-filters d-flex gap-1" id="availableModelsFilters">
+                                <div class="capability-filters d-flex align-items-center gap-1" id="availableModelsFilters">
+                                    <span class="text-muted small me-2">Filters</span>
                                     <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" title="Toggle Reasoning" onclick="toggleCapabilityFilter('reasoning')">
                                         <i class="fas fa-brain"></i>
                                     </button>
@@ -331,7 +318,9 @@
                                         <i class="fas fa-tools"></i>
                                     </button>
                                 </div>
-                                {% endif %}
+                                <button class="btn btn-sm btn-outline-primary" title="Find and download a model by name" onclick="openFindModelModal()">
+                                    <i class="fas fa-search me-1"></i>Find Model
+                                </button>
                             </div>
                         </div>
                         <div class="row g-3" id="availableModelsContainer">
@@ -438,9 +427,8 @@
                                 <span class="fw-semibold text-light section-title-text">Downloadable Models</span>
                             </div>
                             <div class="d-flex align-items-center gap-3">
-                                <small class="text-muted d-none d-sm-block">Curated selection from Ollama library</small>
-                                {% if not models and not available_models %}
-                                <div class="capability-filters d-flex gap-1" id="bestModelsFilters">
+                                <div class="capability-filters d-flex align-items-center gap-1" id="bestModelsFilters">
+                                    <span class="text-muted small me-2">Filters</span>
                                     <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" title="Toggle Reasoning" onclick="toggleCapabilityFilter('reasoning')">
                                         <i class="fas fa-brain"></i>
                                     </button>
@@ -451,7 +439,7 @@
                                         <i class="fas fa-tools"></i>
                                     </button>
                                 </div>
-                                {% endif %}
+                                <small class="text-muted d-none d-sm-block">Curated selection from Ollama library</small>
                             </div>
                         </div>
                         <div class="row g-3" id="downloadableModelsContainer">

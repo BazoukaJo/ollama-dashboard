@@ -58,14 +58,15 @@ function toggleSidebar() {
 
 /** Refresh all dashboard data (models + stats) without full page reload. */
 function refreshDashboardData() {
-  const btn = document.getElementById("refreshDashboardBtn");
-  if (btn) {
-    const icon = btn.querySelector("i");
-    if (icon) {
-      icon.classList.add("fa-spin");
-      setTimeout(() => icon.classList.remove("fa-spin"), 800);
+  [document.getElementById("refreshDashboardBtn"), document.getElementById("refreshModelsBtn")].forEach(function (btn) {
+    if (btn) {
+      const icon = btn.querySelector("i");
+      if (icon) {
+        icon.classList.add("fa-spin");
+        setTimeout(function () { icon.classList.remove("fa-spin"); }, 800);
+      }
     }
-  }
+  });
   if (typeof updateModelData === "function") updateModelData();
   if (typeof updateSystemStats === "function") updateSystemStats();
 }
@@ -1077,7 +1078,6 @@ function updateRunningModelsDisplay(models) {
   // Rebuild the running models list from the latest API payload
   if (!models || models.length === 0) {
     runningModelsContainer.innerHTML = "";
-    applyCapabilityFilters("runningModelsContainer");
     return;
   }
 
@@ -1257,9 +1257,6 @@ function updateRunningModelsDisplay(models) {
     .map((m, idx) => buildRunningModelCardHTML(m, idx))
     .join("");
   runningModelsContainer.innerHTML = cardsHtml;
-
-  // Re-apply filters after update so new/removed models respect the current filter state
-  applyCapabilityFilters("runningModelsContainer");
 }
 
 function buildAvailableModelCardHTML(model) {
@@ -1593,7 +1590,6 @@ function openFindModelModal() {
   if (input) input.value = "";
   const modal = new bootstrap.Modal(document.getElementById("findModelModal"));
   modal.show();
-  setTimeout(() => input && input.focus(), 200);
 }
 
 function confirmFindModel() {
@@ -1611,9 +1607,15 @@ function confirmFindModel() {
 
 document.addEventListener("DOMContentLoaded", function () {
   const input = document.getElementById("findModelInput");
+  const modalEl = document.getElementById("findModelModal");
   if (input) {
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter") confirmFindModel();
+    });
+  }
+  if (modalEl) {
+    modalEl.addEventListener("shown.bs.modal", function () {
+      if (input) input.focus();
     });
   }
 });
@@ -1799,17 +1801,14 @@ async function pullModel(modelName) {
 
 // Capability filtering logic
 function toggleCapabilityFilter(capability) {
-  // Toggle globally for ALL containers
   const filterBtns = document.querySelectorAll(
     `.filter-btn[data-capability="${capability}"]`,
   );
-
   filterBtns.forEach((btn) => {
     btn.classList.toggle("active");
   });
 
-  // Apply filters to ALL containers
-  applyCapabilityFilters("runningModelsContainer");
+  // Apply filters only to Available and Downloadable (not Running Models)
   applyCapabilityFilters("availableModelsContainer");
   applyCapabilityFilters("downloadableModelsContainer");
   applyCapabilityFilters("extendedModelsContainer");

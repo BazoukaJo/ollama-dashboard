@@ -1,32 +1,13 @@
 (function () {
   var _pollActive = false;
-  var _pollTimer = null;
   var _healthTimer = null;
-  var _fetching = false;
-  var POLL_INTERVAL = 10000;
   var HEALTH_INTERVAL = 15000;
 
-  async function pollCycle() {
-    if (_fetching) return;
-    _fetching = true;
-    try {
-      var p1 = typeof updateModelData === "function" ? updateModelData() : Promise.resolve();
-      var p2 = typeof updateSystemStats === "function" ? updateSystemStats() : Promise.resolve();
-      await Promise.all([p1, p2]);
-    } catch (e) {
-      console.log("Poll cycle error:", e);
-    } finally {
-      _fetching = false;
-    }
-  }
+  // Stats: main.js updates every 1s. Only health is polled here (15s).
 
   function startPolling() {
     if (_pollActive) return;
     _pollActive = true;
-    pollCycle();
-    if (_pollTimer) clearInterval(_pollTimer);
-    _pollTimer = setInterval(pollCycle, POLL_INTERVAL);
-
     if (_healthTimer) clearInterval(_healthTimer);
     if (window.serviceControl && window.serviceControl.updateHealthStatus) {
       window.serviceControl.updateHealthStatus();
@@ -39,7 +20,6 @@
 
   function stopPolling() {
     _pollActive = false;
-    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
     if (_healthTimer) { clearInterval(_healthTimer); _healthTimer = null; }
   }
 
@@ -47,6 +27,7 @@
     if (typeof updateTimes === "function") updateTimes();
     if (typeof initializeCompactMode === "function") initializeCompactMode();
     if (typeof loadDownloadableModels === "function") loadDownloadableModels();
+    if (typeof updateModelData === "function") updateModelData();
     startPolling();
   }
 
