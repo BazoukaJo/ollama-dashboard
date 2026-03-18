@@ -40,12 +40,12 @@ def main():
         logger.info("\n" + "=" * 70)
         logger.info("🚀 STARTING SERVER")
         logger.info("=" * 70)
-        logger.info("📍 http://localhost:5000")
+        logger.info("📍 http://127.0.0.1:5000")
         logger.info("=" * 70 + "\n")
 
-        # Start server
+        # Start server (localhost only)
         app.run(
-            host='0.0.0.0',
+            host='127.0.0.1',
             port=5000,
             debug=False,
             threaded=True
