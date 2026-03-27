@@ -28,7 +28,7 @@ REM Start the dashboard
 echo.
 echo [2/2] Starting Ollama Dashboard (production)...
 IF EXIST .venv\Scripts\activate.bat (
-    start "Ollama Dashboard" cmd /c ".venv\Scripts\activate.bat && waitress-serve --call --host=0.0.0.0 --port=5000 --threads=8 app:create_app"
+    start "Ollama Dashboard" cmd /c ".venv\Scripts\activate.bat && waitress-serve --call --host=127.0.0.1 --port=5000 --threads=8 app:create_app"
     echo.
     echo Dashboard is restarting in a new window...
     echo You can close this window.
