@@ -248,3 +248,4 @@ Contributions welcome! Please:
 - **Issues**: [GitHub Issues](https://github.com/bazoukajo/ollama-dashboard/issues)
 - **Documentation**: [docs/](docs/)
 - **Community**: [Ollama Discord](https://discord.gg/ollama)
+- **Donate**: [Buy Me a Coffee ☕](https://buymeacoffee.com/bazoukajo)
