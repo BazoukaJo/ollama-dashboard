@@ -145,10 +145,10 @@ Create a `.env` file with your settings; defaults work out-of-the-box for local 
 
 The service runs a background thread for:
 
-| Data           | Interval | Notes                                                      |
-| -------------- | -------- | ----------------------------------------------------------- |
-| System stats   | 1s       | CPU, RAM, VRAM; cached for `/api/system/stats` (5s TTL)        |
-| Health ping    | ~15s     | Lightweight Ollama check for `/api/health` recovery            |
+| Data         | Interval | Notes                                                   |
+| ------------ | -------- | ------------------------------------------------------- |
+| System stats | 1s       | CPU, RAM, VRAM; cached for `/api/system/stats` (5s TTL) |
+| Health ping  | ~15s     | Lightweight Ollama check for `/api/health` recovery     |
 
 **Model list** (running and available) is **not** polled in the background; it is fetched when you load the page or click **Refresh**. The frontend polls system stats every 1s and health every 15s.
 
@@ -248,3 +248,11 @@ Contributions welcome! Please:
 - **Issues**: [GitHub Issues](https://github.com/bazoukajo/ollama-dashboard/issues)
 - **Documentation**: [docs/](docs/)
 - **Community**: [Ollama Discord](https://discord.gg/ollama)
+
+### Donate
+
+If this project helps you, you can support ongoing development here:
+
+- [Buy Me a Coffee](https://buymeacoffee.com/bazoukajo)
+
+Thanks for helping this tool keep advancing.

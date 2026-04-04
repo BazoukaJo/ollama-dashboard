@@ -3910,3 +3910,28 @@ body.compact-mode .compact-hide {
     animation: none !important;
   }
 }
+
+.dashboard-support-note {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+  font-size: 0.875rem;
+  color: var(--text-muted, #8b949e);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  text-align: center;
+}
+
+.dashboard-support-note-link {
+  color: var(--accent-primary, #4ea1ff);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.dashboard-support-note-link:hover,
+.dashboard-support-note-link:focus-visible {
+  text-decoration: underline;
+}
