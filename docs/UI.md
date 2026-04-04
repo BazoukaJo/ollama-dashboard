@@ -1,8 +1,8 @@
 # UI customization
 
-## Compact mode toggle (disabled by default)
+## Compact mode toggle
 
-The floating **compact mode** button is **not** rendered on the main dashboard (`index.html`) so more vertical space is available for model lists. All **compact-mode styles** remain in `app/static/css/styles.css` (e.g. `.compact-toggle-btn`, `body.compact-mode`).
+The floating **compact mode** button is not included in `index.html` by default (more vertical space for model lists). Styles live in `app/static/css/styles.css` (`.compact-toggle-btn`, `body.compact-mode`).
 
 ### Re-enable the button
 
@@ -18,7 +18,7 @@ The floating **compact mode** button is **not** rendered on the main dashboard (
 
 ### Compact layout without the button
 
-Without `#compactToggle`, the page always loads **expanded** (no `body.compact-mode`). The `compactMode` key is only read when the toggle is present, so you are not stuck in compact layout after removing the button.
+Without `#compactToggle`, the page loads **expanded**. `localStorage` `compactMode` is only applied when the toggle exists.
 
 ---
 

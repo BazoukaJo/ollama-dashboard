@@ -2,9 +2,9 @@
 
 ## Version 1.0003
 
-![Ollama Dashboard](Screenshot.png)
+![Ollama Dashboard — system metrics, running/available/downloadable models, and Settings status (Saved / Default) on each card](docs/images/dashboard.png)
 
-A web dashboard for monitoring, controlling, and managing Ollama language models. Features real-time system monitoring, per-model settings and model discovery.
+A web dashboard for monitoring, controlling, and managing Ollama language models: real-time system metrics, per-model settings with JSON persistence, and model discovery.
 
 ---
 
@@ -20,11 +20,12 @@ A web dashboard for monitoring, controlling, and managing Ollama language models
 
 ### User Interface
 
-- **Dark Mode**: Modern dark theme optimized for long sessions
-- **Responsive Design**: Mobile-friendly, touch-optimized controls
-- **Real-time Updates**: Auto-refresh for model data and system stats
-- **Capability Icons**: Visual indicators for model capabilities (vision, tools, reasoning)
-- **Compact mode**: Styles and `body.compact-mode` remain available via the floating toggle (off by default in `index.html`). Without the toggle, the dashboard always loads expanded. See **[docs/UI.md](docs/UI.md)** to re-enable the button or change how many downloadable models appear before “View More”.
+- **Dark / light themes**: Toggle in the header; tokens in `theme.css`
+- **Responsive layout**: Mobile-friendly controls and card grids
+- **Real-time metrics**: System stats and health; model lists refresh from the UI (no background model-list polling)
+- **Capability icons**: Reasoning, vision, and tools on each card when known
+- **Settings status**: Each **Settings** control shows a small **Saved** (custom JSON) or **Default** (recommended / built-in) badge
+- **Compact mode**: Optional; the floating toggle is not in `index.html` by default. See **[docs/UI.md](docs/UI.md)** to add it or change downloadable-model pagination
 
 ---
 
@@ -56,7 +57,7 @@ start_app.bat
 ### Linux / macOS
 
 ```bash
-git clone https://github.com/poiley/ollama-dashboard.git
+git clone https://github.com/bazoukajo/ollama-dashboard.git
 cd ollama-dashboard
 pip install -r requirements.txt
 python OllamaDashboard.py

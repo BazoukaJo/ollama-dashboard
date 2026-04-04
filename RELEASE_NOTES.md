@@ -6,7 +6,9 @@
 - **Scrolling** — Removed top padding above the sticky header and reserved stable scrollbar gutter so the bar does not “creep” a few pixels before locking.
 - **Tooltips** — Broader, practical `data-dashboard-tooltip` copy on cards, filters, and controls; hover tooltips wait briefly before opening to reduce accidental flashes.
 - **Cards** — Stronger contrast for spec tiles (labels, values, icons) in light and dark themes; model action buttons use a responsive grid (primary actions first, full-width Start on available cards) instead of a rigid three-per-row strip.
+- **Settings status** — Running and available cards always show a compact **Saved** or **Default** badge on the Settings control (per-model `model_settings.json` state).
 - **Downloadable cards** — Same action layout class for the single Download control.
+- **Docs** — README screenshot updated (`docs/images/dashboard.png`).
 
 ## Version 1.0002 (2026)
 

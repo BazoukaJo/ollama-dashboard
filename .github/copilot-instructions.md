@@ -6,7 +6,7 @@
 ## Architecture & Data Flow
 - Single Flask app with one blueprint (`app/routes/main.py`).
 - Core logic in `OllamaService` (`app/services/ollama.py`): handles HTTP to Ollama, caching, capability detection, per-model settings, atomic JSON persistence, health reporting.
-- Background thread in service updates caches (system~2s, running~10s, available~30s, version~300s). Restart process after service/capability/JS edits to clear stale caches.
+- Background thread updates system stats cache (~1s), health ping (~15s), and related caches. Model lists are not polled on a background interval; they refresh from the UI. Restart the process after service/capability/JS edits when caches might be stale.
 - API routes: input validation -> service method -> standardized JSON response.
 - **Windows production**: Waitress WSGI server via `start_app.bat`.
 - **Docker/Linux production**: Gunicorn via `wsgi.py`.
