@@ -60,7 +60,7 @@ def test_delete_model_endpoint_error_handling():
         response = client.delete(f"/api/models/delete/{TEST_MODEL_NAME}")
         data = response.get_json()
 
-        assert response.status_code == 400
+        assert response.status_code == 404
         assert data.get("success") is False
         assert "error" in data.get("message", "").lower() or "not found" in data.get("message", "").lower()
 

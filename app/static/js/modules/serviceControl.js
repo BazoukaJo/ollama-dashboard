@@ -29,31 +29,39 @@
       const healthBadge = document.getElementById('healthStatus');
       const healthText = document.getElementById('healthText');
       if(!healthBadge || !healthText) return;
-      const applyCommon = ()=>{ healthBadge.style.padding='0.5rem 1rem'; healthBadge.style.fontSize='0.85rem'; };
+      const clearInlineSizing = () => {
+        healthBadge.style.padding = '';
+        healthBadge.style.fontSize = '';
+      };
       if (health.status === 'healthy') {
-        healthBadge.className='badge bg-success'; applyCommon();
-        const uptimeMin = Math.floor(health.uptime_seconds/60);
-        const uptimeHr = Math.floor(uptimeMin/60);
-        const uptimeDisplay = uptimeHr>0?`${uptimeHr}h ${uptimeMin%60}m`:`${uptimeMin}m`;
-        healthText.innerHTML = `Healthy • Uptime: ${uptimeDisplay} • ${health.models.running_count} running / ${health.models.available_count} available`;
+        healthBadge.className = 'badge bg-success health-status-badge dashboard-header-health';
+        clearInlineSizing();
+        const uptimeMin = Math.floor(health.uptime_seconds / 60);
+        const uptimeHr = Math.floor(uptimeMin / 60);
+        const uptimeDisplay =
+          uptimeHr > 0 ? `${uptimeHr}h ${uptimeMin % 60}m` : `${uptimeMin}m`;
+        healthText.textContent = `Healthy • Uptime: ${uptimeDisplay}`;
         updateServiceControlButtons(true);
       } else if (health.status === 'degraded') {
-        healthBadge.className='badge bg-warning'; applyCommon();
-        healthText.innerHTML = 'Degraded • Ollama service not running';
+        healthBadge.className = 'badge bg-warning health-status-badge dashboard-header-health';
+        clearInlineSizing();
+        healthText.textContent = 'Degraded • Ollama service not running';
         updateServiceControlButtons(false);
       } else {
-        healthBadge.className='badge bg-danger'; applyCommon();
-        healthText.innerHTML = 'Unhealthy • ' + (health.error || 'Unknown error');
+        healthBadge.className = 'badge bg-danger health-status-badge dashboard-header-health';
+        clearInlineSizing();
+        healthText.textContent = 'Unhealthy • ' + (health.error || 'Unknown error');
         updateServiceControlButtons(false);
       }
     } catch(err){
       const healthBadge = document.getElementById('healthStatus');
       const healthText = document.getElementById('healthText');
-      if(healthBadge && healthText){
-        healthBadge.className='badge bg-danger';
-        healthBadge.style.padding='0.5rem 1rem';
-        healthBadge.style.fontSize='0.85rem';
-        healthText.innerHTML='Health check failed';
+      if (healthBadge && healthText) {
+        healthBadge.className =
+          'badge bg-danger health-status-badge dashboard-header-health';
+        healthBadge.style.padding = '';
+        healthBadge.style.fontSize = '';
+        healthText.textContent = 'Health check failed';
         updateServiceControlButtons(false);
       }
     }

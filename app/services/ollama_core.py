@@ -115,6 +115,9 @@ class OllamaServiceCore:
         # between actively used models ("running") and models
         # that are merely loaded in memory ("loaded").
         self._model_last_activity = {}
+        # Last non-streaming /api/generate token counts (prompt_eval + eval) per model name
+        self._model_token_usage_lock = threading.Lock()
+        self._model_last_generate_tokens = {}
         # Retry metrics for monitoring
         self._total_retry_attempts = 0
         self._successful_retries = 0
@@ -293,6 +296,57 @@ class OllamaServiceCore:
         except Exception:
             # Activity tracking must never break core behavior
             pass
+
+    def record_model_token_usage_from_response(self, model_name, response):
+        """Parse Ollama /api/generate JSON and store prompt_eval_count + eval_count."""
+        try:
+            if not model_name or response is None:
+                return
+            if getattr(response, "status_code", None) != 200:
+                return
+            body = response.json()
+            if not isinstance(body, dict):
+                return
+            self.record_model_token_usage(model_name, body)
+        except Exception:
+            pass
+
+    def record_model_token_usage(self, model_name, generate_body):
+        """Store token totals from a parsed /api/generate response body (dict)."""
+        try:
+            if not model_name or not isinstance(generate_body, dict):
+                return
+            pe = generate_body.get("prompt_eval_count")
+            ev = generate_body.get("eval_count")
+            p = int(pe) if pe is not None else 0
+            e = int(ev) if ev is not None else 0
+            if p < 0 or e < 0:
+                return
+            total = p + e
+            if total <= 0:
+                return
+            with self._model_token_usage_lock:
+                self._model_last_generate_tokens[str(model_name)] = {
+                    "prompt_eval_count": p,
+                    "eval_count": e,
+                    "total": total,
+                }
+        except (TypeError, ValueError, AttributeError):
+            pass
+
+    def get_last_generate_token_total(self, model_name):
+        """Return total tokens from last recorded generate (prompt + completion), or None."""
+        if not model_name:
+            return None
+        try:
+            with self._model_token_usage_lock:
+                rec = self._model_last_generate_tokens.get(str(model_name))
+            if not rec:
+                return None
+            t = rec.get("total")
+            return int(t) if t is not None else None
+        except (TypeError, ValueError, AttributeError):
+            return None
 
     def _get_ollama_host_port(self):
         """Get Ollama host and port with proper fallbacks."""

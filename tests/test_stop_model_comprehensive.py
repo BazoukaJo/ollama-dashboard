@@ -1,6 +1,7 @@
 """Comprehensive tests for the stop_model endpoint.
 
 All tests are fully mocked — no live Ollama server is required.
+Patches ``ollama_service._session.post`` (routes do not use ``requests.post``).
 """
 import pytest
 from unittest.mock import patch, MagicMock
@@ -18,18 +19,20 @@ def client():
 # Success path
 # ---------------------------------------------------------------------------
 
-@patch('app.routes.main.requests.post')
+@patch('app.routes.main.ollama_service._session.post')
 @patch('app.routes.main._verify_model_unloaded')
 @patch('app.routes.main.ollama_service.get_running_models')
 @patch('app.routes.main.ollama_service.get_service_status')
 def test_stop_model_success(mock_status, mock_running, mock_verify, mock_post, client):
     """Stopping a running model returns 200 with success=True."""
     mock_status.return_value = True
-    mock_running.return_value = [{'name': 'llama2:latest'}]
-    mock_post.return_value = MagicMock(status_code=200, text='ok')
+    mock_running.return_value = [{'name': 'mock-stub-model:latest'}]
+    ok = MagicMock(status_code=200, text='ok')
+    ok.json.return_value = {}
+    mock_post.return_value = ok
     mock_verify.return_value = True
 
-    resp = client.post('/api/models/stop/llama2:latest')
+    resp = client.post('/api/models/stop/mock-stub-model:latest')
     assert resp.status_code == 200
     data = resp.get_json()
     assert data['success'] is True
@@ -44,7 +47,7 @@ def test_stop_model_success(mock_status, mock_running, mock_verify, mock_post, c
 def test_stop_model_service_not_running(mock_status, client):
     """Returns 503 when Ollama service is stopped."""
     mock_status.return_value = False
-    resp = client.post('/api/models/stop/llama2:latest')
+    resp = client.post('/api/models/stop/mock-stub-model:latest')
     assert resp.status_code == 503
     data = resp.get_json()
     assert data['success'] is False
@@ -57,7 +60,7 @@ def test_stop_model_not_running(mock_status, mock_running, client):
     mock_status.return_value = True
     mock_running.return_value = []  # model is not loaded
 
-    resp = client.post('/api/models/stop/llama2:latest')
+    resp = client.post('/api/models/stop/mock-stub-model:latest')
     assert resp.status_code == 400
     data = resp.get_json()
     assert data['success'] is False
@@ -67,7 +70,7 @@ def test_stop_model_not_running(mock_status, mock_running, client):
 # Ollama API error handling
 # ---------------------------------------------------------------------------
 
-@patch('app.routes.main.requests.post')
+@patch('app.routes.main.ollama_service._session.post')
 @patch('app.routes.main.ollama_service.get_running_models')
 @patch('app.routes.main.ollama_service.get_service_status')
 def test_stop_model_ollama_404(mock_status, mock_running, mock_post, client):
@@ -82,20 +85,20 @@ def test_stop_model_ollama_404(mock_status, mock_running, mock_post, client):
     assert data['success'] is False
 
 
-@patch('app.routes.main.requests.post')
+@patch('app.routes.main.ollama_service._session.post')
 @patch('app.routes.main.ollama_service.get_running_models')
 @patch('app.routes.main.ollama_service.get_service_status')
 def test_stop_model_ollama_500(mock_status, mock_running, mock_post, client):
     """Returns the Ollama error status when the unload call fails."""
     mock_status.return_value = True
-    mock_running.return_value = [{'name': 'llama2:latest'}]
+    mock_running.return_value = [{'name': 'mock-stub-model:latest'}]
     mock_post.return_value = MagicMock(
         status_code=500,
         text='internal server error',
         json=MagicMock(return_value={'error': 'internal server error'}),
     )
 
-    resp = client.post('/api/models/stop/llama2:latest')
+    resp = client.post('/api/models/stop/mock-stub-model:latest')
     assert resp.status_code == 500
     data = resp.get_json()
     assert data['success'] is False

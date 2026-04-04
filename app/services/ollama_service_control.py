@@ -1,16 +1,56 @@
 """Service control functionality for OllamaService: start, stop, restart, and status checking."""
 # pylint: disable=broad-exception-caught,line-too-long  # intentional: must not crash on any error; long messages
 
+import json
 import os
 import platform
 import shutil
 import subprocess
+import tempfile
 import time
+import urllib.error
+import urllib.request
 from typing import TYPE_CHECKING, Optional, Tuple
 
 import requests
 
 from app.services.service_control import stop_service_unix, stop_service_windows
+
+# Resolves to GitHub latest OllamaSetup.exe (same as https://ollama.com/download/windows).
+OLLAMA_WINDOWS_SETUP_EXE_URL = "https://ollama.com/download/OllamaSetup.exe"
+
+_WINGET_FALLBACK_PATHS = (r"%LOCALAPPDATA%\Microsoft\WindowsApps\winget.exe",)
+_CHOCO_FALLBACK_PATHS = (
+    r"%ChocolateyInstall%\bin\choco.exe",
+    r"%ProgramData%\chocolatey\bin\choco.exe",
+)
+# Appended to install/update API errors on Windows so responses are identifiable vs. legacy builds.
+WINDOWS_UPDATE_FAILURE_TAG = " [win-upd:setup-exe]"
+_CURL_FALLBACK_PATHS = (r"%SystemRoot%\System32\curl.exe",)
+
+
+def _windows_resolve_exe(name: str, *extra_paths: str) -> Optional[str]:
+    """Find an executable: PATH first, then well-known install locations (service / non-login PATH)."""
+    found = shutil.which(name)
+    if found:
+        return found
+    for tmpl in extra_paths:
+        path = os.path.expandvars(tmpl)
+        if path and os.path.isfile(path):
+            return path
+    return None
+
+
+def _windows_powershell_exe() -> Optional[str]:
+    for candidate in ("powershell", "powershell.exe", "pwsh", "pwsh.exe"):
+        found = shutil.which(candidate)
+        if found:
+            return found
+    return _windows_resolve_exe(
+        "powershell.exe",
+        r"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe",
+    )
+
 
 if TYPE_CHECKING:
     import logging
@@ -731,6 +771,156 @@ class OllamaServiceControl:
         except Exception as e:
             return {"success": False, "message": f"Unexpected error restarting service: {str(e)}"}
 
+    def _download_ollama_setup_exe(self, path: str) -> Tuple[bool, str]:
+        """Download latest OllamaSetup.exe: requests, urllib, curl.exe, then PowerShell."""
+        headers = {"User-Agent": "ollama-dashboard/Windows-Ollama-setup"}
+        resp = None
+        try:
+            resp = requests.get(
+                OLLAMA_WINDOWS_SETUP_EXE_URL,
+                headers=headers,
+                stream=True,
+                timeout=(30, 600),
+                allow_redirects=True,
+            )
+            resp.raise_for_status()
+            with open(path, "wb") as out:
+                for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        out.write(chunk)
+            return True, ""
+        except requests.RequestException as exc:
+            self.logger.warning("OllamaSetup download via requests failed: %s", exc)
+        finally:
+            if resp is not None:
+                try:
+                    resp.close()
+                except OSError:
+                    pass
+
+        try:
+            req = urllib.request.Request(OLLAMA_WINDOWS_SETUP_EXE_URL, headers=headers)
+            with urllib.request.urlopen(req, timeout=600) as url_resp:
+                with open(path, "wb") as out:
+                    shutil.copyfileobj(url_resp, out, length=1024 * 1024)
+            return True, ""
+        except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
+            self.logger.warning("OllamaSetup download via urllib failed: %s", exc)
+
+        curl = _windows_resolve_exe("curl", *_CURL_FALLBACK_PATHS)
+        if curl:
+            try:
+                proc = subprocess.run(
+                    [
+                        curl,
+                        "-fSL",
+                        "--retry",
+                        "2",
+                        "-o",
+                        path,
+                        OLLAMA_WINDOWS_SETUP_EXE_URL,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "curl download timed out (over 10 minutes)."
+            if proc.returncode == 0:
+                return True, ""
+            tail = ((proc.stderr or "") + "\n" + (proc.stdout or "")).strip()[-500:]
+            return False, f"curl could not download installer (exit {proc.returncode}). {tail}"
+
+        ps = _windows_powershell_exe()
+        if ps:
+            cmdline = (
+                f"Invoke-WebRequest -Uri {json.dumps(OLLAMA_WINDOWS_SETUP_EXE_URL)} "
+                f"-OutFile {json.dumps(path)} -UseBasicParsing"
+            )
+            try:
+                proc = subprocess.run(
+                    [
+                        ps,
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-Command",
+                        cmdline,
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=600,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "PowerShell download timed out (over 10 minutes)."
+            if proc.returncode == 0:
+                return True, ""
+            tail = ((proc.stderr or "") + "\n" + (proc.stdout or "")).strip()[-500:]
+            return False, f"PowerShell could not download installer (exit {proc.returncode}). {tail}"
+
+        return False, (
+            f"Could not download installer ({OLLAMA_WINDOWS_SETUP_EXE_URL}). "
+            "Install manually from https://ollama.com/download/windows"
+        )
+
+    def _windows_install_via_official_setup(self) -> Tuple[bool, str]:
+        """Download OllamaSetup.exe and run a silent install or in-place upgrade (Inno Setup).
+
+        Used when winget / Chocolatey are missing or fail. See Ollama Windows docs for /DIR etc.
+        """
+        path: Optional[str] = None
+        try:
+            try:
+                fd, path = tempfile.mkstemp(suffix=".exe")
+                os.close(fd)
+            except OSError as exc:
+                return False, f"Could not create temp file for installer: {exc}"
+
+            ok_dl, dl_err = self._download_ollama_setup_exe(path)
+            if not ok_dl:
+                return False, dl_err
+
+            try:
+                size = os.path.getsize(path)
+            except OSError as exc:
+                return False, f"Downloaded installer missing or unreadable: {exc}"
+            if size < 1_000_000:
+                return (
+                    False,
+                    f"Downloaded file too small ({size} bytes); expected OllamaSetup.exe. "
+                    "Install manually from https://ollama.com/download/windows",
+                )
+
+            try:
+                proc = subprocess.run(
+                    [path, "/SP-", "/VERYSILENT", "/NORESTART"],
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "Official Windows installer timed out (over 15 minutes)."
+            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+            if proc.returncode == 0:
+                return True, combined or "Ollama updated via official Windows installer."
+            tail = combined[-800:] if combined else "No output."
+            return (
+                False,
+                f"Official installer exited with code {proc.returncode}. {tail} "
+                "You can install manually from https://ollama.com/download/windows",
+            )
+        finally:
+            if path:
+                try:
+                    if os.path.isfile(path):
+                        os.unlink(path)
+                except OSError:
+                    self.logger.warning("Could not remove temp installer at %s", path)
+
     def _run_ollama_upgrade(self) -> Tuple[bool, str]:
         """Run platform-specific Ollama upgrade (service must be stopped). Returns (ok, detail)."""
         system = platform.system()
@@ -742,8 +932,9 @@ class OllamaServiceControl:
 
     def _upgrade_ollama_windows(self) -> Tuple[bool, str]:
         winget_err: Optional[str] = None
-        winget = shutil.which("winget")
+        winget = _windows_resolve_exe("winget", *_WINGET_FALLBACK_PATHS)
         if winget:
+            proc = None
             try:
                 proc = subprocess.run(
                     [
@@ -763,29 +954,32 @@ class OllamaServiceControl:
                     check=False,
                 )
             except subprocess.TimeoutExpired:
-                return False, "winget upgrade timed out (over 15 minutes)."
-            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
-            low = combined.lower()
-            if proc.returncode == 0:
-                return True, combined or "Ollama upgraded via winget."
-            if any(
-                phrase in low
-                for phrase in (
-                    "no newer package",
-                    "no applicable upgrade",
-                    "no updates found",
-                    "already installed",
-                    "is already installed",
-                )
-            ):
-                return True, "Ollama is already up to date (winget)."
-            self.logger.warning("winget upgrade failed: %s", combined[-2000:])
-            winget_err = (combined or f"winget exit {proc.returncode}")[-1500:]
+                winget_err = "winget upgrade timed out (over 15 minutes)."
+            if proc is not None:
+                combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+                low = combined.lower()
+                if proc.returncode == 0:
+                    return True, combined or "Ollama upgraded via winget."
+                if any(
+                    phrase in low
+                    for phrase in (
+                        "no newer package",
+                        "no applicable upgrade",
+                        "no updates found",
+                        "already installed",
+                        "is already installed",
+                    )
+                ):
+                    return True, "Ollama is already up to date (winget)."
+                self.logger.warning("winget upgrade failed: %s", combined[-2000:])
+                winget_err = (combined or f"winget exit {proc.returncode}")[-1500:]
 
-        choco = shutil.which("choco")
+        choco_err: Optional[str] = None
+        choco = _windows_resolve_exe("choco", *_CHOCO_FALLBACK_PATHS)
         if choco:
+            cproc = None
             try:
-                proc = subprocess.run(
+                cproc = subprocess.run(
                     [choco, "upgrade", "ollama", "-y"],
                     capture_output=True,
                     text=True,
@@ -793,22 +987,25 @@ class OllamaServiceControl:
                     check=False,
                 )
             except subprocess.TimeoutExpired:
-                return False, "Chocolatey upgrade timed out (over 15 minutes)."
-            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
-            if proc.returncode == 0:
-                return True, combined or "Ollama upgraded via Chocolatey."
-            self.logger.warning("choco upgrade failed: %s", combined[-2000:])
-            choco_err = f"Chocolatey failed (exit {proc.returncode}). {combined[-800:]}"
-            if winget_err:
-                return False, f"{winget_err} | {choco_err}"
-            return False, choco_err
+                choco_err = "Chocolatey upgrade timed out (over 15 minutes)."
+            if cproc is not None:
+                combined = ((cproc.stdout or "") + "\n" + (cproc.stderr or "")).strip()
+                if cproc.returncode == 0:
+                    return True, combined or "Ollama upgraded via Chocolatey."
+                self.logger.warning("choco upgrade failed: %s", combined[-2000:])
+                choco_err = f"Chocolatey failed (exit {cproc.returncode}). {combined[-800:]}"
 
+        ok_setup, setup_msg = self._windows_install_via_official_setup()
+        if ok_setup:
+            return True, setup_msg
+        ctx: list[str] = []
         if winget_err:
-            return False, winget_err
-        return (
-            False,
-            "Neither winget nor choco found. Install updates from https://ollama.com/download/windows",
-        )
+            ctx.append(f"winget: {winget_err[:400]}")
+        if choco_err:
+            ctx.append(choco_err[:500])
+        if ctx:
+            return False, f"{setup_msg} Context: {' | '.join(ctx)}"
+        return False, setup_msg
 
     def _upgrade_ollama_darwin(self) -> Tuple[bool, str]:
         brew = shutil.which("brew")
@@ -896,7 +1093,8 @@ class OllamaServiceControl:
                 pass
 
             if not ok:
-                msg = f"Update step failed: {upgrade_msg}"
+                tag = WINDOWS_UPDATE_FAILURE_TAG if platform.system() == "Windows" else ""
+                msg = f"Update step failed: {upgrade_msg}{tag}"
                 if start_result.get("success"):
                     return {"success": False, "message": f"{msg} Ollama was started again."}
                 return {
@@ -932,8 +1130,9 @@ class OllamaServiceControl:
 
     def _install_ollama_windows(self) -> Tuple[bool, str]:
         winget_err: Optional[str] = None
-        winget = shutil.which("winget")
+        winget = _windows_resolve_exe("winget", *_WINGET_FALLBACK_PATHS)
         if winget:
+            proc = None
             try:
                 proc = subprocess.run(
                     [
@@ -953,29 +1152,32 @@ class OllamaServiceControl:
                     check=False,
                 )
             except subprocess.TimeoutExpired:
-                return False, "winget install timed out (over 15 minutes)."
-            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
-            low = combined.lower()
-            if proc.returncode == 0:
-                return True, combined or "Ollama installed via winget."
-            if any(
-                phrase in low
-                for phrase in (
-                    "already installed",
-                    "is already installed",
-                    "no applicable upgrade",
-                    "a newer version was not found",
-                    "no newer package",
-                )
-            ):
-                return True, "Ollama is already installed (winget)."
-            self.logger.warning("winget install failed: %s", combined[-2000:])
-            winget_err = (combined or f"winget exit {proc.returncode}")[-1500:]
+                winget_err = "winget install timed out (over 15 minutes)."
+            if proc is not None:
+                combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+                low = combined.lower()
+                if proc.returncode == 0:
+                    return True, combined or "Ollama installed via winget."
+                if any(
+                    phrase in low
+                    for phrase in (
+                        "already installed",
+                        "is already installed",
+                        "no applicable upgrade",
+                        "a newer version was not found",
+                        "no newer package",
+                    )
+                ):
+                    return True, "Ollama is already installed (winget)."
+                self.logger.warning("winget install failed: %s", combined[-2000:])
+                winget_err = (combined or f"winget exit {proc.returncode}")[-1500:]
 
-        choco = shutil.which("choco")
+        choco_err: Optional[str] = None
+        choco = _windows_resolve_exe("choco", *_CHOCO_FALLBACK_PATHS)
         if choco:
+            cproc = None
             try:
-                proc = subprocess.run(
+                cproc = subprocess.run(
                     [choco, "install", "ollama", "-y"],
                     capture_output=True,
                     text=True,
@@ -983,24 +1185,27 @@ class OllamaServiceControl:
                     check=False,
                 )
             except subprocess.TimeoutExpired:
-                return False, "Chocolatey install timed out (over 15 minutes)."
-            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
-            low = combined.lower()
-            if proc.returncode == 0:
-                return True, combined or "Ollama installed via Chocolatey."
-            if "already installed" in low or "nothing to do" in low:
-                return True, "Ollama is already installed (Chocolatey)."
-            choco_err = f"Chocolatey failed (exit {proc.returncode}). {combined[-800:]}"
-            if winget_err:
-                return False, f"{winget_err} | {choco_err}"
-            return False, choco_err
+                choco_err = "Chocolatey install timed out (over 15 minutes)."
+            if cproc is not None:
+                combined = ((cproc.stdout or "") + "\n" + (cproc.stderr or "")).strip()
+                low = combined.lower()
+                if cproc.returncode == 0:
+                    return True, combined or "Ollama installed via Chocolatey."
+                if "already installed" in low or "nothing to do" in low:
+                    return True, "Ollama is already installed (Chocolatey)."
+                choco_err = f"Chocolatey failed (exit {cproc.returncode}). {combined[-800:]}"
 
+        ok_setup, setup_msg = self._windows_install_via_official_setup()
+        if ok_setup:
+            return True, setup_msg
+        ctx: list[str] = []
         if winget_err:
-            return False, winget_err
-        return (
-            False,
-            "Neither winget nor choco found. Install from https://ollama.com/download/windows",
-        )
+            ctx.append(f"winget: {winget_err[:400]}")
+        if choco_err:
+            ctx.append(choco_err[:500])
+        if ctx:
+            return False, f"{setup_msg} Context: {' | '.join(ctx)}"
+        return False, setup_msg
 
     def _install_ollama_darwin(self) -> Tuple[bool, str]:
         brew = shutil.which("brew")
@@ -1053,7 +1258,8 @@ class OllamaServiceControl:
                 pass
 
             if not ok:
-                msg = f"Install step failed: {detail}"
+                tag = WINDOWS_UPDATE_FAILURE_TAG if platform.system() == "Windows" else ""
+                msg = f"Install step failed: {detail}{tag}"
                 if start_result.get("success"):
                     return {"success": False, "message": f"{msg} Ollama service was started anyway."}
                 return {

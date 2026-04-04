@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+import os
 from typing import Any, Protocol, Tuple
 
 import requests
@@ -14,6 +15,7 @@ from app.services.model_helpers import (_extract_context_length,
                                         format_context_length,
                                         format_running_model_entry,
                                         normalize_available_model_entry)
+from app.services.model_settings_helpers import lookup_settings_entry
 from app.services.system_stats import collect_system_stats, models_memory_usage
 
 
@@ -360,6 +362,13 @@ class OllamaServiceModels:
                         dst_details['context_length'] = src.get('context_length')
                     if entry.get('context_length') is None and src.get('context_length') is not None:
                         entry['context_length'] = src.get('context_length')
+                    for _fld in (
+                        'quantization_level',
+                        'format',
+                        'quantization',
+                    ):
+                        if _fld not in dst_details and _fld in src_details:
+                            dst_details[_fld] = src_details.get(_fld)
                     entry['details'] = dst_details
                     # Use capability flags from available list (enriched from /api/show)
                     for key in ('has_reasoning', 'has_vision', 'has_tools'):
@@ -417,12 +426,29 @@ class OllamaServiceModels:
         try:
             # pylint: disable=protected-access
             with self._ollama_core._model_settings_lock:
-                model_settings = getattr(self, '_model_settings', None)
-                if not model_settings:
+                path = self._model_settings_file_path()
+                try:
+                    disk_mtime = os.path.getmtime(path)
+                except OSError:
+                    disk_mtime = None
+                # Non-empty cache can still be stale (other worker / external edit).
+                if getattr(self, '_model_settings_disk_mtime', None) != disk_mtime:
                     model_settings = self._ollama_core.load_model_settings() or {}
                     setattr(self, '_model_settings', model_settings)
-                entry = model_settings.get(model_name)
-                return bool(entry) and entry.get('source') == 'user'
+                    self._model_settings_disk_mtime = disk_mtime
+                else:
+                    model_settings = getattr(self, '_model_settings', None) or {}
+                entry = lookup_settings_entry(model_settings, model_name)
+                if not entry:
+                    return False
+                src = str((entry.get('source') or '')).strip().lower()
+                if src == 'user':
+                    return True
+                # Auto-generated fallbacks are not "user saved" in the UI sense
+                if src in ('recommended', 'default'):
+                    return False
+                # Legacy JSON often omitted ``source``; treat persisted settings as custom
+                return bool(entry.get('settings'))
         except Exception:
             return False
 

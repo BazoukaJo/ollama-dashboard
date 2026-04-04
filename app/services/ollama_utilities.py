@@ -19,6 +19,7 @@ from app.services.model_settings_helpers import (
     get_model_settings_with_fallback_entry,
     load_model_settings,
     model_settings_file_path,
+    normalize_model_settings_key,
     normalize_setting_value,
     write_model_settings_file,
     validate_json_before_write,
@@ -329,6 +330,29 @@ class OllamaServiceUtilities:
         """Load per-model settings from file."""
         return load_model_settings(self)
 
+    def refresh_model_settings_cache_from_disk(self):
+        """Reload in-memory ``_model_settings`` from the JSON file on disk.
+
+        Call once per request before iterating models for ``has_custom_settings``:
+        the cache can otherwise stay non-empty but stale (another worker wrote the
+        file, or the file was updated outside this process).
+        """
+        lock = getattr(self, '_model_settings_lock', None)
+        path = self._model_settings_file_path()
+        if lock is not None:
+            with lock:
+                self._model_settings = self.load_model_settings() or {}
+                try:
+                    self._model_settings_disk_mtime = os.path.getmtime(path)
+                except OSError:
+                    self._model_settings_disk_mtime = None
+        else:
+            self._model_settings = self.load_model_settings() or {}
+            try:
+                self._model_settings_disk_mtime = os.path.getmtime(path)
+            except OSError:
+                self._model_settings_disk_mtime = None
+
     def _write_model_settings_file(self, model_settings_dict):
         """Write per-model settings to file atomically."""
         return write_model_settings_file(self, model_settings_dict)
@@ -355,8 +379,12 @@ class OllamaServiceUtilities:
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
 
+        canon_key = normalize_model_settings_key(model_name)
+        if not canon_key:
+            return False
+
         self._model_settings = getattr(self, '_model_settings', {})
-        self._model_settings[model_name] = entry
+        self._model_settings[canon_key] = entry
 
         lock = getattr(self, '_model_settings_lock', None)
         if lock is not None:

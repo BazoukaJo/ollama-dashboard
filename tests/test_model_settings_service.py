@@ -5,6 +5,73 @@ from app.services.ollama import OllamaService
 import tempfile
 
 
+def test_has_custom_settings_false_for_recommended_source(tmp_path):
+    app = create_app()
+    svc = OllamaService()
+    svc.init_app(app)
+    model_file = tmp_path / "model_settings.json"
+    app.config["MODEL_SETTINGS_FILE"] = str(model_file)
+    data = {
+        "rec-model": {
+            "settings": {"temperature": 0.75},
+            "source": "recommended",
+            "last_updated": "2020-01-01T00:00:00+00:00",
+        }
+    }
+    model_file.write_text(json.dumps(data), encoding="utf-8")
+    svc.refresh_model_settings_cache_from_disk()
+    assert not svc.has_custom_model_settings("rec-model")
+
+
+def test_has_custom_settings_true_when_source_key_omitted(tmp_path):
+    """Older model_settings.json entries may omit ``source``; still show as saved."""
+    app = create_app()
+    svc = OllamaService()
+    svc.init_app(app)
+    model_file = tmp_path / "model_settings.json"
+    app.config["MODEL_SETTINGS_FILE"] = str(model_file)
+    data = {
+        "legacy-model:tag": {
+            "settings": {"temperature": 0.4},
+            "last_updated": "2020-01-01T00:00:00+00:00",
+        }
+    }
+    model_file.write_text(json.dumps(data), encoding="utf-8")
+    svc.refresh_model_settings_cache_from_disk()
+    assert svc.has_custom_model_settings("legacy-model:tag")
+
+
+def test_has_custom_settings_finds_legacy_whitespace_key(tmp_path):
+    """API names are stripped; JSON keys may have been stored with stray spaces."""
+    app = create_app()
+    svc = OllamaService()
+    svc.init_app(app)
+    model_file = tmp_path / "model_settings.json"
+    app.config["MODEL_SETTINGS_FILE"] = str(model_file)
+    data = {
+        "llama3:latest ": {
+            "settings": {"temperature": 0.5},
+            "source": "user",
+            "last_updated": "2020-01-01T00:00:00+00:00",
+        }
+    }
+    model_file.write_text(json.dumps(data), encoding="utf-8")
+    svc.refresh_model_settings_cache_from_disk()
+    assert svc.has_custom_model_settings("llama3:latest")
+
+
+def test_save_model_settings_uses_stripped_key(tmp_path):
+    app = create_app()
+    svc = OllamaService()
+    svc.init_app(app)
+    model_file = tmp_path / "model_settings.json"
+    app.config["MODEL_SETTINGS_FILE"] = str(model_file)
+    assert svc.save_model_settings("  my-model:tag  ", {"temperature": 0.2}, source="user")
+    loaded = svc.load_model_settings()
+    assert "my-model:tag" in loaded
+    assert "  my-model:tag  " not in loaded
+
+
 def test_save_and_load_model_settings(tmp_path):
     app = create_app()
     svc = OllamaService()

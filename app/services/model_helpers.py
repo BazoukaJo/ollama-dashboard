@@ -21,6 +21,22 @@ def format_context_length(ctx):
     return str(n)
 
 
+def _raw_loaded_context_from_ps(model):
+    """Context window allocated for the loaded process (/api/ps): options.num_ctx or context_length."""
+    if not isinstance(model, dict):
+        return None
+    opts = model.get("options")
+    if isinstance(opts, dict):
+        v = opts.get("num_ctx")
+        if v is not None:
+            return v
+    v = model.get("context_length")
+    if v is not None:
+        return v
+    details = model.get("details") or {}
+    return details.get("context_length")
+
+
 def _extract_context_length(entry):
     """Extract context_length from entry (top-level, details, or model_info)."""
     if not isinstance(entry, dict):
@@ -90,6 +106,64 @@ def context_length_as_int(entry):
     return None
 
 
+def request_context_length_from_settings(service, model_name):
+    """Dashboard num_ctx (formatted) used when attaching options to generate/chat requests."""
+    if not model_name or service is None:
+        return None
+    try:
+        data = service.get_model_settings_with_fallback(str(model_name))
+        if not isinstance(data, dict):
+            return None
+        settings = data.get("settings") or {}
+        nctx = settings.get("num_ctx")
+        if nctx is None:
+            return None
+        return format_context_length(nctx)
+    except Exception:
+        return None
+
+
+def attach_request_context_to_model(service, model_dict):
+    if not isinstance(model_dict, dict):
+        return
+    name = model_dict.get("name")
+    if not name:
+        return
+    model_dict["request_context_length"] = request_context_length_from_settings(
+        service, name
+    )
+
+
+def format_token_count_display(total):
+    """Format a token count for model cards (thousands separators)."""
+    if total is None:
+        return None
+    try:
+        n = int(total)
+    except (TypeError, ValueError):
+        return None
+    if n < 0:
+        return None
+    return f"{n:,}"
+
+
+def attach_last_token_usage_to_model(service, model_dict):
+    """Attach last dashboard /api/generate token total (prompt + completion) for display."""
+    if not isinstance(model_dict, dict):
+        return
+    name = model_dict.get("name")
+    if not name or service is None:
+        return
+    getter = getattr(service, "get_last_generate_token_total", None)
+    if not callable(getter):
+        return
+    total = getter(name)
+    disp = format_token_count_display(total)
+    if disp:
+        model_dict["context_tokens_used_total"] = total
+        model_dict["context_tokens_used_display"] = disp
+
+
 def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflict=False):
     if not isinstance(entry, dict):
         return {'name': str(entry), 'has_vision': False, 'has_tools': False, 'has_reasoning': False}
@@ -114,6 +188,8 @@ def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflic
         model.setdefault('has_vision', False)
         model.setdefault('has_tools', False)
         model.setdefault('has_reasoning', False)
+    attach_request_context_to_model(service, model)
+    attach_last_token_usage_to_model(service, model)
     return model
 
 def format_running_model_entry(service, model, include_has_custom_settings=False, prefer_heuristics_on_conflict=False):
@@ -140,6 +216,14 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
             'context_length': format_context_length(_extract_context_length(model)) if isinstance(model, dict) else None,
         }
 
+        if isinstance(model, dict):
+            raw_loaded = _raw_loaded_context_from_ps(model)
+            entry['loaded_context_length'] = (
+                format_context_length(raw_loaded) if raw_loaded is not None else None
+            )
+        else:
+            entry['loaded_context_length'] = None
+
         # Format VRAM size if present
         if entry.get('size_vram') is not None:
             try:
@@ -159,6 +243,8 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
                 entry['has_custom_settings'] = bool(ms.get('source') == 'user')
             except Exception:
                 entry['has_custom_settings'] = False
+        attach_request_context_to_model(service, entry)
+        attach_last_token_usage_to_model(service, entry)
         return entry
     except Exception:
         return {'name': str(model), 'running': False, 'has_vision': False, 'has_tools': False, 'has_reasoning': False}

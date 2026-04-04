@@ -166,31 +166,43 @@ class TestModelEndpoints:
         data = response.get_json()
         assert 'models' in data or 'success' in data
 
-    @patch('app.routes.main.requests.post')
+    @patch('app.routes.main.ollama_service.get_service_status', return_value=True)
+    @patch('app.routes.main.ollama_service._session.post')
     @patch('app.routes.main.ollama_service.get_running_models')
-    def test_start_model_success(self, mock_running, mock_post, client):
+    def test_start_model_success(self, mock_running, mock_post, _mock_svc_up, client):
         """POST /api/models/start/<model> should start model."""
         mock_running.return_value = []
 
         class MockResponse:
             status_code = 200
-            def json(self): return {}
+            text = 'ok'
+
+            def json(self):
+                return {}
+
         mock_post.return_value = MockResponse()
 
         response = client.post('/api/models/start/llama3.1:8b')
-        assert response.status_code in [200, 503]  # 503 if service down
+        assert response.status_code == 200
 
+    @patch('app.routes.main._verify_model_unloaded', return_value=True)
+    @patch('app.routes.main.ollama_service.get_service_status', return_value=True)
+    @patch('app.routes.main.ollama_service._session.post')
     @patch('app.routes.main.ollama_service.get_running_models')
-    @patch('app.routes.main.requests.post')
-    def test_stop_model(self, mock_post, mock_running, client):
+    def test_stop_model(self, mock_running, mock_post, _mock_svc_up, _mock_verify, client):
         """POST /api/models/stop/<model> should stop model."""
+
         class MockResponse:
             status_code = 200
-            def json(self): return {}
+            text = 'ok'
+
+            def json(self):
+                return {}
+
         mock_post.return_value = MockResponse()
         mock_running.return_value = [{'name': 'llama3.1:8b'}]
         response = client.post('/api/models/stop/llama3.1:8b')
-        assert response.status_code in [200, 503]
+        assert response.status_code == 200
 
     @patch('app.routes.main.ollama_service._session.delete')
     def test_delete_model(self, mock_delete, client):

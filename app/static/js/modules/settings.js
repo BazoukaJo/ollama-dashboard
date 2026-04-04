@@ -159,7 +159,10 @@
     try {
       const r = await fetch(`/api/models/settings/${encodeURIComponent(modelName)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       const data = await r.json();
-      if(data.success) window.showNotification(data.message,'success');
+      if(data.success) {
+        window.showNotification(data.message,'success');
+        if (typeof updateModelData === 'function') void updateModelData();
+      }
       else window.showNotification(data.message || 'Failed to save settings','error');
     } catch(err){ window.showNotification('Failed to save settings: '+err.message,'error'); }
   }
@@ -168,7 +171,10 @@
     try {
       const r = await fetch(`/api/models/settings/${encodeURIComponent(modelName)}`,{method:'DELETE'});
       const data = await r.json();
-      if(data.success) window.showNotification(data.message,'success');
+      if(data.success) {
+        window.showNotification(data.message,'success');
+        if (typeof updateModelData === 'function') void updateModelData();
+      }
       else window.showNotification(data.message || 'Failed to delete settings','error');
     } catch(err){ window.showNotification('Failed to delete settings: '+err.message,'error'); }
   }

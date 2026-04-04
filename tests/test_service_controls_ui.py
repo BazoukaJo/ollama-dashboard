@@ -102,21 +102,27 @@ class TestServiceControlsUI(unittest.TestCase):
         # JS will try to find a card with .model-title containing the name
         script = f"""
                 (function() {{
-                    var update = window.updateAvailableModelsDisplay;
+                    var update = window.updateRunningModelsDisplay;
                     if (typeof update !== 'function') return false;
-                    // Replace available models with a test entry toggling capabilities
-                    var testModel = {{ name: '{modelName}', has_vision: true, has_tools: false, has_reasoning: true }};
+                    var testModel = {{
+                        name: '{modelName}',
+                        has_vision: true, has_tools: false, has_reasoning: true,
+                        details: {{ family: 'qwen', parameter_size: '4B', context_length: 4096 }},
+                        size: 1000000000, size_vram: 500000000,
+                        formatted_size: '1 GB', formatted_size_vram: '500 MB',
+                        context_length: 4096, loaded_context_length: '4096'
+                    }};
                     update([testModel]);
                     return true;
                 }})();
             """
         res = self.driver.execute_script(script)
-        self.assertTrue(res, 'Failed to call updateAvailableModelsDisplay')
+        self.assertTrue(res, 'Failed to call updateRunningModelsDisplay')
         time.sleep(0.5)
 
         # Now query the card for the model and verify capability classes
         # Find the card by title text
-        cards = self.driver.find_elements(By.CSS_SELECTOR, '#availableModelsContainer .model-card')
+        cards = self.driver.find_elements(By.CSS_SELECTOR, '#runningModelsContainer .model-card')
         matched_card = None
         for c in cards:
             title = c.find_element(By.CSS_SELECTOR, '.model-title').text.strip()
@@ -134,40 +140,35 @@ class TestServiceControlsUI(unittest.TestCase):
         self.assertIn('disabled', caps[2].get_attribute('class'))
 
     def test_special_char_model_names_ui(self):
-        # Ensures updateAvailableModelsDisplay and related DOM lookup works
+        # Ensures updateRunningModelsDisplay and related DOM lookup works
         url = 'http://127.0.0.1:5000/'
         self.driver.get(url)
-
-        # Create a model with special characters in its name and add a card to DOM
-        special_name = "weird\"name'\n<>"
-        script_insert = f"""
-            (function() {{
-                var container = document.getElementById('availableModelsContainer');
-                var col = document.createElement('div'); col.className = 'col-md-6 col-lg-4';
-                var card = document.createElement('div'); card.className = 'model-card h-100';
-                card.setAttribute('data-model-name', '{special_name}');
-                var title = document.createElement('div'); title.className = 'model-title'; title.textContent = '{special_name}';
-                var caps = document.createElement('div'); caps.className = 'model-capabilities';
-                caps.innerHTML = '<span class="capability-icon disabled"><i class="fas fa-brain"></i></span>' +
-                                 '<span class="capability-icon disabled"><i class="fas fa-image"></i></span>' +
-                                 '<span class="capability-icon disabled"><i class="fas fa-tools"></i></span>';
-                card.appendChild(title); card.appendChild(caps); col.appendChild(card); container.appendChild(col);
-                return true;
-            }})();
-        """
-        self.driver.execute_script(script_insert)
 
         # Mask fetch to prevent network calls
         self.driver.execute_script("window._origFetch = window.fetch; window.fetch = (u,o) => Promise.resolve({ok:true,json:()=>Promise.resolve({success:true,message:'mocked'})});")
 
-        # Update with a matching model (enable vision + reasoning, disable tools)
-        script_update = f"(function(){{ var update = window.updateAvailableModelsDisplay; update && update([{{ name: '{special_name}', has_vision: true, has_tools: false, has_reasoning: true }}]); return true; }})();"
-        res = self.driver.execute_script(script_update)
-        self.assertTrue(res, 'Failed to call updateAvailableModelsDisplay for special name')
+        special_name = "weird\"name'\n<>"
+        script_update = """
+            (function(){
+                var n = arguments[0];
+                var update = window.updateRunningModelsDisplay;
+                if (typeof update !== 'function') return false;
+                update([{
+                    name: n,
+                    has_vision: true, has_tools: false, has_reasoning: true,
+                    details: { family: 'x', parameter_size: 'y', context_length: 4096 },
+                    size: 1000000000, size_vram: 0,
+                    formatted_size: '1 GB', formatted_size_vram: '0 B',
+                    context_length: 4096, loaded_context_length: '4096'
+                }]);
+                return true;
+            })();
+        """
+        res = self.driver.execute_script(script_update, special_name)
+        self.assertTrue(res, 'Failed to call updateRunningModelsDisplay for special name')
         time.sleep(0.2)
 
-        # Find the inserted card and validate capability classes
-        cards = self.driver.find_elements(By.CSS_SELECTOR, '#availableModelsContainer .model-card')
+        cards = self.driver.find_elements(By.CSS_SELECTOR, '#runningModelsContainer .model-card')
         matched = None
         for c in cards:
             try:

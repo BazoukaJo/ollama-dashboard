@@ -124,7 +124,7 @@ class TestModelCardStructure:
     def test_running_card_has_three_spec_rows(
         self, mock_version, mock_stats, mock_available, mock_running, client
     ):
-        """Running model cards have Family, Size+GPU, Context spec rows."""
+        """Running model cards have Family, Size+GPU, Max context + Allocated spec rows."""
         mock_running.return_value = [
             {'name': 'llama3.1:8b', 'details': {'family': 'llama'}, 'parameter_size': '8B'}
         ]
@@ -140,7 +140,8 @@ class TestModelCardStructure:
         assert re.search(r'class="spec-label"[^>]*>\s*Parameters', html)
         assert re.search(r'class="spec-label"[^>]*>\s*Size', html)
         assert 'GPU Allocation' in html
-        assert re.search(r'class="spec-label"[^>]*>\s*Context', html)
+        assert re.search(r'class="spec-label"[^>]*>\s*Max context', html)
+        assert re.search(r'class="spec-label"[^>]*>\s*Allocated', html)
         assert 'spec-row' in html
 
     @patch('app.routes.main.ollama_service.get_running_models')

@@ -32,6 +32,34 @@ _DEF_TEMPLATE = {
 def get_default_settings_template():
     return dict(_DEF_TEMPLATE)
 
+
+def normalize_model_settings_key(model_name):
+    """Canonical dict key for per-model settings (matches Ollama API name strings)."""
+    if model_name is None:
+        return ''
+    return str(model_name).strip()
+
+
+def lookup_settings_entry(model_settings, model_name):
+    """Return the settings entry dict for ``model_name``, or None.
+
+    Keys in persisted JSON may differ by surrounding whitespace from API ``name``;
+    match using stripped equality.
+    """
+    if not isinstance(model_settings, dict):
+        return None
+    want = normalize_model_settings_key(model_name)
+    if not want:
+        return None
+    if want in model_settings:
+        entry = model_settings[want]
+        return entry if isinstance(entry, dict) else None
+    for k, v in model_settings.items():
+        if normalize_model_settings_key(k) == want:
+            return v if isinstance(v, dict) else None
+    return None
+
+
 def model_settings_file_path(service):
     if service.app:
         return service.app.config.get('MODEL_SETTINGS_FILE', 'model_settings.json')
@@ -56,6 +84,10 @@ def write_model_settings_file(service, model_settings_dict):
         with open(tmp_path, 'w', encoding='utf-8') as f:
             json.dump(model_settings_dict, f, indent=2)
         os.replace(tmp_path, path)
+        try:
+            service._model_settings_disk_mtime = os.path.getmtime(path)
+        except OSError:
+            service._model_settings_disk_mtime = None
         return True
     except (OSError, TypeError) as e:
         service.logger.exception("Error writing model settings: %s", e)
@@ -170,13 +202,21 @@ def get_model_settings_with_fallback_entry(service, model_name):
 
 def delete_model_settings_entry(service, model_name):
     try:
+        want = normalize_model_settings_key(model_name)
+        if not want:
+            return False
         with service._model_settings_lock:
             if not service._model_settings:
                 service._model_settings = load_model_settings(service) or {}
-            if model_name in service._model_settings:
-                del service._model_settings[model_name]
+            if want in service._model_settings:
+                del service._model_settings[want]
                 write_model_settings_file(service, service._model_settings)
                 return True
+            for k in list(service._model_settings.keys()):
+                if normalize_model_settings_key(k) == want:
+                    del service._model_settings[k]
+                    write_model_settings_file(service, service._model_settings)
+                    return True
         return False
     except Exception as e:
         service.logger.exception(f"Error deleting model settings for {model_name}: {e}")

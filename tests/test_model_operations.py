@@ -26,20 +26,21 @@ def client(app):
 class TestModelStop:
     """Test suite for model stop endpoint."""
 
-    @patch('app.routes.main.requests.post')
+    @patch('app.routes.main._verify_model_unloaded', return_value=True)
+    @patch('app.routes.main.ollama_service._session.post')
     @patch('app.routes.main.ollama_service.get_running_models')
     @patch('app.routes.main.ollama_service.get_service_status')
-    def test_stop_model_success(self, mock_status, mock_running, mock_post, client):
+    def test_stop_model_success(self, mock_status, mock_running, mock_post, mock_verify_unload, client):
         """Test successfully stopping a running model."""
         mock_status.return_value = True
-        mock_running.return_value = [{'name': 'llama2:latest', 'size': 1000000}]
+        mock_running.return_value = [{'name': 'mock-stub-model:latest', 'size': 1000000}]
 
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {'status': 'success'}
         mock_post.return_value = mock_response
 
-        response = client.post('/api/models/stop/llama2:latest')
+        response = client.post('/api/models/stop/mock-stub-model:latest')
 
         assert response.status_code == 200
         data = response.get_json()
@@ -51,7 +52,7 @@ class TestModelStop:
         call_args = mock_post.call_args
         assert call_args[1]['json']['keep_alive'] == 0
         assert call_args[1]['json']['prompt'] == ''
-        assert call_args[1]['json']['model'] == 'llama2:latest'
+        assert call_args[1]['json']['model'] == 'mock-stub-model:latest'
 
     @patch('app.routes.main.ollama_service.get_running_models')
     @patch('app.routes.main.ollama_service.get_service_status')
@@ -60,7 +61,7 @@ class TestModelStop:
         mock_status.return_value = True
         mock_running.return_value = []
 
-        response = client.post('/api/models/stop/llama2:latest')
+        response = client.post('/api/models/stop/mock-stub-model:latest')
 
         assert response.status_code == 400
         data = response.get_json()
@@ -72,24 +73,25 @@ class TestModelStop:
         """Test stopping a model when Ollama service is down."""
         mock_status.return_value = False
 
-        response = client.post('/api/models/stop/llama2:latest')
+        response = client.post('/api/models/stop/mock-stub-model:latest')
 
         assert response.status_code == 503
         data = response.get_json()
         assert data['success'] is False
         assert 'service is not running' in data['message'].lower()
 
-    @patch('app.routes.main.requests.post')
+    @patch('app.routes.main._verify_model_unloaded', return_value=True)
+    @patch('app.routes.main.ollama_service._session.post')
     @patch('app.routes.main.ollama_service.get_running_models')
     @patch('app.routes.main.ollama_service.get_service_status')
-    def test_stop_model_timeout(self, mock_status, mock_running, mock_post, client):
+    def test_stop_model_timeout(self, mock_status, mock_running, mock_post, mock_verify_unload, client):
         """Test stopping a model that times out."""
         mock_status.return_value = True
-        mock_running.return_value = [{'name': 'llama2:latest', 'size': 1000000}]
+        mock_running.return_value = [{'name': 'mock-stub-model:latest', 'size': 1000000}]
 
         mock_post.side_effect = requests.exceptions.Timeout()
 
-        response = client.post('/api/models/stop/llama2:latest')
+        response = client.post('/api/models/stop/mock-stub-model:latest')
 
         assert response.status_code == 504
         data = response.get_json()
@@ -100,14 +102,15 @@ class TestModelStop:
 class TestModelRestart:
     """Test suite for model restart endpoint."""
 
+    @patch('app.routes.main._verify_model_unloaded', return_value=True)
     @patch('time.sleep')
-    @patch('app.routes.main.requests.post')
+    @patch('app.routes.main.ollama_service._session.post')
     @patch('app.routes.main.ollama_service.get_running_models')
     @patch('app.routes.main.ollama_service.get_service_status')
-    def test_restart_running_model_success(self, mock_status, mock_running, mock_post, mock_sleep, client):
+    def test_restart_running_model_success(self, mock_status, mock_running, mock_post, mock_sleep, mock_verify_unload, client):
         """Test successfully restarting a running model."""
         mock_status.return_value = True
-        mock_running.return_value = [{'name': 'llama2:latest', 'size': 1000000}]
+        mock_running.return_value = [{'name': 'mock-stub-model:latest', 'size': 1000000}]
 
         stop_response = Mock()
         stop_response.status_code = 200
@@ -118,7 +121,7 @@ class TestModelRestart:
 
         mock_post.side_effect = [stop_response, start_response]
 
-        response = client.post('/api/models/restart/llama2:latest')
+        response = client.post('/api/models/restart/mock-stub-model:latest')
 
         assert response.status_code == 200
         data = response.get_json()
@@ -126,7 +129,7 @@ class TestModelRestart:
         assert 'restarted successfully' in data['message'].lower()
         assert mock_post.call_count == 2
 
-    @patch('app.routes.main.requests.post')
+    @patch('app.routes.main.ollama_service._session.post')
     @patch('app.routes.main.ollama_service.get_running_models')
     @patch('app.routes.main.ollama_service.get_service_status')
     def test_restart_stopped_model_success(self, mock_status, mock_running, mock_post, client):
@@ -139,7 +142,7 @@ class TestModelRestart:
         start_response.json.return_value = {'response': 'test'}
         mock_post.return_value = start_response
 
-        response = client.post('/api/models/restart/llama2:latest')
+        response = client.post('/api/models/restart/mock-stub-model:latest')
 
         assert response.status_code == 200
         data = response.get_json()
@@ -147,7 +150,7 @@ class TestModelRestart:
         assert mock_post.call_count == 1
 
     @patch('time.sleep')
-    @patch('app.routes.main.requests.post')
+    @patch('app.routes.main.ollama_service._session.post')
     @patch('app.routes.main.ollama_service.get_running_models')
     @patch('app.routes.main.ollama_service.get_service_status')
     def test_restart_model_start_fails_with_retry(self, mock_status, mock_running, mock_post, mock_sleep, client):
@@ -165,7 +168,7 @@ class TestModelRestart:
 
         mock_post.side_effect = [fail_response, success_response]
 
-        response = client.post('/api/models/restart/llama2:latest')
+        response = client.post('/api/models/restart/mock-stub-model:latest')
 
         assert response.status_code == 200
         data = response.get_json()
@@ -176,7 +179,7 @@ class TestModelRestart:
         """Test restart when Ollama service is down."""
         mock_status.return_value = False
 
-        response = client.post('/api/models/restart/llama2:latest')
+        response = client.post('/api/models/restart/mock-stub-model:latest')
 
         assert response.status_code == 503
         data = response.get_json()
@@ -187,19 +190,20 @@ class TestModelRestart:
 class TestModelDelete:
     """Test suite for model delete endpoint."""
 
+    @patch('app.routes.main._verify_model_deleted', return_value=True)
     @patch('app.routes.main.ollama_service._session.delete')
     @patch('app.routes.main.ollama_service.get_available_models')
     @patch('app.routes.main.ollama_service.get_running_models')
-    def test_delete_model_success(self, mock_running, mock_available, mock_delete, client):
+    def test_delete_model_success(self, mock_running, mock_available, mock_delete, mock_verify_deleted, client):
         """Test successfully deleting a model."""
         mock_running.return_value = []
-        mock_available.return_value = [{'name': 'llama2:latest', 'size': 1000000}]
+        mock_available.return_value = [{'name': 'mock-stub-model:latest', 'size': 1000000}]
 
         delete_response = Mock()
         delete_response.status_code = 200
         mock_delete.return_value = delete_response
 
-        response = client.delete('/api/models/delete/llama2:latest')
+        response = client.delete('/api/models/delete/mock-stub-model:latest')
 
         assert response.status_code == 200
         data = response.get_json()
@@ -220,7 +224,7 @@ class TestModelDelete:
 
         response = client.delete('/api/models/delete/nonexistent:latest')
 
-        assert response.status_code == 400
+        assert response.status_code == 404
         data = response.get_json()
         assert data['success'] is False
 
@@ -228,7 +232,7 @@ class TestModelDelete:
 class TestModelStart:
     """Test suite for model start endpoint."""
 
-    @patch('app.routes.main.requests.post')
+    @patch('app.routes.main.ollama_service._session.post')
     @patch('app.routes.main.ollama_service.get_running_models')
     @patch('app.routes.main.ollama_service.get_service_status')
     def test_start_model_success(self, mock_status, mock_running, mock_post, client):
@@ -241,7 +245,7 @@ class TestModelStart:
         start_response.json.return_value = {'response': 'test'}
         mock_post.return_value = start_response
 
-        response = client.post('/api/models/start/llama2:latest')
+        response = client.post('/api/models/start/mock-stub-model:latest')
 
         assert response.status_code == 200
         data = response.get_json()
@@ -252,9 +256,9 @@ class TestModelStart:
     def test_start_already_running_model(self, mock_status, mock_running, client):
         """Test starting a model that is already running."""
         mock_status.return_value = True
-        mock_running.return_value = [{'name': 'llama2:latest', 'size': 1000000}]
+        mock_running.return_value = [{'name': 'mock-stub-model:latest', 'size': 1000000}]
 
-        response = client.post('/api/models/start/llama2:latest')
+        response = client.post('/api/models/start/mock-stub-model:latest')
 
         assert response.status_code == 200
         data = response.get_json()

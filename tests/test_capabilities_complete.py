@@ -111,7 +111,7 @@ class TestCapabilityDetection:
 
     def test_no_capabilities_basic_model(self, ollama_service):
         """Test that basic text model has no special capabilities."""
-        model = {'name': 'llama2:7b', 'details': {}}
+        model = {'name': 'fixture-basic:7b', 'details': {}}
         capabilities = ollama_service._detect_model_capabilities(model)
         assert capabilities['has_vision'] in (False, None)
         assert capabilities['has_tools'] in (False, None)

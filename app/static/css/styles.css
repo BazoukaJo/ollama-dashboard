@@ -1,6 +1,10 @@
 /* ===== CSS Variables & Base Styles ===== */
 /* Theme colors live in theme.css (html.dark / html.light), BlueprintAssist-aligned. */
 :root {
+  /* Browser default UI font (generic sans-serif); overrides Bootstrap’s bundled stack */
+  --bs-font-sans-serif: sans-serif;
+  --bs-font-monospace: monospace;
+  --bs-body-font-family: sans-serif;
   --border-radius: 8px;
   --border-radius-lg: 12px;
   --transition: all 0.2s ease;
@@ -90,7 +94,7 @@
 body {
   background: var(--primary-bg, #1a1a1a);
   color: var(--text-secondary, #ccc);
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: sans-serif;
   font-size: 15px;
   line-height: 1.55;
   margin: 0;
@@ -268,6 +272,10 @@ body {
   display: block;
 }
 
+.dashboard-header-banner .dashboard-meta-logo {
+  align-self: center;
+}
+
 .dashboard-meta-row small {
   font-size: 0.875rem;
   color: var(--text-accent);
@@ -275,8 +283,567 @@ body {
   line-height: 1.4;
 }
 
-.dashboard-header-toolbar {
-  row-gap: 0.35rem;
+/* ===== Dashboard header: flex + container queries — no horizontal scroll; meta drops below when it would crowd primary row ===== */
+/* Sticky backdrop + border: see theme.css .dashboard-header-banner */
+.dashboard-header-banner {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  container-type: inline-size;
+  container-name: dash-hdr;
+}
+
+/* Second row under the top bar: CPU/RAM/VRAM/GPU — in header so it stays visible while model lists scroll (theme.css sticky banner) */
+.dashboard-header-resources-strip {
+  margin-top: 0.4rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.dashboard-header-banner .dashboard-header-resources-strip .compact-system-resources {
+  margin-bottom: 0 !important;
+}
+
+/* Centered on header bottom edge; vertical center sits on the border (half in / half out) */
+.dashboard-header-ollama-cta {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, -50%);
+  z-index: 1022;
+  margin: 0;
+  white-space: nowrap;
+  max-width: min(22rem, 94%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  line-height: 1.35;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.38);
+}
+
+html.light .dashboard-header-ollama-cta {
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.14);
+}
+
+/* Let the header shrink inside Bootstrap’s .container instead of overflowing the viewport */
+#dashboard-page.container {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dashboard-header-bar {
+  /* Match .dashboard-header-banner .theme-toggle-btn width (2rem) + touch margin */
+  --header-theme-hit: 2rem;
+  --header-theme-gap: 0.7rem;
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: flex-start;
+  gap: 0.42rem 0.75rem;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  /* Reserve space so in-flow content never sits under the fixed theme control */
+  padding-right: calc(var(--header-theme-hit) + var(--header-theme-gap));
+}
+
+/* Primary strip: logo + health + Ollama controls stay one locked cluster (controls never drift toward version/meta). */
+.dashboard-header-start {
+  --header-ollama-control-height: 2.125rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  gap: 0.32rem 0.4rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Logo | health | start/stop/restart — nowrap so service buttons stay immediately right of health */
+.dashboard-header-service-cluster {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  align-content: center;
+  gap: 0.32rem 0.4rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Logo + health: single row */
+.dashboard-header-start-lock {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  align-content: center;
+  gap: 0.32rem 0.4rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.dashboard-header-start-lock .dashboard-meta-logo {
+  flex-shrink: 0;
+}
+
+.dashboard-header-ollama-toolbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  align-content: center;
+  gap: 0.28rem 0.38rem;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: none;
+}
+
+/* Pinned top-right of the bar — out of flex flow so it never wraps or shifts */
+.dashboard-header-bar .dashboard-header-theme-toggle.theme-toggle-btn {
+  position: absolute;
+  top: 0.1rem;
+  right: max(0px, env(safe-area-inset-right, 0px));
+  z-index: 6;
+  flex: none;
+  margin: 0;
+}
+
+/*
+ * Version + refresh: shrink-wrapped panel (background matches content width), right-aligned in the bar;
+ * on narrow viewports it grows to full row width. Vertically centered with .dashboard-header-start.
+ */
+.dashboard-header-version-status {
+  --hdr-meta-fs: 0.75rem;
+  --hdr-meta-lh: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+  flex: 0 1 auto;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  margin-left: auto;
+  align-self: center;
+  box-sizing: border-box;
+  padding: 0.22rem 0.48rem 0.24rem;
+  border-radius: 0.45rem;
+  background: var(--header-meta-panel-bg);
+  border: 1px solid var(--header-meta-panel-border);
+  box-shadow: var(--header-meta-panel-shadow);
+}
+
+.dashboard-header-versions {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.dashboard-header-meta {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.dashboard-header-version-status .dashboard-header-meta {
+  margin-top: 0.22rem;
+  padding-top: 0.22rem;
+  border-top: 1px solid var(--header-meta-divider);
+}
+
+/* Wide: one row start | version+status stack; panel stays content-sized (no flex-grow gap) */
+@container dash-hdr (min-width: 58rem) {
+  .dashboard-header-version-status {
+    flex: 0 1 auto;
+    width: max-content;
+    max-width: min(100%, calc(100cqi - var(--header-theme-hit) - var(--header-theme-gap) - 1rem));
+  }
+
+  .dashboard-header-bar {
+    flex-wrap: nowrap;
+    gap: 0.45rem 1rem;
+    align-items: center;
+  }
+
+  .dashboard-header-meta {
+    max-width: 100%;
+  }
+
+  .dashboard-header-banner .refresh-indicator {
+    align-items: center;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    justify-content: flex-end;
+  }
+
+  .dashboard-header-banner .refresh-indicator-cluster {
+    width: auto;
+    max-width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+}
+
+/* No @container support: approximate with viewport width */
+@supports not (container-type: inline-size) {
+  @media (min-width: 992px) {
+    .dashboard-header-version-status {
+      flex: 0 1 auto;
+      width: max-content;
+      max-width: min(100%, calc(100vw - var(--header-theme-hit) - var(--header-theme-gap) - 3rem));
+    }
+
+    .dashboard-header-bar {
+      flex-wrap: nowrap;
+      gap: 0.45rem 1rem;
+      align-items: center;
+    }
+
+    .dashboard-header-meta {
+      max-width: 100%;
+    }
+
+    .dashboard-header-banner .refresh-indicator {
+      width: auto;
+      max-width: 100%;
+      justify-content: flex-end;
+    }
+
+    .dashboard-header-banner .refresh-indicator-cluster {
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+  }
+}
+
+/* Version chips row + refresh status — right-aligned, wrap-friendly */
+.dashboard-header-version-line {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.26rem 0.26rem;
+  font-size: var(--hdr-meta-fs, 0.75rem);
+  line-height: var(--hdr-meta-lh, 1.2rem);
+  font-weight: 400;
+  text-align: end;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.dashboard-header-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  max-width: 100%;
+  padding: 0.1rem 0.42rem;
+  border-radius: 0.35rem;
+  font-size: 0.95em;
+  line-height: 1.28;
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  color: var(--text-secondary);
+  background: var(--header-meta-chip-bg);
+  border: 1px solid var(--header-meta-chip-border);
+  box-sizing: border-box;
+}
+
+.dashboard-header-meta-chip--endpoint {
+  font-family: ui-monospace, "Cascadia Code", "Segoe UI Mono", monospace;
+  font-weight: 450;
+  font-size: 0.92em;
+  letter-spacing: 0.02em;
+  color: var(--header-meta-chip-endpoint-fg);
+  background: var(--header-meta-chip-endpoint-bg);
+}
+
+.dashboard-header-meta-chip--warn {
+  color: var(--warning-color);
+  background: rgba(255, 193, 7, 0.12);
+  border-color: rgba(255, 193, 7, 0.32);
+}
+
+html.light .dashboard-header-meta-chip--warn {
+  background: hsl(45, 100%, 96%);
+  border-color: hsl(45, 90%, 82%);
+  color: hsl(32, 95%, 32%);
+}
+
+.dashboard-header-status-line {
+  font-size: var(--hdr-meta-fs, 0.75rem);
+  line-height: var(--hdr-meta-lh, 1.2rem);
+  font-weight: 450;
+  color: var(--text-muted);
+  text-align: end;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.dashboard-header-inline-sep {
+  opacity: 0.35;
+  font-weight: 300;
+  user-select: none;
+  margin: 0 0.28em;
+  white-space: pre;
+}
+
+.dashboard-header-banner .refresh-poll-sep {
+  opacity: 0.35;
+  margin-right: 0.22em;
+  font-weight: 300;
+}
+
+/* Phones: slightly larger meta copy; tighter vertical rhythm */
+@media (max-width: 575.98px) {
+  .dashboard-header-bar {
+    gap: 0.32rem 0.45rem;
+    --header-theme-hit: 2.1rem;
+  }
+
+  .dashboard-header-start {
+    --header-ollama-control-height: 2rem;
+    gap: 0.22rem 0.3rem;
+  }
+
+  .dashboard-header-service-cluster {
+    gap: 0.22rem 0.3rem;
+  }
+
+  .dashboard-header-start-lock {
+    gap: 0.22rem 0.3rem;
+  }
+
+  .dashboard-header-version-status {
+    --hdr-meta-fs: 0.7rem;
+    --hdr-meta-lh: 1.18rem;
+    width: 100%;
+    margin-left: 0;
+    align-self: stretch;
+    padding: 0.2rem 0.4rem 0.22rem;
+  }
+
+  .dashboard-header-banner .refresh-indicator {
+    font-size: var(--hdr-meta-fs);
+  }
+
+  .dashboard-header-banner .refresh-indicator-cluster {
+    gap: 0.28rem;
+  }
+
+  .dashboard-header-banner .dashboard-meta-logo {
+    width: 1.4rem;
+    height: 1.4rem;
+    padding: 0.16rem;
+  }
+
+  .dashboard-header-banner .theme-toggle-btn {
+    width: 2.05rem;
+    height: 2.05rem;
+  }
+}
+
+/* Tablet: single column, a bit more air between header rows */
+@media (min-width: 576px) and (max-width: 991.98px) {
+  .dashboard-header-bar {
+    gap: 0.48rem 0.6rem;
+  }
+}
+
+.dashboard-header-meta-sep {
+  opacity: 0.35;
+  font-size: 0.65rem;
+  line-height: 1;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.dashboard-header-banner .refresh-indicator {
+  justify-content: flex-end;
+  align-items: center;
+  align-self: auto;
+  width: 100%;
+  max-width: 100%;
+  min-width: min(100%, max-content);
+  margin-bottom: 0;
+  padding-left: 0;
+  padding-right: 0;
+  flex-shrink: 0;
+  font-size: var(--hdr-meta-fs);
+  line-height: var(--hdr-meta-lh);
+}
+
+.dashboard-header-banner .btn-refresh.btn-sm {
+  padding: 0.12rem 0.38rem;
+}
+
+.dashboard-header-banner .refresh-indicator-cluster {
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: inherit;
+  line-height: var(--hdr-meta-lh);
+  width: 100%;
+  max-width: 100%;
+  min-width: min(100%, max-content);
+  gap: 0.26rem;
+}
+
+/* Dot + status copy stay one unit; refresh button sits after (still end-aligned). */
+.dashboard-header-banner .refresh-indicator-state {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  flex-wrap: nowrap;
+  gap: 0.26rem;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+
+.dashboard-header-banner .refresh-indicator-state .dashboard-header-status-line {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  text-align: end;
+}
+
+/* Dot scales with line box; locked to status line via .refresh-indicator-state */
+.dashboard-header-banner .refresh-indicator .dot,
+.dashboard-header-banner .refresh-indicator-state .dot {
+  width: 1cap;
+  height: 1cap;
+  min-width: 6px;
+  min-height: 6px;
+  flex-shrink: 0;
+}
+
+@media (min-width: 992px) {
+  .dashboard-header-banner .refresh-indicator .dot,
+  .dashboard-header-banner .refresh-indicator-state .dot {
+    min-width: 5px;
+    min-height: 5px;
+  }
+}
+
+
+/* Health pill: compact width; ellipsis when needed — counts removed from label (see section badges) */
+.dashboard-header-banner .dashboard-header-health.health-status-badge {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(100%, 28rem);
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  line-height: 1.3;
+  min-height: var(--header-ollama-control-height, 2.125rem);
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  justify-content: flex-start;
+  text-align: start;
+  box-sizing: border-box;
+}
+
+@media (min-width: 576px) {
+  .dashboard-header-banner .dashboard-header-health.health-status-badge {
+    padding: 0.22rem 0.6rem;
+    font-size: 0.8rem;
+  }
+}
+
+@media (min-width: 992px) {
+  .dashboard-header-banner .dashboard-header-health.health-status-badge {
+    font-size: 0.82rem;
+    line-height: 1.25;
+  }
+}
+
+@media (min-width: 576px) {
+  .dashboard-header-banner .dashboard-header-health.health-status-badge {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .dashboard-header-banner .dashboard-header-health.health-status-badge #healthText {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+}
+
+.dashboard-header-banner .service-controls {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  align-self: center;
+  align-content: center;
+  min-height: var(--header-ollama-control-height, 2.125rem);
+}
+
+.dashboard-header-banner .service-controls .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--header-ollama-control-height, 2.125rem);
+  padding: 0.2rem 0.45rem;
+  box-sizing: border-box;
+}
+
+.dashboard-header-banner .theme-toggle-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.45rem;
+}
+
+/* Find Model modal: modal-lg + input-group-lg in template */
+#findModelModal .find-model-input-group .input-group-text {
+  min-width: 3.25rem;
+  justify-content: center;
 }
 
 /* ===== Refresh Indicator ===== */
@@ -976,9 +1543,54 @@ canvas {
   display: block;
 }
 
-/* Professional Model Card Styles */
+/*
+ * Card grids: min track size via minmax + 1fr; max width applied on .col (not inside minmax).
+ * Using min(max, 1fr) inside minmax() fights fr distribution in some layouts; capping .col avoids that.
+ */
+.model-cards-row.row {
+  --model-card-min-track: min(100%, 21.19rem);
+  --model-card-max-track: 25.2rem;
+  display: grid !important;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(var(--model-card-min-track), 1fr)
+  );
+  row-gap: var(--bs-gutter-y, 1rem);
+  column-gap: var(--bs-gutter-x, 1rem);
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.model-cards-row.row > .col {
+  width: 100%;
+  max-width: var(--model-card-max-track);
+  justify-self: center;
+  box-sizing: border-box;
+  flex: none !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+body.compact-mode .model-cards-row.row {
+  --model-card-min-track: min(100%, 18.94rem);
+  --model-card-max-track: 21.6rem;
+}
+
+/* Downloadable + extended grids: ~30% narrower max/min track than Running / Available */
+.model-cards-row.row.model-cards-row--downloadable {
+  --model-card-min-track: min(100%, 18.54rem);
+  /* At least as wide as min-track so grid min and .col max-width stay consistent */
+  --model-card-max-track: 18.54rem;
+}
+
+body.compact-mode .model-cards-row.row.model-cards-row--downloadable {
+  --model-card-min-track: min(100%, 16.57rem);
+  --model-card-max-track: 16.57rem;
+}
+
+/* Professional Model Card Styles — vertical flow + uniform spec grid */
 .model-card {
-  padding: 4px;
+  padding: 0.5rem 0.65rem;
   margin: 4px;
   border-radius: 12px;
   background: var(--model-card-bg, rgba(255, 255, 255, 0.02));
@@ -988,21 +1600,180 @@ canvas {
   z-index: 0;
   overflow: visible;
   animation: fadeInUp 0.5s ease-out;
-  /* Grid layout for clear element positioning */
-  display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto auto auto auto;
-  gap: 0 0.5rem;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  container-type: inline-size;
+  container-name: model-card;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
-.model-card .model-header { grid-column: 1 / -1; grid-row: 1; }
-.model-card .model-title { grid-column: 1; grid-row: 2; min-width: 0; }
-.model-card .model-capabilities { grid-column: 2; grid-row: 2; align-self: center; }
-.model-card .model-specs { grid-column: 1 / -1; grid-row: 3; }
-.model-card .download-progress { grid-column: 1 / -1; grid-row: 4; }
-.model-card .model-actions { grid-column: 1 / -1; grid-row: 5; }
-/* When no download-progress, model-actions uses row 4 */
-.model-card:not(:has(.download-progress)) .model-actions { grid-row: 4; }
+
+/* Header: icon | body — first column fixed width so the icon stays anchored (no x drift when card width changes). */
+.model-card .model-header.model-card-head {
+  display: grid;
+  grid-template-columns: var(--model-card-icon-col, 26px) minmax(0, 1fr);
+  grid-template-areas: "head-icon head-body";
+  align-items: start;
+  justify-items: stretch;
+  column-gap: 0.5rem;
+  row-gap: 0;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 0;
+  padding-bottom: 0.22rem;
+  border-bottom: 1px solid var(--model-card-border, rgba(255, 255, 255, 0.1));
+  box-sizing: border-box;
+}
+
+.model-card .model-header.model-card-head .model-icon-wrapper {
+  grid-area: head-icon;
+  justify-self: start;
+  align-self: start;
+  width: var(--model-card-icon-col, 26px);
+  height: var(--model-card-icon-col, 26px);
+  flex-shrink: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.model-card-head-body {
+  grid-area: head-body;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+}
+
+/* Title on the left; status + capabilities on the right when width allows — wrap only when needed. */
+.model-card-head-name-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  column-gap: 0.45rem;
+  row-gap: 0.35rem;
+  width: 100%;
+  min-width: 0;
+}
+
+/* Trail: status + caps; stays on same row as title when space permits (margin-left: auto). */
+.model-card-head-trail {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.32rem 0.4rem;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: auto;
+}
+
+.model-card-head-name-row .model-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+  margin: 0;
+  min-width: 0;
+}
+
+.model-card-head-aside {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.model-card .model-header.model-card-head .model-capabilities {
+  flex-shrink: 0;
+  margin: 0;
+  justify-content: flex-end;
+  width: auto;
+}
+
+.model-card .model-header.model-card-head .model-meta {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+/* Only stack title above trail on very narrow cards (avoid premature column layout). */
+@container model-card (max-width: 12rem) {
+  .model-card-head-name-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .model-card-head-trail {
+    justify-content: flex-end;
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+  }
+}
+
+.model-card .model-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem 0.55rem;
+  width: 100%;
+  min-width: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  min-height: 0;
+  border-bottom: none;
+  line-height: 1.2;
+}
+
+.model-card .model-card-head-name-row > .model-title {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.model-card .model-specs {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.26rem;
+  align-content: start;
+}
+
+/* Flatten spec rows into the parent grid (no ragged flex wraps) */
+.model-card .model-specs > .spec-row {
+  display: contents;
+}
+
+.model-card .spec-item--full {
+  grid-column: 1 / -1;
+}
+
+.model-card .download-progress,
+.model-card .model-actions {
+  width: 100%;
+  overflow: visible;
+}
 
 .model-card:nth-child(1) {
   animation-delay: 0.1s;
@@ -1032,7 +1803,7 @@ canvas {
   z-index: 8;
 }
 
-.model-header {
+.model-header:not(.model-card-head) {
   display: flex;
   align-items: center;
   gap: 3px;
@@ -1042,8 +1813,8 @@ canvas {
 }
 
 .model-icon-wrapper {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   background: linear-gradient(135deg, #666666, #999999);
   border-radius: 8px;
   display: flex;
@@ -1063,25 +1834,250 @@ canvas {
   color: var(--model-title-color, #ffffff);
   margin: 0;
   margin-top: 0.15rem;
-  line-height: 1.2;
+  line-height: 1.22;
   padding-bottom: 0.3125rem;
-  min-height: 1.4em;
+  min-height: 1.25em;
+}
+
+/* Split display: optional registry path row + primary name + tag chip (never clip the tag) */
+.model-title-display {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.model-title-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.14rem;
+  min-width: 0;
+}
+
+.model-card-head-body .model-title-stack {
+  align-items: flex-start;
+  text-align: start;
+  width: 100%;
+  min-width: 0;
+}
+
+.model-card-head-body .model-title-display {
+  max-width: 100%;
+  text-align: start;
+}
+
+.model-title-scope-row {
+  min-width: 0;
+}
+
+.model-card .model-title .model-title-scope {
+  display: block;
+  font-family: monospace;
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--model-title-scope-color, var(--model-title-color, #ffffff));
+  opacity: var(--model-title-scope-opacity, 0.66);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-title-name-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  max-width: 100%;
+  gap: 0;
+}
+
+/* Keep stem, colon, and tag together; only the base name may ellipsize so :tag stays adjacent */
+.model-card .model-title .model-title-name-core {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.model-card .model-title .model-title-name-core--full {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.model-card .model-title .model-title-base {
+  font-weight: 650;
+  font-size: 1.05rem;
+  letter-spacing: -0.03em;
+  color: var(--model-title-color, #ffffff);
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+}
+
+.model-card .model-title .model-title-full {
+  font-weight: 650;
+  font-size: 1.05rem;
+  letter-spacing: -0.025em;
+  color: var(--model-title-color, #ffffff);
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.model-card .model-title .model-title-name-core--full .model-title-full {
+  display: block;
+  flex: none;
+}
+
+.model-card .model-title .model-title-colon {
+  opacity: 0.42;
+  font-weight: 300;
+  font-size: 0.92em;
+  margin: 0 0.04em;
+  color: var(--model-title-color, #ffffff);
+  user-select: none;
+  flex-shrink: 0;
+  align-self: center;
+  line-height: 1;
+}
+
+.model-card .model-title .model-title-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: monospace;
+  font-size: 0.76em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.18em 0.5em 0.2em;
+  margin-left: 0.12em;
+  border-radius: 0.42em;
+  background: var(--model-title-tag-bg, rgba(255, 255, 255, 0.08));
+  color: var(--model-title-tag-fg, #eceff1);
+  border: 1px solid var(--model-title-tag-border, rgba(255, 255, 255, 0.18));
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  line-height: 1.2;
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+/* Saved-defaults indicator lives inside Settings action (right), not the title */
+.model-action-settings-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  line-height: 1;
+  width: auto;
+  max-width: 100%;
+  /* Avoid min-width:0 here — it lets flex/grid shrink the row to nothing in minmax(0,1fr) cells */
+  min-width: min-content;
+  flex-wrap: wrap;
+  white-space: normal;
+  row-gap: 0.12rem;
+}
+
+.model-actions .model-action-settings-btn .fa-cog {
+  font-size: 0.68rem;
+  flex-shrink: 0;
+}
+
+.model-actions .model-action-settings-btn .model-action-btn-label {
+  margin: 0;
+}
+
+/* Settings status: always visible — saved (amber) vs default/recommended (grey) */
+.model-actions .model-action-settings-btn .model-settings-status-badge.badge {
+  flex-shrink: 0;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.18rem;
+  font-size: 0.56rem !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  padding: 0.1rem 0.38rem 0.11rem !important;
+  letter-spacing: 0.01em;
+  vertical-align: middle;
+  border-style: solid;
+  border-width: 1px;
+  min-height: 0;
+}
+
+.model-actions .model-action-settings-btn .model-settings-status-badge .model-settings-status-ic {
+  font-size: 0.5rem;
+  line-height: 1;
+}
+
+.model-actions .model-action-settings-btn .model-settings-status-badge--saved {
+  color: #1a1a1a !important;
+  background-color: #ffc107 !important;
+  border-color: rgba(0, 0, 0, 0.14) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+.model-actions .model-action-settings-btn .model-settings-status-badge--saved .model-settings-status-ic {
+  color: inherit !important;
+  opacity: 1;
+}
+
+/* Greyed when no custom save — still clearly readable */
+.model-actions .model-action-settings-btn .model-settings-status-badge--default {
+  color: rgba(180, 186, 193, 0.95) !important;
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  box-shadow: none;
+  opacity: 0.92;
+}
+
+.model-actions .model-action-settings-btn .model-settings-status-badge--default .model-settings-status-ic {
+  color: rgba(180, 186, 193, 0.85) !important;
+  opacity: 0.75;
+}
+
+html.light .model-actions .model-action-settings-btn .model-settings-status-badge--default {
+  color: hsl(220, 9%, 40%) !important;
+  background-color: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+html.light .model-actions .model-action-settings-btn .model-settings-status-badge--default .model-settings-status-ic {
+  color: hsl(220, 9%, 45%) !important;
+  opacity: 0.8;
+}
+
+.model-actions .model-action-settings-btn {
+  padding: 0.22rem 0.32rem;
+  font-size: 0.75rem;
+  overflow: visible !important;
 }
 
 .model-capabilities {
   display: flex !important;
-  gap: 0.35rem;
+  gap: 0.28rem;
   justify-content: flex-end;
   flex-shrink: 0;
-  align-self: center;
+  align-items: center;
 }
 
 .capability-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 5px;
   /* Neutral base: make icons follow enabled/disabled classes instead of defaulting to red */
   background: transparent;
@@ -1123,9 +2119,9 @@ canvas {
 }
 
 .status-indicator {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 500;
-  padding: 0.25rem 0.625rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 4px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1150,7 +2146,17 @@ canvas {
   border: 1px solid rgba(108, 117, 125, 0.3);
 }
 
-/* Unified spec spacing: same for all card types (Running, Available, Best) */
+/* Long combined labels (e.g. “Available · Loaded”) stay readable next to caps */
+.model-card-head-trail .status-indicator {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  max-width: min(100%, 16.5rem);
+  text-align: end;
+  white-space: normal;
+}
+
+/* Unified spec spacing: grid gaps replace per-row margins */
 .model-card .model-specs {
   margin-bottom: 0 !important;
   margin-top: 0;
@@ -1158,20 +2164,12 @@ canvas {
 }
 
 .model-card .spec-row {
-  display: flex;
-  flex-direction: row; /* Row first, column second */
-  gap: 0.12rem;
-  margin-bottom: 0.12rem;
-  flex-wrap: nowrap;
-}
-
-.model-card .spec-row:last-child {
-  margin-bottom: 0 !important;
+  margin-bottom: 0;
 }
 
 /* Consistent gap between specs and actions for all card types */
 .model-card .model-actions {
-  margin-top: 0.2rem !important;
+  margin-top: 0.06rem !important;
 }
 
 /* Placeholder rows with only opacity-0 items must not add vertical space */
@@ -1194,17 +2192,17 @@ canvas {
 .model-card .spec-item {
   flex: 1 1 0%;
   min-width: 0;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   background: var(--spec-tile-bg, rgba(255, 255, 255, 0.02));
-  border-radius: 6px;
-  padding: 0.25rem 0.3rem;
-  margin: 1px;
+  border-radius: 8px;
+  padding: 0.2rem 0.35rem;
+  margin: 0;
   border: 1px solid var(--spec-tile-border, rgba(255, 255, 255, 0.05));
-  transition: all 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease;
   display: flex;
-  align-items: flex-start;
-  gap: 0.25rem;
-  min-height: 1.55rem;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2rem;
   overflow: hidden;
 }
 
@@ -1224,12 +2222,6 @@ canvas {
 
 .spec-row:last-child {
   margin-bottom: 0 !important;
-}
-
-/* Size+Context row: keep on same line (Available/Downloadable when no GPU) */
-.spec-row-size-context {
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
 }
 
 .spec-item {
@@ -1261,7 +2253,14 @@ canvas {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 0.125rem;
+  margin-top: 0;
+  align-self: flex-start;
+  padding-top: 0.1rem;
+}
+
+.model-card .spec-item .spec-icon {
+  align-self: center;
+  padding-top: 0;
 }
 
 .spec-icon i {
@@ -1273,6 +2272,11 @@ canvas {
 .spec-content {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  text-align: start;
 }
 
 .spec-label {
@@ -1285,31 +2289,99 @@ canvas {
   display: block;
 }
 
+.model-card .spec-label {
+  font-size: 0.72rem;
+  margin-bottom: 0.03rem;
+}
+
 .spec-value {
   color: var(--spec-value-color, #ffffff);
   font-weight: 500;
   font-size: 0.875rem;
   word-break: break-word;
   line-height: 1.45;
+  text-align: start;
+  width: 100%;
+}
+
+.model-card .spec-value {
+  font-size: 0.8125rem;
+  line-height: 1.32;
+}
+
+/* Context line: optional request (num_ctx) · max · loaded (running) */
+.spec-context-dual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.15rem 0.28rem;
+  width: 100%;
+}
+
+.spec-context-dual .ctx-used {
+  color: var(--text-secondary, #ccc);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.spec-context-dual .ctx-request {
+  color: var(--accent-subtle, #cfd4dc);
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.spec-context-dual .ctx-sep {
+  opacity: 0.45;
+  font-weight: 400;
+  user-select: none;
+}
+
+.spec-context-dual .ctx-max {
+  font-weight: 600;
+}
+
+.spec-context-dual .ctx-loaded {
+  color: var(--text-muted, #8b949e);
+  font-weight: 500;
+  font-size: 0.8125rem;
+}
+
+.spec-context-dual .ctx-max-inline {
+  font-weight: 600;
+}
+
+.spec-context-dual .ctx-max:only-child,
+.spec-context-dual > span.text-nowrap:only-child {
+  margin-left: 0;
+}
+
+/* Running: push allocated context to the end when paired with max */
+.spec-item .spec-context-dual .ctx-loaded {
+  margin-left: auto;
+  text-align: right;
 }
 
 /* Card actions: grid by intent (not a fixed 3-per-row strip) */
 .model-actions {
   display: grid;
-  gap: 0.35rem 0.3rem;
+  gap: 0.28rem 0.28rem;
   margin-top: 0 !important;
   align-content: start;
 }
 
+/* Default: no “more” column */
 .model-actions--running {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* Row 1: full-width Start; row 2: Info | Settings | Delete (⋯ menu is column 4 when present) */
 .model-actions--available {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.model-actions--available > .btn-success {
+.model-actions--available > .btn.btn-primary {
   grid-column: 1 / -1;
 }
 
@@ -1318,70 +2390,258 @@ canvas {
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* ⋯ menu: narrow rail on the right, same height as the button block (no extra row) */
+.model-actions--running:has(.model-more-wrap) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.4rem;
+}
+
+.model-actions--running:has(.model-more-wrap) > :nth-child(1) {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.model-actions--running:has(.model-more-wrap) > :nth-child(2) {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.model-actions--running:has(.model-more-wrap) > :nth-child(3) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.model-actions--running:has(.model-more-wrap) > :nth-child(4) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.model-actions--running:has(.model-more-wrap) > .model-more-wrap {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  justify-self: stretch;
+  align-self: stretch;
+  width: 100%;
+  max-width: none;
+  display: flex;
+}
+
+.model-actions--available:has(.model-more-wrap) {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) 2.4rem;
+}
+
+.model-actions--available:has(.model-more-wrap) > .btn.btn-primary {
+  grid-column: 1 / span 3;
+  grid-row: 1;
+}
+
+.model-actions--available:has(.model-more-wrap) > :nth-child(2) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.model-actions--available:has(.model-more-wrap) > :nth-child(3) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.model-actions--available:has(.model-more-wrap) > :nth-child(4) {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.model-actions--available:has(.model-more-wrap) > .model-more-wrap {
+  grid-column: 4;
+  grid-row: 1 / span 2;
+  justify-self: stretch;
+  align-self: stretch;
+  width: 100%;
+  max-width: none;
+  display: flex;
+}
+
+.model-actions--download:has(.model-more-wrap) {
+  grid-template-columns: minmax(0, 1fr) 2.4rem;
+}
+
+.model-actions--download:has(.model-more-wrap) > .btn {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.model-actions--download:has(.model-more-wrap) > .model-more-wrap {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: stretch;
+  align-self: stretch;
+  display: flex;
+}
+
 .model-actions .btn {
   width: 100%;
   min-width: 0;
   max-width: none;
   font-size: 0.8125rem;
-  padding: 0.35rem 0.5rem;
+  padding: 0.3rem 0.45rem;
   border-radius: 6px;
   font-weight: 500;
   text-transform: none;
   letter-spacing: 0;
+  position: relative;
+  z-index: 0;
+  overflow: visible;
+  isolation: isolate;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease,
+    filter 0.2s ease,
+    color 0.2s ease;
 }
 
-.model-actions .model-more-wrap {
-  grid-column: 1 / -1;
-  justify-self: end;
-  width: auto;
-  max-width: 100%;
+.model-actions .btn i {
+  color: inherit;
+}
+
+.model-actions .btn:focus-visible {
+  outline: none;
+  z-index: 1;
+  box-shadow: 0 0 0 2px rgba(200, 200, 200, 0.45);
+}
+
+.model-actions .btn:active {
+  transform: translateY(0);
+  transition-duration: 0.08s;
+}
+
+.model-actions .btn-primary:active,
+.model-actions .btn-success:active,
+.model-actions .btn-danger:active,
+.model-actions .btn-warning:active {
+  filter: brightness(0.94);
+}
+
+.model-actions .model-more-wrap .btn-group {
+  display: flex;
+  width: 100%;
+  min-height: 100%;
 }
 
 .model-actions .model-more-wrap .dropdown-toggle {
-  width: auto;
+  flex: 1 1 auto;
+  width: 100% !important;
+  min-width: 0 !important;
   max-width: none;
-  min-width: 2.25rem;
-  padding-left: 0.45rem;
-  padding-right: 0.45rem;
+  min-height: 100%;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  /* Match neutral card actions (e.g. Info): filled surface + border, not default outline + ripple */
+  background: var(--tertiary-bg) !important;
+  color: var(--text-reading) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: none !important;
+}
+
+.model-actions .model-more-wrap .dropdown-toggle::before {
+  display: none;
+}
+
+/* Icon-only control: hide Bootstrap’s caret */
+.model-actions .model-more-wrap .dropdown-toggle::after {
+  display: none;
+}
+
+.model-actions .model-more-wrap .dropdown-toggle:hover,
+.model-actions .model-more-wrap .dropdown-toggle.show {
+  background: var(--accent-bg) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-hover) !important;
+  transform: translateY(-1px);
+  box-shadow: none !important;
+}
+
+.model-actions .model-more-wrap .dropdown-toggle:focus-visible {
+  outline: none;
+  /* Theme-specific ring: theme.css (html.dark / html.light) */
+  box-shadow: 0 0 0 2px rgba(200, 200, 200, 0.35) !important;
+}
+
+.model-actions .model-more-wrap .dropdown-toggle i {
+  color: inherit !important;
+}
+
+/* Card actions: one hover language — slight lift + brightness (semantic) or surface shift (neutral) */
+.model-actions .btn-primary {
+  background: #0d6efd !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.32);
+}
+
+.model-actions .btn-primary:hover {
+  filter: brightness(1.09);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(13, 110, 253, 0.42);
+}
+
+.model-actions .btn-warning {
+  background: var(--warning-color) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  color: rgba(0, 0, 0, 0.84) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+}
+
+.model-actions .btn-warning:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+
+.model-actions .btn-secondary,
+.model-actions .btn-info {
+  background: var(--tertiary-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-reading) !important;
+  box-shadow: none !important;
+}
+
+.model-actions .btn-secondary:hover,
+.model-actions .btn-info:hover {
+  background: var(--accent-bg) !important;
+  border-color: var(--border-hover) !important;
+  color: var(--text-primary) !important;
+  transform: translateY(-1px);
+  filter: none;
 }
 
 .model-actions .btn-success {
-  background: linear-gradient(135deg, #28a745, #20c997);
-  border: none;
-  color: white;
-  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+  background: var(--success-color) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .model-actions .btn-success:hover {
-  background: linear-gradient(135deg, #218838, #17a2b8);
+  filter: brightness(1.09) saturate(1.04);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
 }
 
 .model-actions .btn-danger {
-  background: linear-gradient(135deg, #dc3545, #fd7e14);
-  border: none;
-  color: white;
-  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+  background: var(--danger-color) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .model-actions .btn-danger:hover {
-  background: linear-gradient(135deg, #c82333, #e8590c);
+  filter: brightness(1.09);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
-}
-
-.model-actions .btn-info {
-  background: #2a2b2c;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #e6e6e6;
-  box-shadow: none;
-}
-
-.model-actions .btn-info:hover {
-  background: #2f3031;
-  transform: translateY(-1px);
-  box-shadow: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
 }
 
 /* Loading States */
@@ -1394,25 +2654,6 @@ canvas {
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-}
-
-/* Professional Visual Effects */
-.model-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.07);
-  border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
-  opacity: 0;
-  transition: opacity var(--transition);
-  pointer-events: none;
-}
-
-.model-card:hover::before {
-  opacity: 1;
 }
 
 /* Inset rim follows border-radius (mask-based gradient border did not match curves reliably) */
@@ -1436,31 +2677,6 @@ canvas {
   backdrop-filter: blur(10px);
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* Enhanced button hover effects — overflow visible so [data-dashboard-tooltip]::after is not clipped */
-.model-actions .btn {
-  position: relative;
-  overflow: visible;
-  transition: all var(--transition);
-}
-
-.model-actions .btn::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  transition: width 0.3s, height 0.3s;
-}
-
-.model-actions .btn:hover::before {
-  width: 120%;
-  height: 120%;
 }
 
 /* Subtle glow effects */
@@ -1499,11 +2715,11 @@ canvas {
 }
 
 .model-card:focus-within::after {
-  box-shadow: inset 0 0 0 2px rgba(126, 184, 255, 0.45);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2);
 }
 
 .model-card:hover:focus-within::after {
-  box-shadow: inset 0 0 0 2px rgba(126, 184, 255, 0.55);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.28);
 }
 
 /* Professional spacing and typography improvements */
@@ -1991,10 +3207,18 @@ body.compact-mode {
 
 /* Compact mode rules: only affect card internal styling */
 body.compact-mode .model-card {
-  display: grid; /* Keep grid layout for positioning */
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  padding: 0.4rem 0.48rem;
 }
 
-body.compact-mode .model-header {
+body.compact-mode .model-header.model-card-head {
+  gap: 0.35rem;
+  margin-bottom: 0;
+}
+
+body.compact-mode .model-header:not(.model-card-head) {
   gap: 0.625rem;
   margin-bottom: 0.625rem;
 }
@@ -2008,18 +3232,13 @@ body.compact-mode .model-specs {
   margin-bottom: 0;
 }
 
-body.compact-mode .model-card .spec-row {
-  gap: 0.1rem;
-  margin-bottom: 0.1rem;
-}
-
-body.compact-mode .model-card .spec-row:last-child {
-  margin-bottom: 0 !important;
+body.compact-mode .model-card .model-specs {
+  gap: 0.22rem;
 }
 
 body.compact-mode .model-card .spec-item {
-  padding: 0.2rem;
-  min-height: 1.5rem;
+  padding: 0.16rem 0.28rem;
+  min-height: 1.38rem;
 }
 
 body.compact-mode .spec-icon {
@@ -2047,6 +3266,21 @@ body.compact-mode .model-actions {
 body.compact-mode .model-actions .btn {
   font-size: 0.8125rem;
   padding: 0.3rem 0.42rem;
+}
+
+body.compact-mode .model-actions .model-action-settings-btn {
+  padding: 0.18rem 0.26rem !important;
+  font-size: 0.72rem !important;
+}
+
+body.compact-mode .model-actions .model-action-settings-btn .model-settings-status-badge.badge {
+  padding: 0.06rem 0.3rem 0.07rem !important;
+  font-size: 0.52rem !important;
+  gap: 0.14rem;
+}
+
+body.compact-mode .model-actions .model-action-settings-btn .model-settings-status-badge .model-settings-status-ic {
+  font-size: 0.46rem;
 }
 
 body.compact-mode .model-action-btn-label {
@@ -2119,10 +3353,7 @@ body.compact-mode .models-section {
   margin-top: 0.65rem !important;
 }
 
-body.compact-mode #runningModelsContainer.row.g-3,
-body.compact-mode #availableModelsContainer.row.g-3,
-body.compact-mode #downloadableModelsContainer.row.g-3,
-body.compact-mode .extended-models-container.row.g-3 {
+body.compact-mode #runningModelsContainer.row.g-3 {
   --bs-gutter-x: 0.45rem;
   --bs-gutter-y: 0.4rem;
 }
@@ -2227,34 +3458,32 @@ body:not(.compact-mode) .models-management .d-flex.align-items-center.gap-2 {
   margin-bottom: 0 !important;
 }
 
-body:not(.compact-mode) #runningModelsContainer.row.g-3,
-body:not(.compact-mode) #availableModelsContainer.row.g-3,
-body:not(.compact-mode) #downloadableModelsContainer.row.g-3,
-body:not(.compact-mode) .extended-models-container.row.g-3 {
+body:not(.compact-mode) #runningModelsContainer.row.g-3 {
   --bs-gutter-x: 0.45rem;
   --bs-gutter-y: 0.4rem;
 }
 
-/* Normal mode: use same card size as compact */
+/* Normal mode: card padding aligns with flex layout */
 body:not(.compact-mode) .model-card {
-  padding: 0.5rem;
+  padding: 0.5rem 0.62rem;
   border: 1px solid var(--model-card-border, rgba(255, 255, 255, 0.08));
 }
 
-body:not(.compact-mode) .model-header {
+body:not(.compact-mode) .model-header:not(.model-card-head) {
   margin-bottom: 2px !important;
   gap: 4px !important;
 }
 
-body:not(.compact-mode) .model-card .model-header {
-  margin-bottom: 2px !important;
+body:not(.compact-mode) .model-card .model-header.model-card-head {
+  margin-bottom: 0 !important;
 }
 
 body:not(.compact-mode) .model-title,
 body:not(.compact-mode) .model-card .model-title {
-  margin-bottom: 0.1rem !important;
-  margin-top: 0.15rem !important;
-  padding-bottom: 0.3125rem !important;
+  margin-bottom: 0 !important;
+  margin-top: 0 !important;
+  padding-bottom: 0 !important;
+  border-bottom: none !important;
 }
 
 body:not(.compact-mode) .model-specs {
@@ -2262,17 +3491,22 @@ body:not(.compact-mode) .model-specs {
 }
 
 body:not(.compact-mode) .model-card .spec-item {
-  padding: 0.2rem !important;
-  min-height: 1.5rem !important;
+  padding: 0.18rem 0.32rem !important;
+  min-height: 1.42rem !important;
 }
 
 body:not(.compact-mode) .model-actions {
-  gap: 0.35rem 0.3rem !important;
+  gap: 0.28rem 0.26rem !important;
 }
 
 body:not(.compact-mode) .model-actions .btn {
-  padding: 0.35rem 0.5rem !important;
+  padding: 0.3rem 0.42rem !important;
   font-size: 0.8125rem !important;
+}
+
+body:not(.compact-mode) .model-actions .model-action-settings-btn {
+  padding: 0.22rem 0.3rem !important;
+  font-size: 0.75rem !important;
 }
 
 body:not(.compact-mode) .health-status-badge {
@@ -2322,24 +3556,23 @@ body:not(.compact-mode) .text-center.py-5 {
 .refresh-indicator { margin-bottom: 0.2rem; }
 .models-management > div { margin-bottom: var(--space-xs); }
 .models-management > div:last-child { margin-bottom: var(--space-xs); }
-.model-card { padding: 0.4rem; margin-bottom: 0; }
+.model-card { padding: 0.5rem 0.65rem; margin-bottom: 0; }
 .model-title { margin-bottom: 0.1rem; line-height: 1.28; }
-.model-card .model-title { margin-bottom: 0.1rem; line-height: 1.28; }
+.model-card .model-title { margin-bottom: 0; line-height: 1.3; }
 .model-card .model-description { margin-top: 0; }
 .model-specs { margin-bottom: 0; }
 .spec-row { margin-bottom: 0.12rem; }
+.model-card .spec-row { margin-bottom: 0; }
 .spec-row:last-child { margin-bottom: 0 !important; }
 .model-card .model-description { margin-bottom: 1px; }
-.model-card .model-header { margin-bottom: 1px; }
-.model-card .download-progress { margin-top: 0.25rem; margin-bottom: 0.25rem; }
+.model-card .model-header.model-card-head { margin-bottom: 0; }
+.model-card .model-header:not(.model-card-head) { margin-bottom: 1px; }
+.model-card .download-progress { margin-top: 0.18rem; margin-bottom: 0.18rem; }
 .model-actions .btn-group { gap: 4px; }
 .models-section { margin-top: 1rem; }
 
 /* Card grid gaps: base (aligned with compact resources rhythm) */
-#runningModelsContainer.row.g-3,
-#availableModelsContainer.row.g-3,
-#downloadableModelsContainer.row.g-3,
-.extended-models-container.row.g-3 {
+#runningModelsContainer.row.g-3 {
   --bs-gutter-x: 0.45rem;
   --bs-gutter-y: 0.4rem;
 }
@@ -2410,19 +3643,19 @@ body.compact-mode .compact-hide {
     flex-direction: column;
     gap: 0.25rem;
   }
-  /* Size+Context row stays horizontal (no GPU case) - never stack to column */
-  .spec-row-size-context {
-    flex-direction: row !important;
-  }
 
-  .model-meta {
-    flex-direction: column;
-    gap: 0.25rem;
+  .model-card-head-aside {
+    gap: 0.25rem 0.3rem;
   }
 
   .model-actions .btn {
     font-size: 0.7rem;
     padding: 0.375rem 0.125rem;
+  }
+
+  .model-actions .model-action-settings-btn {
+    font-size: 0.64rem;
+    padding: 0.28rem 0.12rem;
   }
 
   .models-mgmt-toolbar {
@@ -2435,14 +3668,39 @@ body.compact-mode .compact-hide {
     width: 100%;
   }
 
-  .model-card .model-title {
+  /* Long registry paths may wrap; name+tag stay in .model-title-name-core (chip never orphaned) */
+  .model-card .model-title-scope-row {
     overflow-wrap: anywhere;
     word-break: break-word;
+  }
+
+  .model-card .model-title-scope {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
   }
 
   .model-card .spec-value.text-nowrap {
     white-space: normal;
     overflow-wrap: anywhere;
+  }
+
+  /* Cards: keep spec grid; title row already full width */
+  .model-card .model-specs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 360px) {
+  .model-card .model-specs {
+    grid-template-columns: 1fr;
+  }
+
+  .model-card .spec-item--full {
+    grid-column: 1;
   }
 }
 
@@ -2504,7 +3762,7 @@ body.compact-mode .compact-hide {
   line-height: 1;
 }
 
-/* Legacy: health row was standalone; badge now lives in .dashboard-header-toolbar */
+/* Legacy: health row was standalone; badge now lives in .dashboard-header-start-lock */
 .health-service-row {
   width: 100%;
   max-width: 100%;
@@ -2513,8 +3771,7 @@ body.compact-mode .compact-hide {
   box-sizing: border-box;
 }
 
-.health-service-row .health-status-badge,
-.dashboard-header-toolbar .health-status-badge {
+.health-service-row .health-status-badge {
   max-width: 100%;
   white-space: normal;
   text-align: center;
@@ -2619,6 +3876,7 @@ body.compact-mode .compact-hide {
 /* ===== Reduced motion (accessibility) ===== */
 @media (prefers-reduced-motion: reduce) {
   .refresh-indicator .dot,
+  .refresh-indicator-state .dot,
   .status-dot,
   .streaming-indicator {
     animation: none !important;

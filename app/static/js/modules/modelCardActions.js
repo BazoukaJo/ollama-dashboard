@@ -225,6 +225,9 @@
             ? String(data.response)
             : JSON.stringify(data, null, 2);
         out.textContent = text;
+        if (typeof updateModelData === "function") {
+          void updateModelData();
+        }
       } catch (err) {
         out.textContent = err.message || String(err);
         recordRecentModelError(String(out.textContent));

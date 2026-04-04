@@ -37,44 +37,74 @@ if (!window.getCapabilitiesHTML) {
     return "—";
   }
 
+  /**
+   * Parse Ollama-style model id: optional registry path, repo stem, tag after last ":".
+   * Mirrors Jinja model_title_block (index.html).
+   */
+  function parseModelTitleParts(rawName) {
+    const full = rawName != null ? String(rawName) : "";
+    let tag = null;
+    let stem = full;
+    const cidx = full.lastIndexOf(":");
+    if (cidx > 0 && cidx < full.length - 1) {
+      tag = full.slice(cidx + 1);
+      stem = full.slice(0, cidx);
+    }
+    let pathPrefix = null;
+    let shortStem = stem;
+    const sidx = stem.lastIndexOf("/");
+    if (sidx >= 0 && sidx < stem.length - 1) {
+      pathPrefix = stem.slice(0, sidx + 1);
+      shortStem = stem.slice(sidx + 1);
+    }
+    return { full, tag, pathPrefix, shortStem };
+  }
+
+  /** Card title: optional scope line (registry path) + primary name + tag chip. */
+  function modelTitleMarkup(rawName) {
+    const esc = window.escapeHtml || escapeHtml;
+    const { full, tag, pathPrefix, shortStem } = parseModelTitleParts(rawName);
+    const titleAttr = full ? ` title="${esc(full)}"` : "";
+    const scopeRow = pathPrefix
+      ? `<span class="model-title-scope-row"><span class="model-title-scope">${esc(pathPrefix)}</span></span>`
+      : "";
+    const nameLine =
+      tag != null
+        ? `<span class="model-title-name-core"><span class="model-title-base">${esc(shortStem)}</span><span class="model-title-colon" aria-hidden="true">:</span><span class="model-title-tag">${esc(tag)}</span></span>`
+        : `<span class="model-title-name-core model-title-name-core--full"><span class="model-title-full">${esc(shortStem)}</span></span>`;
+    const inner = `<span class="model-title-stack">${scopeRow}<span class="model-title-name-line">${nameLine}</span></span>`;
+    return `<div class="model-title"><span class="model-title-display"${titleAttr} aria-label="${esc(full)}">${inner}</span></div>`;
+  }
+
+  /** Settings row: status pill always visible — saved (yellow) vs default/recommended (grey). */
+  function modelActionSettingsButtonInner(hasCustomSettings) {
+    const status = hasCustomSettings
+      ? `<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--saved" data-dashboard-tooltip="Custom per-model options saved for this dashboard (temperature, context, etc.)." aria-label="Saved custom defaults"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Saved</span></span>`
+      : `<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--default" data-dashboard-tooltip="Using recommended or built-in defaults — nothing custom saved yet for this model." aria-label="Using default settings"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Default</span></span>`;
+    return `<span class="model-action-settings-inner"><i class="fas fa-cog" aria-hidden="true"></i><span class="model-action-btn-label">Settings</span>${status}</span>`;
+  }
+
   function buildDownloadableModelCardHTML(model) {
     const family = familyFromModel(model);
     const contextVal = contextFromModel(model);
-    const quantRaw =
-      model.quantization_level != null && model.quantization_level !== ""
-        ? String(model.quantization_level)
-        : model.details && model.details.quantization_level != null
-          ? String(model.details.quantization_level)
-          : "";
-    const quantRow =
-      quantRaw !== ""
-        ? `
-                  <div class="spec-row compact-hide">
-                        <div class="spec-item">
-                            <div class="spec-icon"><i class="fas fa-layer-group"></i></div>
-                            <div class="spec-content">
-                                <div class="spec-label" data-dashboard-tooltip="Quantization or precision tag when Ollama exposes it.">Quantization</div>
-                                <div class="spec-value">${escapeHtml(quantRaw)}</div>
-                            </div>
-                        </div>
-                        <div class="spec-item opacity-0"><div class="spec-content"><div class="spec-label">&nbsp;</div><div class="spec-value">&nbsp;</div></div></div>
-                    </div>`
-        : "";
     return `
-        <div class="col-md-6 col-lg-4">
+        <div class="col">
           <div class="model-card h-100" data-model-name="${escapeHtml(model.name)}">
-                <div class="model-header">
+                <div class="model-header model-card-head">
                     <div class="model-icon-wrapper">
                         <i class="fas fa-cloud model-icon-main"></i>
                     </div>
-                    <div class="model-meta">
-                        <span class="status-indicator downloadable" data-dashboard-tooltip="Listed in the Ollama library but not installed locally yet.">
-                            <i class="fas fa-circle"></i>Downloadable
-                        </span>
+                    <div class="model-card-head-body">
+                        <div class="model-card-head-name-row">
+                            ${modelTitleMarkup(model.name || "Unknown")}
+                            <div class="model-card-head-trail" aria-label="Model capabilities">
+                                <div class="model-card-head-aside" aria-label="Model capabilities">
+                                    <div class="model-capabilities" aria-label="Model capabilities">${getCapabilitiesHTML(model)}</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <div class="model-title">${escapeHtml(model.name) || "Unknown"}</div>
-                <div class="model-capabilities">${getCapabilitiesHTML(model)}</div>
                 <div class="model-specs">
                   <div class="spec-row compact-hide">
                         <div class="spec-item">
@@ -96,8 +126,7 @@ if (!window.getCapabilitiesHTML) {
                             </div>
                         </div>
                     </div>
-                    ${quantRow}
-                    <div class="spec-row spec-row-size-context compact-hide">
+                    <div class="spec-row compact-hide">
                         <div class="spec-item">
                             <div class="spec-icon">
                                 <i class="fas fa-hdd"></i>
@@ -135,4 +164,7 @@ if (!window.getCapabilitiesHTML) {
   window.modelCards = window.modelCards || {};
   window.modelCards.buildDownloadableModelCardHTML =
     buildDownloadableModelCardHTML;
+  window.modelCards.modelTitleMarkup = modelTitleMarkup;
+  window.modelCards.modelActionSettingsButtonInner = modelActionSettingsButtonInner;
+  window.modelCards.parseModelTitleParts = parseModelTitleParts;
 })();

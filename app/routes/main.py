@@ -21,6 +21,10 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 from app import __version__ as DASHBOARD_VERSION
 from app.routes import bp
 from app.services.ollama_update_check import run_startup_ollama_update_check
+from app.services.model_helpers import (
+    attach_last_token_usage_to_model,
+    attach_request_context_to_model,
+)
 from app.services.validators import InputValidator
 from app.services.error_handling import (
     TransientErrorDetector,
@@ -117,6 +121,15 @@ def index():
         svc = _get_ollama_service()
         running_models = svc.get_running_models()
         available_models = svc.get_available_models()
+        svc.refresh_model_settings_cache_from_disk()
+        for _m in running_models or []:
+            _m['has_custom_settings'] = svc.has_custom_model_settings(_m.get('name'))
+            attach_request_context_to_model(svc, _m)
+            attach_last_token_usage_to_model(svc, _m)
+        for _m in available_models or []:
+            _m['has_custom_settings'] = svc.has_custom_model_settings(_m.get('name'))
+            attach_request_context_to_model(svc, _m)
+            attach_last_token_usage_to_model(svc, _m)
         system_stats = svc.get_system_stats()
         _upd = run_startup_ollama_update_check(svc, refresh_installed_version=True)
         version = _upd.get('current_version') or 'Unknown'
@@ -361,6 +374,12 @@ def start_model(model_name):
             result = _attempt_generate()
 
             if result["success"]:
+                try:
+                    _get_ollama_service().record_model_token_usage_from_response(
+                        model_name, result["response"]
+                    )
+                except Exception:
+                    pass
                 # Clear the cache for running models to force a refresh
                 # This ensures the UI shows the model as loaded immediately
                 _get_ollama_service().clear_cache('running_models')
@@ -388,6 +407,12 @@ def start_model(model_name):
                         result = _attempt_generate()
 
                         if result["success"]:
+                            try:
+                                _get_ollama_service().record_model_token_usage_from_response(
+                                    model_name, result["response"]
+                                )
+                            except Exception:
+                                pass
                             # Clear the cache for running models to force a refresh
                             _get_ollama_service().clear_cache('running_models')
                             # Force immediate refresh to populate cache with current state
@@ -558,6 +583,12 @@ def restart_model(model_name):
                 )
 
                 if start_response.status_code == 200:
+                    try:
+                        _get_ollama_service().record_model_token_usage_from_response(
+                            model_name, start_response
+                        )
+                    except Exception:
+                        pass
                     message = f"Model {model_name} restarted successfully"
                     if attempt > 0:
                         message += f" (after {attempt + 1} attempts)"
@@ -656,9 +687,12 @@ def get_available_models():
         except Exception:
             # Logging should never break the endpoint
             pass
-        # Add has_custom_settings flag for each model (to be used in UI)
+        svc = _get_ollama_service()
+        svc.refresh_model_settings_cache_from_disk()
         for m in models:
-            m['has_custom_settings'] = _get_ollama_service().has_custom_model_settings(m.get('name'))
+            m['has_custom_settings'] = svc.has_custom_model_settings(m.get('name'))
+            attach_request_context_to_model(svc, m)
+            attach_last_token_usage_to_model(svc, m)
         return {"models": models}
     except Exception as e:
         return {"error": str(e), "models": []}, 500
@@ -668,7 +702,11 @@ def get_available_models():
 def get_running_models():
     """Get list of currently running models. Always fetches fresh from Ollama for accuracy."""
     try:
-        models = _get_ollama_service().get_running_models(force_refresh=True)
+        svc = _get_ollama_service()
+        models = svc.get_running_models(force_refresh=True)
+        svc.refresh_model_settings_cache_from_disk()
+        for m in models or []:
+            m['has_custom_settings'] = svc.has_custom_model_settings(m.get('name'))
         try:
             current_app.logger.debug(
                 "[models.running] count=%d names=%s",
@@ -707,6 +745,7 @@ def get_combined_models():
         svc = _get_ollama_service()
         available = svc.get_available_models()
         running = svc.get_running_models(force_refresh=True)
+        svc.refresh_model_settings_cache_from_disk()
 
         by_name = {}
 
@@ -1007,6 +1046,13 @@ def chat():
                 _get_ollama_service().record_model_activity(model_name)
             except Exception:
                 pass
+            if not stream:
+                try:
+                    _get_ollama_service().record_model_token_usage_from_response(
+                        model_name, response
+                    )
+                except Exception:
+                    pass
             return (response.content, 200, {'Content-Type': 'text/plain'}) if stream else response.json()
 
         # Handle error responses

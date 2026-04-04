@@ -1,14 +1,19 @@
+"""
+Smoke-test HTTP routes with the Flask test client.
+
+Mutating Ollama routes are intentionally omitted: unmocked POSTs to start/stop/restart/pull/delete
+models or to service start/stop/restart hit a real Ollama (or OS service) and can download,
+unload, or delete models. Use the dedicated mocked tests in test_*model*.py for those behaviors.
+"""
 import pytest
 import logging
 from app import create_app
+
 
 def get_endpoints():
     return [
         ('GET', '/'),
         ('GET', '/api/test'),
-        ('POST', '/api/models/start/test-model'),
-        ('POST', '/api/models/stop/test-model'),
-        ('POST', '/api/models/restart/test-model'),
         ('GET', '/api/models/info/test-model'),
         ('GET', '/api/system/stats'),
         ('GET', '/api/models/available'),
@@ -22,7 +27,6 @@ def get_endpoints():
         ('GET', '/api/version'),
         ('POST', '/api/models/bulk/start'),
         ('POST', '/api/chat'),
-        ('DELETE', '/api/models/delete/test-model'),
         ('GET', '/metrics'),
         ('GET', '/health'),
         ('GET', '/api/chat/history'),
@@ -31,12 +35,8 @@ def get_endpoints():
         ('GET', '/api/system/stats/history'),
         ('GET', '/api/service/status'),
         ('GET', '/api/health'),
-        ('POST', '/api/service/start'),
-        ('POST', '/api/service/stop'),
-        ('POST', '/api/service/restart'),
         ('GET', '/api/models/memory/usage'),
         ('GET', '/api/models/downloadable'),
-        ('POST', '/api/models/pull/test-model'),
         ('GET', '/api/test-models-debug'),
         ('GET', '/admin/model-defaults'),
     ]

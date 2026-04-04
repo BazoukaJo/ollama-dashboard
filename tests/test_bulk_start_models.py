@@ -1,6 +1,8 @@
 """Tests for the /api/models/bulk/start endpoint.
 
 All tests are fully mocked — no live Ollama server required.
+Use fictitious model tags (not catalog names like llama2:latest) so an accidental
+unmocked call cannot trigger a real pull.
 """
 import pytest
 from unittest.mock import patch, MagicMock
@@ -27,7 +29,7 @@ def test_bulk_start_all_succeed(mock_session, mock_clear, client):
 
     resp = client.post(
         '/api/models/bulk/start',
-        json={'models': ['llama2:latest', 'phi3:mini']},
+        json={'models': ['mock-stub-model:latest', 'mock-stub-alt:mini']},
     )
     assert resp.status_code == 200
     data = resp.get_json()
@@ -42,7 +44,7 @@ def test_bulk_start_cache_is_cleared(mock_session, mock_clear, client):
     """Cache is always cleared after a bulk start, even on partial failure."""
     mock_session.post.return_value = MagicMock(status_code=200, text='ok')
 
-    client.post('/api/models/bulk/start', json={'models': ['llama2:latest']})
+    client.post('/api/models/bulk/start', json={'models': ['mock-stub-model:latest']})
     mock_clear.assert_called_with('running_models')
 
 
@@ -60,12 +62,12 @@ def test_bulk_start_partial_failure(mock_session, mock_clear, client):
 
     resp = client.post(
         '/api/models/bulk/start',
-        json={'models': ['llama2:latest', 'bad-model:latest']},
+        json={'models': ['mock-stub-model:latest', 'bad-model:latest']},
     )
     assert resp.status_code == 200
     data = resp.get_json()
     results_by_model = {r['model']: r for r in data['results']}
-    assert results_by_model['llama2:latest']['success'] is True
+    assert results_by_model['mock-stub-model:latest']['success'] is True
     assert results_by_model['bad-model:latest']['success'] is False
 
 
@@ -113,7 +115,7 @@ def test_bulk_start_keep_alive_passed(mock_session, mock_clear, client):
     """keep_alive='24h' is included in the Ollama generate payload."""
     mock_session.post.return_value = MagicMock(status_code=200, text='ok')
 
-    client.post('/api/models/bulk/start', json={'models': ['llama2:latest']})
+    client.post('/api/models/bulk/start', json={'models': ['mock-stub-model:latest']})
 
     call_kwargs = mock_session.post.call_args
     payload = call_kwargs[1].get('json') or call_kwargs[0][1]

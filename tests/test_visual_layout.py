@@ -62,7 +62,7 @@ def _run_with_mocks(client, running=None, available=None):
 
 
 class TestModelCardSpecRows:
-    """Each model card must have exactly 3 spec rows (Family+Params, Size+GPU, Context)."""
+    """Running cards: Family+Params, Size+GPU, Max context+Allocated."""
 
     def test_running_card_has_three_spec_rows(self, client):
         status, html = _run_with_mocks(
@@ -72,70 +72,64 @@ class TestModelCardSpecRows:
 
         start = html.find('id="runningModelsContainer"')
         assert start != -1, "Running section should render when models exist"
-        end = html.find('id="availableModelsContainer"')
+        end = html.find("<!-- No Models Message -->")
         if end == -1:
-            end = html.find("Downloadable Models")
-        end = end if end != -1 else len(html)
+            end = len(html)
         section = html[start:end]
         spec_rows = section.count('class="spec-row')
         assert spec_rows == 3, (
             f"Running card should have 3 spec rows, found {spec_rows}"
         )
 
-    def test_available_card_has_two_spec_rows(self, client):
-        """Available card (no GPU) has 2 rows: Family+Params, Size+Context."""
+class TestModelCardHeaderLayout:
+    """Model card header: icon | title body | aside (capabilities + status)."""
+
+    def test_index_html_has_head_body_and_aside(self, client):
         status, html = _run_with_mocks(
             client,
-            available=[{"name": "llama", "size": 5e9, "details": {"family": "llama"}}],
+            running=[{"name": "m1", "details": {"family": "x"}}],
         )
         assert status == 200
+        assert 'class="model-card-head-body"' in html
+        assert 'model-card-head-name-row' in html
+        assert 'model-card-head-trail' in html
+        assert 'class="model-card-head-aside"' in html
+        assert "model-card-head-title" not in html
+        assert "model-card-head-secondary" not in html
 
-        start = html.find('id="availableModelsContainer"')
-        assert start != -1, "Available section should render when models exist"
-        end = html.find("Downloadable Models")
-        if end == -1:
-            end = html.find('id="bestModelsContainer"')
-        end = end if end != -1 else len(html)
-        section = html[start:end]
-        spec_rows = section.count('class="spec-row')
-        assert spec_rows == 2, (
-            f"Available card (no GPU) should have 2 spec rows (Family+Params, Size+Context), found {spec_rows}"
-        )
+    def test_styles_css_header_uses_grid_and_new_classes(self):
+        css_path = Path(__file__).resolve().parent.parent / "app" / "static" / "css" / "styles.css"
+        css = css_path.read_text(encoding="utf-8")
+        assert ".model-card-head-body" in css
+        assert ".model-card-head-name-row" in css
+        assert ".model-card-head-trail" in css
+        assert ".model-card-head-aside" in css
+        assert "grid-template-areas:" in css and "head-body" in css and "head-icon" in css
+        assert "display: grid" in css
+        assert "model-card-head-title" not in css
+        assert "model-card-head-secondary" not in css
 
-    def test_running_three_rows_available_two_rows(self, client):
-        """Running has 3 rows (includes GPU); Available has 2 rows (Size+Context on same line)."""
-        status, html = _run_with_mocks(
-            client,
-            running=[{"name": "r1", "details": {"family": "a"}}],
-            available=[{"name": "a1", "size": 1, "details": {"family": "b"}}],
+    def test_model_cards_js_matches_header_markup(self):
+        js_path = (
+            Path(__file__).resolve().parent.parent
+            / "app"
+            / "static"
+            / "js"
+            / "modules"
+            / "modelCards.js"
         )
-        assert status == 200
+        js = js_path.read_text(encoding="utf-8")
+        assert "model-card-head-body" in js
+        assert "model-card-head-name-row" in js
+        assert "model-card-head-trail" in js
+        assert "model-card-head-aside" in js
 
-        run_start = html.find('id="runningModelsContainer"')
-        assert run_start != -1
-        run_section = html[run_start : run_start + 6000]
-        run_blocks = re.findall(
-            r'<div class="model-specs">(.*?)</div>\s*<div class="model-actions',
-            run_section,
-            re.DOTALL,
-        )
-        for block in run_blocks:
-            assert block.count('class="spec-row') == 3, (
-                "Running card must have 3 spec rows (Family+Params, Size+GPU, Context)"
-            )
-
-        av_start = html.find('id="availableModelsContainer"')
-        assert av_start != -1
-        av_section = html[av_start : av_start + 6000]
-        av_blocks = re.findall(
-            r'<div class="model-specs">(.*?)</div>\s*<div class="model-actions',
-            av_section,
-            re.DOTALL,
-        )
-        for block in av_blocks:
-            assert block.count('class="spec-row') == 2, (
-                "Available card (no GPU) must have 2 spec rows (Family+Params, Size+Context)"
-            )
+    def test_main_js_matches_header_markup(self):
+        js_path = Path(__file__).resolve().parent.parent / "app" / "static" / "js" / "main.js"
+        js = js_path.read_text(encoding="utf-8")
+        assert js.count("model-card-head-body") >= 1
+        assert js.count("model-card-head-aside") >= 1
+        assert "model-card-head-trail" in js
 
 
 class TestCSSLayoutRules:
@@ -218,15 +212,14 @@ class TestSectionSpacing:
         assert "mb-4" in html or "mb-3" in html
         assert "section-title-text" in html
 
-    def test_running_section_exactly_three_spec_rows_per_card(self, client):
-        """Regression: each running card has exactly 3 spec rows (no extra placeholder row)."""
+    def test_running_section_spec_row_count_per_card(self, client):
+        """Running card: three spec rows (Family+Params, Size+GPU, Max+Allocated)."""
         _, html = _run_with_mocks(client, running=[{"name": "x", "details": {}}])
         run_start = html.find('id="runningModelsContainer"')
         assert run_start != -1
-        # Extract up to available section or 8k chars
-        run_end = html.find('id="availableModelsContainer"', run_start)
+        run_end = html.find("<!-- No Models Message -->", run_start)
         if run_end == -1:
-            run_end = html.find("Downloadable Models", run_start) or run_start + 8000
+            run_end = run_start + 8000
         snippet = html[run_start:run_end]
         spec_row_count = snippet.count('class="spec-row')
         assert spec_row_count == 3, (

@@ -3,7 +3,7 @@
  * html gets class "light" or "dark"; localStorage key "theme" (same as BlueprintAssist).
  */
 
-/* --- Dark (default dashboard look) --- */
+/* --- Dark (default dashboard look): greyscale surfaces; no blue in chrome/popups --- */
 html.dark {
   --primary-bg: #1a1a1a;
   --secondary-bg: #222324;
@@ -12,15 +12,17 @@ html.dark {
   --border-color: #3a3b3c;
   --border-hover: #6c757d;
   --text-primary: #ffffff;
-  --text-secondary: #cccccc;
-  --text-muted: #8b949e;
-  --text-accent: #bcbec0;
-  --text-reading: #e8eaed;
-  --accent-subtle: #7eb8ff;
+  --text-secondary: #d1d5db;
+  --text-muted: #9ca3af;
+  --text-accent: #c4c8cd;
+  --text-reading: #eceff1;
+  /* Neutral “highlight” for focus / inline emphasis (not blue) */
+  --accent-subtle: #d1d5db;
   --success-color: #28a745;
   --warning-color: #ffc107;
   --danger-color: #dc3545;
-  --info-color: #0dcaf0;
+  /* Semantic info links in modals — neutral, not cyan */
+  --info-color: #b8bec7;
   --shadow-light: rgba(0, 0, 0, 0.1);
   --shadow-medium: rgba(0, 0, 0, 0.2);
   --shadow-strong: rgba(0, 0, 0, 0.3);
@@ -36,6 +38,15 @@ html.dark {
   --spec-value-color: #f1f3f5;
   --spec-icon-color: #c1c6cd;
   --model-title-color: #ffffff;
+  --model-title-tag-bg: rgba(255, 255, 255, 0.08);
+  --model-title-tag-fg: #eceff1;
+  --model-title-tag-border: rgba(255, 255, 255, 0.18);
+  --model-title-scope-color: #c8cdd4;
+  --model-title-scope-opacity: 0.92;
+  /* Saved per-model options (compact save icon on Settings button) — distinct from blue tag chip */
+  --model-saved-settings-badge-bg: rgba(251, 191, 36, 0.24);
+  --model-saved-settings-badge-fg: #fde68a;
+  --model-saved-settings-badge-border: rgba(252, 211, 77, 0.42);
   --modal-surface: #131415;
   --modal-surface-elevated: #0f1011;
   --modal-border: #1f1f1f;
@@ -54,56 +65,88 @@ html.dark {
   --tooltip-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   /* Matches .health-status-badge: 0.25rem×2 vertical padding + 1.25×0.8125rem line box */
   --health-service-hit: calc(0.5rem + 0.8125rem * 1.25);
+  /* Header meta strip (version + refresh row) */
+  --header-meta-panel-bg: rgba(48, 49, 50, 0.55);
+  --header-meta-panel-border: rgba(255, 255, 255, 0.1);
+  --header-meta-panel-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  --header-meta-divider: rgba(255, 255, 255, 0.08);
+  --header-meta-chip-bg: rgba(255, 255, 255, 0.06);
+  --header-meta-chip-border: rgba(255, 255, 255, 0.11);
+  --header-meta-chip-endpoint-bg: rgba(255, 255, 255, 0.06);
+  --header-meta-chip-endpoint-fg: #cfd4dc;
 }
 
-/* --- Light (BlueprintAssist :root HSL → practical hex) --- */
+/* --- Light: neutral canvas, strong body contrast, restrained accents --- */
 html.light {
-  --primary-bg: hsl(0, 0%, 98%);
+  --primary-bg: hsl(210, 8%, 96%);
   --secondary-bg: hsl(0, 0%, 100%);
-  --tertiary-bg: hsl(0, 0%, 96%);
-  --accent-bg: hsl(0, 0%, 94%);
-  --border-color: hsl(0, 0%, 90%);
-  --border-hover: hsl(0, 0%, 75%);
-  --text-primary: hsl(0, 0%, 9%);
-  --text-secondary: hsl(0, 0%, 20%);
-  --text-muted: hsl(0, 0%, 45%);
-  --text-accent: hsl(0, 0%, 35%);
-  --text-reading: hsl(0, 0%, 15%);
-  --accent-subtle: hsl(217, 71%, 45%);
-  --success-color: #1e7e34;
-  --warning-color: #d39e00;
-  --danger-color: #c82333;
-  --info-color: #0aa2c0;
+  --tertiary-bg: hsl(210, 7%, 94%);
+  --accent-bg: hsl(210, 6%, 92%);
+  --border-color: hsl(210, 10%, 86%);
+  --border-hover: hsl(210, 8%, 74%);
+  /* Typography: darker mid-tones for readability on pale greys */
+  --text-primary: hsl(220, 18%, 9%);
+  --text-secondary: hsl(220, 14%, 20%);
+  --text-muted: hsl(220, 10%, 36%);
+  --text-accent: hsl(220, 12%, 28%);
+  --text-reading: hsl(220, 16%, 11%);
+  /* Links / focus: deep blue-grey, not electric blue */
+  --accent-subtle: hsl(222, 35%, 32%);
+  --success-color: hsl(152, 69%, 26%);
+  --warning-color: hsl(32, 95%, 35%);
+  --danger-color: hsl(355, 78%, 42%);
+  /* Inline “info” links / code — dark blue-grey, not bright cyan */
+  --info-color: hsl(222, 32%, 30%);
+  /* Shadows: slate-tinted (reads softer than pure black) */
   --shadow-light: rgba(0, 0, 0, 0.06);
   --shadow-medium: rgba(0, 0, 0, 0.1);
-  --shadow-strong: rgba(0, 0, 0, 0.14);
+  --shadow-strong: rgba(0, 0, 0, 0.16);
   --surface-compact: hsl(0, 0%, 100%);
   --model-card-bg: hsl(0, 0%, 100%);
-  --model-card-border: hsl(0, 0%, 90%);
-  --spec-tile-bg: rgba(0, 0, 0, 0.04);
-  --spec-tile-border: rgba(0, 0, 0, 0.12);
-  --spec-tile-hover-bg: rgba(0, 0, 0, 0.07);
-  --spec-tile-hover-border: rgba(0, 0, 0, 0.18);
-  --spec-label-color: hsl(220, 9%, 30%);
-  --spec-value-color: hsl(0, 0%, 9%);
-  --spec-icon-color: hsl(220, 6%, 38%);
-  --model-title-color: hsl(0, 0%, 9%);
+  --model-card-border: hsl(210, 10%, 88%);
+  --model-card-hover-bg: hsl(210, 20%, 99%);
+  --model-card-hover-border: hsl(210, 8%, 82%);
+  --model-card-hover-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  --spec-tile-bg: rgba(0, 0, 0, 0.035);
+  --spec-tile-border: rgba(0, 0, 0, 0.08);
+  --spec-tile-hover-bg: rgba(0, 0, 0, 0.05);
+  --spec-tile-hover-border: rgba(0, 0, 0, 0.12);
+  --spec-label-color: hsl(220, 10%, 32%);
+  --spec-value-color: hsl(220, 18%, 11%);
+  --spec-icon-color: hsl(220, 8%, 38%);
+  --model-title-color: hsl(220, 18%, 9%);
+  --model-title-tag-bg: rgba(0, 0, 0, 0.06);
+  --model-title-tag-fg: hsl(220, 14%, 22%);
+  --model-title-tag-border: rgba(0, 0, 0, 0.12);
+  --model-title-scope-color: hsl(220, 8%, 38%);
+  --model-title-scope-opacity: 1;
+  --model-saved-settings-badge-bg: rgba(217, 119, 6, 0.16);
+  --model-saved-settings-badge-fg: hsl(28, 78%, 28%);
+  --model-saved-settings-badge-border: rgba(180, 83, 9, 0.38);
   --modal-surface: hsl(0, 0%, 100%);
-  --modal-surface-elevated: hsl(0, 0%, 97%);
-  --modal-border: hsl(0, 0%, 90%);
-  --modal-text: hsl(0, 0%, 9%);
+  --modal-surface-elevated: hsl(210, 8%, 97%);
+  --modal-border: hsl(210, 10%, 88%);
+  --modal-text: hsl(220, 18%, 9%);
   --input-bg: hsl(0, 0%, 100%);
-  --input-border: hsl(0, 0%, 82%);
-  --theme-toggle-border: hsl(0, 0%, 90%);
+  --input-border: hsl(218, 14%, 82%);
+  --theme-toggle-border: hsl(218, 16%, 88%);
   --theme-toggle-bg: hsl(0, 0%, 100%);
-  --theme-toggle-bg-hover: hsl(0, 0%, 96%);
-  --theme-toggle-fg: hsl(0, 0%, 9%);
-  --header-backdrop: rgba(255, 255, 255, 0.92);
+  --theme-toggle-bg-hover: hsl(220, 18%, 96%);
+  --theme-toggle-fg: hsl(222, 47%, 11%);
+  --header-backdrop: rgba(248, 249, 250, 0.94);
   --tooltip-bg: hsl(0, 0%, 100%);
-  --tooltip-fg: hsl(0, 0%, 9%);
-  --tooltip-border: hsl(0, 0%, 90%);
-  --tooltip-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  --tooltip-fg: hsl(220, 18%, 11%);
+  --tooltip-border: hsl(210, 10%, 85%);
+  --tooltip-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   --health-service-hit: calc(0.5rem + 0.8125rem * 1.25);
+  --header-meta-panel-bg: hsl(210, 8%, 98%);
+  --header-meta-panel-border: hsl(210, 10%, 90%);
+  --header-meta-panel-shadow: none;
+  --header-meta-divider: hsl(210, 8%, 88%);
+  --header-meta-chip-bg: hsl(0, 0%, 100%);
+  --header-meta-chip-border: hsl(210, 10%, 88%);
+  --header-meta-chip-endpoint-bg: hsl(210, 8%, 96%);
+  --header-meta-chip-endpoint-fg: hsl(220, 14%, 22%);
 }
 
 /* Header bar: sticky strip (logo, health, service controls, theme) */
@@ -112,8 +155,8 @@ html.light {
   top: 0;
   z-index: 1020;
   margin-top: 0;
-  margin-bottom: 0.5rem;
-  padding: max(0.35rem, env(safe-area-inset-top, 0px)) 0 0.5rem;
+  margin-bottom: 0.35rem;
+  padding: max(0.18rem, env(safe-area-inset-top, 0px)) 0 0.3rem;
   background: var(--header-backdrop);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
@@ -124,73 +167,31 @@ html.light {
   backface-visibility: hidden;
 }
 
+/* Room for CTA lower half below the border (see .dashboard-header-ollama-cta in styles.css) */
+#dashboard-body .dashboard-header-banner:has(> .dashboard-header-ollama-cta) {
+  margin-bottom: calc(0.35rem + 1.05rem);
+}
+
 /* Reserve scrollbar width so layout doesn’t shift by ~1px when scrolling starts */
 html:has(#dashboard-body) {
   scrollbar-gutter: stable;
 }
 
-/*
- * Narrow viewports: avoid flex-wrap jank (logo / health / controls fighting one row).
- * Fixed rows — brand + theme, then full-width health, then controls (+ optional install row).
- */
+/* Phones: tighter header rhythm; health pill may wrap (grid layout lives in styles.css) */
 @media (max-width: 575.98px) {
-  .dashboard-header-toolbar.d-flex {
-    display: grid !important;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: 0.5rem;
-    row-gap: 0.45rem;
-    align-items: center;
+  .dashboard-header-bar {
+    gap: 0.3rem;
   }
 
-  .dashboard-header-toolbar-main {
-    display: contents;
-  }
-
-  .dashboard-header-toolbar .dashboard-meta-logo {
-    grid-column: 1;
-    grid-row: 1;
-    justify-self: start;
-    align-self: center;
-  }
-
-  .dashboard-header-toolbar #themeToggleBtn.theme-toggle-btn {
-    grid-column: 2;
-    grid-row: 1;
-    margin-left: 0 !important;
-    margin-inline-start: 0 !important;
-    justify-self: end;
-    align-self: start;
-  }
-
-  .dashboard-header-toolbar #healthStatus.health-status-badge {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    width: 100%;
+  .dashboard-header-banner .dashboard-header-status-line {
     max-width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-    justify-self: stretch;
   }
 
-  .dashboard-header-toolbar .service-controls {
-    grid-column: 1 / -1;
-    grid-row: 3;
-    display: flex !important;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    justify-content: flex-start;
-    align-items: center;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .dashboard-header-toolbar #installOllamaBtn,
-  .dashboard-header-toolbar #updateOllamaBtn {
-    grid-column: 1 / -1;
-    grid-row: 4;
-    width: 100%;
-    justify-self: stretch;
-    box-sizing: border-box;
+  .dashboard-header-banner .dashboard-header-health.health-status-badge {
+    max-width: 100%;
+    white-space: normal;
+    text-overflow: unset;
+    overflow: visible;
   }
 }
 
@@ -379,8 +380,8 @@ html.light .compact-system-resources {
 }
 
 html.light .compact-metric {
-  background: rgba(0, 0, 0, 0.02);
-  border-color: rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 html.light .metric-value-compact {
@@ -396,9 +397,28 @@ html.light .refresh-indicator {
   color: var(--text-secondary);
 }
 
-html.light .health-status-badge {
+/* Semantic colors in light mode (JS swaps bg-success / warning / danger; SSR starts bg-secondary) */
+html.light .health-status-badge.bg-success {
+  background: hsl(142, 62%, 92%) !important;
+  color: hsl(152, 69%, 24%) !important;
+  border: 1px solid hsl(142, 45%, 76%);
+}
+
+html.light .health-status-badge.bg-warning {
+  background: hsl(45, 100%, 94%) !important;
+  color: hsl(32, 95%, 28%) !important;
+  border: 1px solid hsl(45, 88%, 78%);
+}
+
+html.light .health-status-badge.bg-danger {
+  background: hsl(0, 86%, 97%) !important;
+  color: hsl(355, 78%, 32%) !important;
+  border: 1px solid hsl(355, 72%, 88%);
+}
+
+html.light .health-status-badge.bg-secondary {
   background: var(--tertiary-bg) !important;
-  color: var(--text-primary) !important;
+  color: var(--text-secondary) !important;
   border: 1px solid var(--border-color);
 }
 
@@ -412,7 +432,7 @@ html.light .page-title-minimal {
 }
 
 html.light code.text-info {
-  color: var(--accent-subtle) !important;
+  color: hsl(222, 32%, 26%) !important;
 }
 
 html.light .model-code-block {
@@ -422,9 +442,9 @@ html.light .model-code-block {
 }
 
 html.light .alert-danger {
-  background: #fde8e8;
-  border-color: #f5c2c7;
-  color: #842029;
+  background: hsl(0, 86%, 97%);
+  border-color: hsl(355, 72%, 88%);
+  color: hsl(355, 78%, 28%);
 }
 
 html.light .btn-outline-secondary {
@@ -455,13 +475,51 @@ html.light .status-indicator {
   color: var(--text-secondary);
 }
 
+/* Card hover: replace dark-theme white wash + heavy shadow */
+html.light .model-card:hover {
+  background: var(--model-card-hover-bg);
+  border-color: var(--model-card-hover-border);
+  box-shadow: var(--model-card-hover-shadow);
+}
+
+html.light .capability-icon:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+/* Status chips: clearer contrast on white cards */
+html.light .status-indicator.running {
+  background: rgba(22, 163, 74, 0.12);
+  color: hsl(152, 69%, 24%);
+  border-color: rgba(22, 163, 74, 0.32);
+}
+
+html.light .status-indicator.available,
+html.light .status-indicator.downloadable {
+  background: rgba(0, 0, 0, 0.05);
+  color: hsl(220, 10%, 30%);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
 html.light .capability-filters .filter-btn {
   border-color: var(--border-color);
   color: var(--text-muted);
 }
 
+html.light .capability-filters .filter-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
 html.light .compact-system-resources:hover {
   border-color: var(--border-hover);
+}
+
+html.light .resource-icon-cpu,
+html.light .resource-icon-ram,
+html.light .resource-icon-gpu,
+html.light .resource-icon-disk {
+  color: var(--spec-icon-color);
 }
 
 html.light .table-dark {
@@ -470,6 +528,63 @@ html.light .table-dark {
   --bs-table-border-color: var(--border-color);
   --bs-table-striped-bg: rgba(0, 0, 0, 0.03);
   --bs-table-hover-bg: rgba(0, 0, 0, 0.05);
+}
+
+/* Dark: dialogs / dropdowns — keep links and emphasis neutral (greyscale) */
+html.dark .modal-body a.text-info {
+  color: var(--text-reading) !important;
+}
+
+html.dark .modal-body code.text-info,
+html.dark code.text-info {
+  color: var(--text-accent) !important;
+}
+
+/* Dark: capability filter “active” matches page chrome (no blue selection) */
+html.dark .capability-filters .filter-btn.active {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: var(--text-primary) !important;
+}
+
+html.dark .capability-filters .filter-btn.active[data-capability="reasoning"],
+html.dark .capability-filters .filter-btn.active[data-capability="vision"],
+html.dark .capability-filters .filter-btn.active[data-capability="tools"] {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.22) !important;
+  color: var(--text-secondary) !important;
+}
+
+html.dark .model-actions .model-more-wrap .dropdown-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(220, 220, 220, 0.4) !important;
+}
+
+html.light .model-actions .model-more-wrap .dropdown-toggle:focus-visible {
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+html.dark .model-actions .btn:focus-visible {
+  box-shadow: 0 0 0 2px rgba(220, 220, 220, 0.45);
+}
+
+html.light .model-actions .btn:focus-visible {
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.26);
+}
+
+html.dark .model-card:focus-within::after {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
+html.dark .model-card:hover:focus-within::after {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.28);
+}
+
+html.light .model-card:focus-within::after {
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.12);
+}
+
+html.light .model-card:hover:focus-within::after {
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18);
 }
 
 /* ----- Dashboard tooltips: body-mounted layer (see tooltips.js); no ::after ----- */
