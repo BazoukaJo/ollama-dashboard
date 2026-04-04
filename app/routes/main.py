@@ -59,6 +59,58 @@ def _get_timezone_name():
             return 'UTC'
 
 
+def _normalize_ollama_host_port_for_display(raw_host, raw_port):
+    """If OLLAMA_HOST is host:port, use that port once (avoid 127.0.0.1:11434:11434 in UI)."""
+    host = str(raw_host or 'localhost').strip() or 'localhost'
+    try:
+        port = int(raw_port)
+    except (TypeError, ValueError):
+        port = 11434
+    if isinstance(host, str) and host.count(':') == 1:
+        host_part, _, port_part = host.partition(':')
+        if host_part and port_part and str(port_part).strip().isdigit():
+            try:
+                port = int(port_part)
+                host = host_part
+            except (ValueError, TypeError):
+                pass
+    return host, port
+
+
+def _ollama_ui_template_vars():
+    """Expose Ollama host/port to the UI (matches service outbound host/port)."""
+    try:
+        host, port = _get_ollama_service()._get_ollama_host_port()
+    except Exception:
+        host, port = _normalize_ollama_host_port_for_display(
+            current_app.config.get('OLLAMA_HOST', 'localhost'),
+            current_app.config.get('OLLAMA_PORT', 11434),
+        )
+    port = int(port)
+    return {
+        'ollama_public_host': host,
+        'ollama_public_port': port,
+        'ollama_api_base': f'http://{host}:{port}'.rstrip('/'),
+    }
+
+
+def _ollama_installed_for_dashboard(svc, update_result):
+    """Whether to hide the Install button: binary on disk or API reported a real version.
+
+    After updates, PATH seen by the dashboard process may not include ``ollama`` while
+    ``/api/version`` still works — without this, users see both a version badge and Install.
+    """
+    if svc is not None:
+        try:
+            if svc.is_ollama_installed():
+                return True
+        except Exception:
+            pass
+    ver = (update_result or {}).get('current_version') or ''
+    v = (ver or '').strip()
+    return bool(v and v.lower() != 'unknown')
+
+
 @bp.route('/')
 def index():
     try:
@@ -68,7 +120,7 @@ def index():
         system_stats = svc.get_system_stats()
         _upd = run_startup_ollama_update_check(svc, refresh_installed_version=True)
         version = _upd.get('current_version') or 'Unknown'
-        ollama_installed = svc.is_ollama_installed()
+        ollama_installed = _ollama_installed_for_dashboard(svc, _upd)
         return render_template(
             'index.html',
             models=running_models,
@@ -82,6 +134,7 @@ def index():
             ollama_update_latest_version=_upd.get('latest_version'),
             dashboard_version=DASHBOARD_VERSION,
             timestamp=int(time.time()),
+            **_ollama_ui_template_vars(),
         )
     except Exception as e:
         empty_stats = {
@@ -98,9 +151,11 @@ def index():
         except Exception:
             pass
         try:
-            ollama_installed = _get_ollama_service().is_ollama_installed()
+            svc_err = _get_ollama_service()
         except Exception:
-            ollama_installed = False
+            svc_err = None
+        ollama_installed = _ollama_installed_for_dashboard(svc_err, _upd)
+        version_err = _upd.get('current_version') or 'Unknown'
         return render_template(
             'index.html',
             models=[],
@@ -108,12 +163,13 @@ def index():
             system_stats=empty_stats,
             error=str(e),
             timezone=_get_timezone_name(),
-            ollama_version='Unknown',
+            ollama_version=version_err,
             ollama_installed=ollama_installed,
             ollama_update_available=bool(_upd.get('update_available')),
             ollama_update_latest_version=_upd.get('latest_version'),
             dashboard_version=DASHBOARD_VERSION,
             timestamp=int(time.time()),
+            **_ollama_ui_template_vars(),
         )
 
 @bp.route('/api/test')
@@ -121,10 +177,15 @@ def test():
     return {"message": "API is working"}
 
 def _get_ollama_url(endpoint=""):
-    """Generate Ollama API URL."""
-    host = current_app.config.get('OLLAMA_HOST', 'localhost')
-    port = current_app.config.get('OLLAMA_PORT', 11434)
-    return f"http://{host}:{port}/api/{endpoint}"
+    """Generate Ollama API URL (host may not include :port; see _normalize_ollama_host_port_for_display)."""
+    try:
+        host, port = _get_ollama_service()._get_ollama_host_port()
+    except Exception:
+        host, port = _normalize_ollama_host_port_for_display(
+            current_app.config.get('OLLAMA_HOST', 'localhost'),
+            current_app.config.get('OLLAMA_PORT', 11434),
+        )
+    return f"http://{host}:{int(port)}/api/{endpoint}"
 
 
 # Force kill the dashboard app and all children
@@ -794,6 +855,30 @@ def api_apply_all_recommended():
         return _json_success(f"Applied recommended settings to {applied} models.", extra={'applied': applied, 'errors': errors})
     except Exception as e:
         return _json_error(f"Error applying all recommended settings: {str(e)}")
+
+
+@bp.route('/api/models/settings/copy', methods=['POST'])
+def api_copy_model_settings_between():
+    """Copy saved/recommended settings from one model name to another."""
+    body = request.get_json() or {}
+    src = body.get('from') or body.get('source')
+    dst = body.get('to') or body.get('target')
+    for label, raw in (('source', src), ('target', dst)):
+        err, status = _validate_model_name(raw)
+        if err is not None:
+            return err, status
+    if src == dst:
+        return _json_error('Source and target must differ', status=400)
+    try:
+        svc = _get_ollama_service()
+        src_data = svc.get_model_settings_with_fallback(src)
+        if not src_data or not isinstance(src_data.get('settings'), dict):
+            return _json_error(f"No settings to copy from '{src}'", status=404)
+        if not svc.save_model_settings(dst, src_data['settings'], source='user'):
+            return _json_error(f"Failed to save settings for '{dst}'", status=500)
+        return _json_success(f"Copied settings from '{src}' to '{dst}'.")
+    except Exception as exc:
+        return _json_error(f"Copy settings failed: {str(exc)}")
 
 
 @bp.route('/api/models/settings/<model_name>/reset', methods=['POST'])

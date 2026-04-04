@@ -1,5 +1,20 @@
 # Release Notes
 
+## Version 1.0003 (2026)
+
+- **Header** — Sticky top bar with Ollama logo (left-aligned), health badge, and service controls; dashboard / Ollama versions and API host moved to a compact strip below that scrolls with the page. Narrow viewports use a fixed row layout (brand + theme, then full-width health, then controls) to avoid awkward flex wrapping.
+- **Scrolling** — Removed top padding above the sticky header and reserved stable scrollbar gutter so the bar does not “creep” a few pixels before locking.
+- **Tooltips** — Broader, practical `data-dashboard-tooltip` copy on cards, filters, and controls; hover tooltips wait briefly before opening to reduce accidental flashes.
+- **Cards** — Stronger contrast for spec tiles (labels, values, icons) in light and dark themes; model action buttons use a responsive grid (primary actions first, full-width Start on available cards) instead of a rigid three-per-row strip.
+- **Downloadable cards** — Same action layout class for the single Download control.
+
+## Version 1.0002 (2026)
+
+- UI: streamlined header (versions row + Ollama mark), more downloadable models before “View More”, compact toggle optional via [docs/UI.md](docs/UI.md).
+- Models: card “More” menu (copy CLI/curl, library link, quick chat, copy settings), settings copy API, recent error strip, quantization row when available.
+- Polling: model list refresh on the countdown; Ollama install detection vs API version; `OLLAMA_HOST` with embedded port normalized for display and URLs.
+- Docs: [docs/UI.md](docs/UI.md) for UI toggles and layout constants.
+
 ## Version 1.0001 (2025)
 
 First stable release of Ollama Dashboard: a web UI to monitor, control, and manage Ollama models and the Ollama service.

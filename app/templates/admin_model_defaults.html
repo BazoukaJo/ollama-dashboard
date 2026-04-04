@@ -1,22 +1,47 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark" data-bs-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Model Defaults - Admin</title>
+  <script>
+  (function () {
+    try {
+      if (typeof localStorage !== "undefined") {
+        var theme = localStorage.getItem("theme") || "dark";
+        if (theme !== "light" && theme !== "dark") theme = "dark";
+        var root = document.documentElement;
+        root.classList.remove("light", "dark");
+        root.classList.add(theme);
+        root.setAttribute("data-bs-theme", theme);
+      }
+    } catch (e) {
+      console.warn("Theme script error:", e);
+    }
+  })();
+  </script>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
   <div class="container py-4">
-    <div class="d-flex align-items-center justify-content-between mb-3">
-      <h3>Model Defaults</h3>
-      <div>
-        <a href="/" class="btn btn-outline-secondary">Back</a>
-        <button class="btn btn-primary" id="applyAllBtn">Apply Recommended to All</button>
+    <header class="dashboard-header-banner mb-3">
+      <button type="button" id="themeToggleBtn" class="theme-toggle-btn" data-dashboard-tooltip="Switch to light mode" aria-label="Switch to light mode">
+        <i class="fas fa-sun theme-toggle-icon theme-toggle-icon--sun" aria-hidden="true"></i>
+        <i class="fas fa-moon theme-toggle-icon theme-toggle-icon--moon" aria-hidden="true"></i>
+      </button>
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 pt-1 dashboard-header-main">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <h3 class="mb-0">Model Defaults</h3>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="/" class="btn btn-outline-secondary">Back</a>
+          <button class="btn btn-primary" id="applyAllBtn">Apply Recommended to All</button>
+        </div>
       </div>
-    </div>
+    </header>
     <div class="table-responsive">
       <table class="table table-dark table-striped">
         <thead>
@@ -28,6 +53,8 @@
       </table>
     </div>
   </div>
+  <script src="{{ url_for('static', filename='js/tooltips.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <script src="{{ url_for('static', filename='js/modules/utils.js') }}"></script>
   <script src="{{ url_for('static', filename='js/modules/modelCards.js') }}"></script>
   <script src="{{ url_for('static', filename='js/modules/serviceControl.js') }}"></script>

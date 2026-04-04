@@ -1,0 +1,515 @@
+/**
+ * Light / dark themes — tokens aligned with BlueprintAssist (globals.css :root / .dark).
+ * html gets class "light" or "dark"; localStorage key "theme" (same as BlueprintAssist).
+ */
+
+/* --- Dark (default dashboard look) --- */
+html.dark {
+  --primary-bg: #1a1a1a;
+  --secondary-bg: #222324;
+  --tertiary-bg: #2a2b2c;
+  --accent-bg: #303132;
+  --border-color: #3a3b3c;
+  --border-hover: #6c757d;
+  --text-primary: #ffffff;
+  --text-secondary: #cccccc;
+  --text-muted: #8b949e;
+  --text-accent: #bcbec0;
+  --text-reading: #e8eaed;
+  --accent-subtle: #7eb8ff;
+  --success-color: #28a745;
+  --warning-color: #ffc107;
+  --danger-color: #dc3545;
+  --info-color: #0dcaf0;
+  --shadow-light: rgba(0, 0, 0, 0.1);
+  --shadow-medium: rgba(0, 0, 0, 0.2);
+  --shadow-strong: rgba(0, 0, 0, 0.3);
+  --surface-compact: #252526;
+  --model-card-bg: rgba(255, 255, 255, 0.02);
+  --model-card-border: rgba(255, 255, 255, 0.1);
+  /* Spec tiles inside cards: stronger than card surface so rows read as distinct blocks */
+  --spec-tile-bg: rgba(255, 255, 255, 0.065);
+  --spec-tile-border: rgba(255, 255, 255, 0.14);
+  --spec-tile-hover-bg: rgba(255, 255, 255, 0.1);
+  --spec-tile-hover-border: rgba(255, 255, 255, 0.22);
+  --spec-label-color: #d8dce1;
+  --spec-value-color: #f1f3f5;
+  --spec-icon-color: #c1c6cd;
+  --model-title-color: #ffffff;
+  --modal-surface: #131415;
+  --modal-surface-elevated: #0f1011;
+  --modal-border: #1f1f1f;
+  --modal-text: #e6e6e6;
+  --input-bg: #161616;
+  --input-border: #262626;
+  --theme-toggle-border: hsl(240, 3%, 28%);
+  --theme-toggle-bg: hsl(240, 3%, 22%);
+  --theme-toggle-bg-hover: hsl(240, 3%, 28%);
+  --theme-toggle-fg: hsl(0, 0%, 98%);
+  --header-backdrop: rgba(26, 26, 26, 0.92);
+  /* BlueprintAssist popover / TooltipContent */
+  --tooltip-bg: hsl(240, 3%, 22%);
+  --tooltip-fg: hsl(0, 0%, 98%);
+  --tooltip-border: hsl(240, 3%, 30%);
+  --tooltip-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  /* Matches .health-status-badge: 0.25rem×2 vertical padding + 1.25×0.8125rem line box */
+  --health-service-hit: calc(0.5rem + 0.8125rem * 1.25);
+}
+
+/* --- Light (BlueprintAssist :root HSL → practical hex) --- */
+html.light {
+  --primary-bg: hsl(0, 0%, 98%);
+  --secondary-bg: hsl(0, 0%, 100%);
+  --tertiary-bg: hsl(0, 0%, 96%);
+  --accent-bg: hsl(0, 0%, 94%);
+  --border-color: hsl(0, 0%, 90%);
+  --border-hover: hsl(0, 0%, 75%);
+  --text-primary: hsl(0, 0%, 9%);
+  --text-secondary: hsl(0, 0%, 20%);
+  --text-muted: hsl(0, 0%, 45%);
+  --text-accent: hsl(0, 0%, 35%);
+  --text-reading: hsl(0, 0%, 15%);
+  --accent-subtle: hsl(217, 71%, 45%);
+  --success-color: #1e7e34;
+  --warning-color: #d39e00;
+  --danger-color: #c82333;
+  --info-color: #0aa2c0;
+  --shadow-light: rgba(0, 0, 0, 0.06);
+  --shadow-medium: rgba(0, 0, 0, 0.1);
+  --shadow-strong: rgba(0, 0, 0, 0.14);
+  --surface-compact: hsl(0, 0%, 100%);
+  --model-card-bg: hsl(0, 0%, 100%);
+  --model-card-border: hsl(0, 0%, 90%);
+  --spec-tile-bg: rgba(0, 0, 0, 0.04);
+  --spec-tile-border: rgba(0, 0, 0, 0.12);
+  --spec-tile-hover-bg: rgba(0, 0, 0, 0.07);
+  --spec-tile-hover-border: rgba(0, 0, 0, 0.18);
+  --spec-label-color: hsl(220, 9%, 30%);
+  --spec-value-color: hsl(0, 0%, 9%);
+  --spec-icon-color: hsl(220, 6%, 38%);
+  --model-title-color: hsl(0, 0%, 9%);
+  --modal-surface: hsl(0, 0%, 100%);
+  --modal-surface-elevated: hsl(0, 0%, 97%);
+  --modal-border: hsl(0, 0%, 90%);
+  --modal-text: hsl(0, 0%, 9%);
+  --input-bg: hsl(0, 0%, 100%);
+  --input-border: hsl(0, 0%, 82%);
+  --theme-toggle-border: hsl(0, 0%, 90%);
+  --theme-toggle-bg: hsl(0, 0%, 100%);
+  --theme-toggle-bg-hover: hsl(0, 0%, 96%);
+  --theme-toggle-fg: hsl(0, 0%, 9%);
+  --header-backdrop: rgba(255, 255, 255, 0.92);
+  --tooltip-bg: hsl(0, 0%, 100%);
+  --tooltip-fg: hsl(0, 0%, 9%);
+  --tooltip-border: hsl(0, 0%, 90%);
+  --tooltip-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  --health-service-hit: calc(0.5rem + 0.8125rem * 1.25);
+}
+
+/* Header bar: sticky strip (logo, health, service controls, theme) */
+.dashboard-header-banner {
+  position: sticky;
+  top: 0;
+  z-index: 1020;
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  padding: max(0.35rem, env(safe-area-inset-top, 0px)) 0 0.5rem;
+  background: var(--header-backdrop);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 1px 0 var(--shadow-light);
+  /* Reduce subpixel “crawl” before stick + compositing with backdrop-filter */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Reserve scrollbar width so layout doesn’t shift by ~1px when scrolling starts */
+html:has(#dashboard-body) {
+  scrollbar-gutter: stable;
+}
+
+/*
+ * Narrow viewports: avoid flex-wrap jank (logo / health / controls fighting one row).
+ * Fixed rows — brand + theme, then full-width health, then controls (+ optional install row).
+ */
+@media (max-width: 575.98px) {
+  .dashboard-header-toolbar.d-flex {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 0.5rem;
+    row-gap: 0.45rem;
+    align-items: center;
+  }
+
+  .dashboard-header-toolbar-main {
+    display: contents;
+  }
+
+  .dashboard-header-toolbar .dashboard-meta-logo {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    align-self: center;
+  }
+
+  .dashboard-header-toolbar #themeToggleBtn.theme-toggle-btn {
+    grid-column: 2;
+    grid-row: 1;
+    margin-left: 0 !important;
+    margin-inline-start: 0 !important;
+    justify-self: end;
+    align-self: start;
+  }
+
+  .dashboard-header-toolbar #healthStatus.health-status-badge {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    justify-self: stretch;
+  }
+
+  .dashboard-header-toolbar .service-controls {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: flex-start;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dashboard-header-toolbar #installOllamaBtn,
+  .dashboard-header-toolbar #updateOllamaBtn {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    width: 100%;
+    justify-self: stretch;
+    box-sizing: border-box;
+  }
+}
+
+.theme-toggle-btn {
+  position: relative;
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  margin: 0;
+  border-radius: 0.5rem;
+  border: 1px solid var(--theme-toggle-border);
+  background: var(--theme-toggle-bg);
+  color: var(--theme-toggle-fg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease,
+    box-shadow 0.2s ease;
+  box-shadow: 0 1px 2px var(--shadow-light);
+}
+
+/* Subpages (settings, admin): theme toggle is direct child of banner */
+.dashboard-header-banner > .theme-toggle-btn {
+  position: absolute;
+  top: max(0.35rem, env(safe-area-inset-top, 0px));
+  right: max(0.25rem, env(safe-area-inset-right, 0px));
+  z-index: 20;
+}
+
+.dashboard-header-banner:has(> .theme-toggle-btn) .title-container,
+.dashboard-header-banner:has(> .theme-toggle-btn) .dashboard-header-main {
+  padding-inline-end: 2.85rem;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--theme-toggle-bg-hover);
+  border-color: var(--border-hover);
+}
+
+.theme-toggle-btn:focus-visible {
+  outline: 2px solid var(--accent-subtle);
+  outline-offset: 2px;
+}
+
+.theme-toggle-btn .theme-toggle-icon {
+  position: absolute;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+}
+
+html.dark .theme-toggle-icon--sun {
+  opacity: 0;
+  transform: rotate(-90deg) scale(0);
+}
+
+html.dark .theme-toggle-icon--moon {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+html.light .theme-toggle-icon--sun {
+  opacity: 1;
+  transform: rotate(0deg) scale(1);
+}
+
+html.light .theme-toggle-icon--moon {
+  opacity: 0;
+  transform: rotate(90deg) scale(0);
+}
+
+/* --- Light mode: Bootstrap + dashboard overrides --- */
+html.light body {
+  background: var(--primary-bg);
+  color: var(--text-secondary);
+}
+
+html.light .text-light {
+  color: var(--text-primary) !important;
+}
+
+html.light .bg-dark {
+  background-color: var(--secondary-bg) !important;
+}
+
+html.light .border-secondary {
+  border-color: var(--border-color) !important;
+}
+
+html.light .card.bg-dark {
+  background-color: var(--secondary-bg) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+html.light .form-control.bg-dark,
+html.light .form-control.bg-dark.text-light {
+  background-color: var(--input-bg) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--input-border) !important;
+}
+
+html.light .input-group-text.bg-secondary {
+  background-color: var(--tertiary-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-secondary) !important;
+}
+
+html.light .modal-content,
+html.light .modal-xl .modal-content {
+  background: var(--modal-surface) !important;
+  color: var(--modal-text) !important;
+  border-color: var(--modal-border) !important;
+  box-shadow: 0 18px 48px var(--shadow-strong) !important;
+}
+
+html.light .modal-header,
+html.light .modal-footer {
+  background: var(--modal-surface-elevated) !important;
+  border-color: var(--modal-border) !important;
+  color: var(--modal-text) !important;
+}
+
+html.light .modal-body {
+  background: var(--modal-surface) !important;
+  color: var(--text-reading) !important;
+}
+
+html.light .btn-close,
+html.light .btn-close.btn-close-white {
+  filter: none;
+  opacity: 0.55;
+}
+
+html.light .btn-close:hover {
+  opacity: 0.85;
+}
+
+html.light .modal-body .accordion-item,
+html.light .modal-body .accordion-button,
+html.light .modal-body .accordion-body {
+  background: var(--modal-surface-elevated) !important;
+  border-color: var(--modal-border) !important;
+  color: var(--modal-text) !important;
+}
+
+html.light .modal-body .nav-tabs .nav-link {
+  background: var(--tertiary-bg) !important;
+  color: var(--text-secondary) !important;
+  border-color: var(--input-border) !important;
+}
+
+html.light .modal-body .nav-tabs .nav-link.active {
+  background: var(--modal-surface) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--modal-border) !important;
+}
+
+html.light .modal-body .tab-content {
+  background: var(--modal-surface) !important;
+  border-color: var(--modal-border) !important;
+}
+
+html.light .modal-body .form-control,
+html.light .modal-body .form-select {
+  background: var(--input-bg) !important;
+  color: var(--modal-text) !important;
+  border-color: var(--input-border) !important;
+}
+
+html.light .model-card {
+  background: var(--model-card-bg);
+  border-color: var(--model-card-border);
+}
+
+html.light .model-title,
+html.light .model-card .model-title {
+  color: var(--model-title-color);
+}
+
+html.light .compact-system-resources {
+  background: var(--surface-compact);
+  border-color: var(--border-color);
+}
+
+html.light .compact-metric {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+html.light .metric-value-compact {
+  color: var(--text-primary);
+}
+
+html.light .timeline-canvas {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html.light .refresh-indicator {
+  color: var(--text-secondary);
+}
+
+html.light .health-status-badge {
+  background: var(--tertiary-bg) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color);
+}
+
+html.light .section-title-text {
+  color: var(--text-primary) !important;
+}
+
+html.light .page-title,
+html.light .page-title-minimal {
+  color: var(--text-primary);
+}
+
+html.light code.text-info {
+  color: var(--accent-subtle) !important;
+}
+
+html.light .model-code-block {
+  background: var(--tertiary-bg) !important;
+  color: var(--text-reading) !important;
+  border: 1px solid var(--border-color);
+}
+
+html.light .alert-danger {
+  background: #fde8e8;
+  border-color: #f5c2c7;
+  color: #842029;
+}
+
+html.light .btn-outline-secondary {
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+
+html.light .btn-outline-secondary:hover {
+  background: var(--tertiary-bg);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+html.light .spec-label {
+  color: var(--spec-label-color) !important;
+}
+
+html.light .spec-value {
+  color: var(--spec-value-color) !important;
+}
+
+html.light .spec-icon i {
+  color: var(--spec-icon-color);
+  opacity: 1;
+}
+
+html.light .status-indicator {
+  color: var(--text-secondary);
+}
+
+html.light .capability-filters .filter-btn {
+  border-color: var(--border-color);
+  color: var(--text-muted);
+}
+
+html.light .compact-system-resources:hover {
+  border-color: var(--border-hover);
+}
+
+html.light .table-dark {
+  --bs-table-bg: var(--secondary-bg);
+  --bs-table-color: var(--text-primary);
+  --bs-table-border-color: var(--border-color);
+  --bs-table-striped-bg: rgba(0, 0, 0, 0.03);
+  --bs-table-hover-bg: rgba(0, 0, 0, 0.05);
+}
+
+/* ----- Dashboard tooltips: body-mounted layer (see tooltips.js); no ::after ----- */
+[data-dashboard-tooltip] {
+  position: relative;
+}
+
+[data-dashboard-tooltip]::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* Floating host appended to body — escapes card overflow / stacking contexts */
+.dashboard-tooltip-host {
+  position: fixed;
+  z-index: 200000;
+  box-sizing: border-box;
+  max-width: min(280px, calc(100vw - 16px));
+  width: max-content;
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  word-wrap: break-word;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-2px) scale(0.97);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0.12s;
+  border-radius: 0.375rem;
+  border: 1px solid var(--tooltip-border);
+  background: var(--tooltip-bg);
+  color: var(--tooltip-fg);
+  box-shadow: var(--tooltip-shadow);
+}
+
+.dashboard-tooltip-host.dashboard-tooltip-host--visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}

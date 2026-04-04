@@ -167,7 +167,7 @@ async function stopModel(modelName) {
     `.model-card[data-model-name="${cssEscape(modelName)}"]`,
   );
   const stopButton = card
-    ? card.querySelector('button[title="Stop model"]')
+    ? card.querySelector('button[data-model-action="stop"]')
     : null;
   const originalText = stopButton ? stopButton.innerHTML : null;
   if (stopButton) {
@@ -246,7 +246,7 @@ async function restartModel(modelName) {
     `.model-card[data-model-name="${cssEscape(modelName)}"]`,
   );
   const restartButton = card
-    ? card.querySelector('button[title="Restart model"]')
+    ? card.querySelector('button[data-model-action="restart"]')
     : null;
   const originalText = restartButton ? restartButton.innerHTML : null;
   if (restartButton) {
@@ -300,7 +300,7 @@ async function deleteModel(modelName) {
     `.model-card[data-model-name="${cssEscape(modelName)}"]`,
   );
   const deleteButton = card
-    ? card.querySelector('button[title="Delete model"]')
+    ? card.querySelector('button[data-model-action="delete"]')
     : null;
   const originalText = deleteButton ? deleteButton.innerHTML : null;
   if (deleteButton) {
@@ -459,21 +459,23 @@ async function showModelInfo(modelName) {
                 </section>
 
                 <section class="model-info-section">
-                  <div class="section-header">
+                  <div class="section-header d-flex flex-wrap justify-content-between align-items-start gap-2">
                     <div>
                       <h6 class="section-title">Parameters</h6>
                       <p class="section-hint">Runtime overrides and defaults</p>
                     </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary mc-copy-parameters">Copy</button>
                   </div>
                   <div class="model-code-wrapper">${parametersBlock}</div>
                 </section>
 
                 <section class="model-info-section">
-                  <div class="section-header">
+                  <div class="section-header d-flex flex-wrap justify-content-between align-items-start gap-2">
                     <div>
                       <h6 class="section-title">Modelfile</h6>
                       <p class="section-hint">Source definition used to build this model</p>
                     </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary mc-copy-modelfile">Copy</button>
                   </div>
                   <div class="model-code-wrapper">${modelfileBlock}</div>
                 </section>
@@ -499,16 +501,29 @@ async function showModelInfo(modelName) {
       `;
 
       document.body.insertAdjacentHTML("beforeend", modalHtml);
-      const modal = new bootstrap.Modal(
-        document.getElementById("modelInfoModal"),
-      );
+      const modalRoot = document.getElementById("modelInfoModal");
+      const btnP = modalRoot.querySelector(".mc-copy-parameters");
+      if (btnP) {
+        btnP.onclick = function () {
+          if (window.modelCardActions && modelCardActions.copyText) {
+            modelCardActions.copyText(info.parameters || "", "Parameters copied");
+          }
+        };
+      }
+      const btnM = modalRoot.querySelector(".mc-copy-modelfile");
+      if (btnM) {
+        btnM.onclick = function () {
+          if (window.modelCardActions && modelCardActions.copyText) {
+            modelCardActions.copyText(info.modelfile || "", "Modelfile copied");
+          }
+        };
+      }
+      const modal = new bootstrap.Modal(modalRoot);
       modal.show();
 
-      document
-        .getElementById("modelInfoModal")
-        .addEventListener("hidden.bs.modal", function () {
-          this.remove();
-        });
+      modalRoot.addEventListener("hidden.bs.modal", function () {
+        this.remove();
+      });
     } else {
       showNotification("Failed to get model info: " + info.error, "error");
     }
@@ -534,6 +549,14 @@ function buildModelSummary(info, details, modelName) {
       label: "Quantization",
       value: details.quantization_level,
     });
+  }
+
+  if (details.license) {
+    summaryItems.push({ label: "License", value: String(details.license) });
+  }
+
+  if (details.model_type) {
+    summaryItems.push({ label: "Model type", value: String(details.model_type) });
   }
 
   if (details.format) {
@@ -621,7 +644,7 @@ function renderCapabilityBadges(info) {
     .map((badge) => {
       const state = capState(badge.val);
       const title = capTitle(badge.val, badge.label);
-      return `<span class="capability-pill ${state}" title="${title}">
+      return `<span class="capability-pill ${state}" data-dashboard-tooltip="${title}">
           <i class="fas ${badge.icon}"></i>
           <span>${badge.label}</span>
         </span>`;
@@ -664,7 +687,7 @@ function jsonToTable(json, level = 0) {
     const maxLength = 100;
     if (json.length > maxLength) {
       const truncated = json.substring(0, maxLength);
-      return `<span class="text-warning" title="${escapeHtml(json)}">"${escapeHtml(truncated)}..."</span>`;
+      return `<span class="text-warning" data-dashboard-tooltip="${escapeHtml(json)}">"${escapeHtml(truncated)}..."</span>`;
     }
     return `<span class="text-warning">"${escapeHtml(json)}"</span>`;
   }
@@ -730,6 +753,14 @@ function jsonToTable(json, level = 0) {
 // Moved escapeHtml and cssEscape to modules/utils.js; legacy globals preserved there.
 
 function showNotification(message, type) {
+  if (type === "error" || type === "danger") {
+    if (
+      window.modelCardActions &&
+      typeof modelCardActions.recordRecentModelError === "function"
+    ) {
+      modelCardActions.recordRecentModelError(String(message));
+    }
+  }
   const notification = document.createElement("div");
   const isError = type === "error" || type === "danger";
   const alertClass = isError
@@ -745,7 +776,7 @@ function showNotification(message, type) {
   const copyButton = isError
     ? `
     <button type="button" class="btn btn-sm btn-outline-light" onclick="copyErrorToClipboard(this)"
-            style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex-shrink: 0;" title="Copy error to clipboard">
+            style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex-shrink: 0;" data-dashboard-tooltip="Copy error to clipboard">
       <i class="fas fa-copy"></i> Copy
     </button>
   `
@@ -767,6 +798,15 @@ function showNotification(message, type) {
       notification.remove();
     }
   }, 5000);
+}
+
+function afterModelCardsRendered() {
+  if (
+    window.modelCardActions &&
+    typeof modelCardActions.enhanceAllModelCards === "function"
+  ) {
+    modelCardActions.enhanceAllModelCards();
+  }
 }
 
 function copyErrorToClipboard(button) {
@@ -814,13 +854,13 @@ function getCapabilitiesHTML(model) {
   const v = model?.has_vision;
   const t = model?.has_tools;
   return `
-    <span class="capability-icon ${capState(r)}" title="${capTitle(r, "Reasoning")}">
+    <span class="capability-icon ${capState(r)}" data-dashboard-tooltip="${capTitle(r, "Reasoning")}">
       <i class="fas fa-brain"></i>
     </span>
-    <span class="capability-icon ${capState(v)}" title="${capTitle(v, "Image Processing")}">
+    <span class="capability-icon ${capState(v)}" data-dashboard-tooltip="${capTitle(v, "Image Processing")}">
       <i class="fas fa-image"></i>
     </span>
-    <span class="capability-icon ${capState(t)}" title="${capTitle(t, "Tool Usage")}">
+    <span class="capability-icon ${capState(t)}" data-dashboard-tooltip="${capTitle(t, "Tool Usage")}">
       <i class="fas fa-tools"></i>
     </span>
   `;
@@ -1134,6 +1174,31 @@ function updateRunningModelsDisplay(models) {
     const gpuPercent =
       size > 0 && sizeVram > 0 ? ((sizeVram / size) * 100).toFixed(1) : "0.0";
 
+    const quantRaw =
+      details?.quantization_level ??
+      model?.quantization_level ??
+      (details?.quantization != null ? String(details.quantization) : "");
+    const quantEsc =
+      quantRaw !== "" && quantRaw != null
+        ? typeof escapeHtml === "function"
+          ? escapeHtml(String(quantRaw))
+          : String(quantRaw)
+        : "";
+    const quantRow =
+      quantEsc !== ""
+        ? `
+            <div class="spec-row compact-hide">
+              <div class="spec-item">
+                <div class="spec-icon"><i class="fas fa-layer-group"></i></div>
+                <div class="spec-content">
+                  <div class="spec-label" data-dashboard-tooltip="Quantization or precision tag when Ollama exposes it (e.g. Q4_K_M).">Quantization</div>
+                  <div class="spec-value">${quantEsc}</div>
+                </div>
+              </div>
+              <div class="spec-item opacity-0"><div class="spec-content"><div class="spec-label">&nbsp;</div><div class="spec-value">&nbsp;</div></div></div>
+            </div>`
+        : "";
+
     const capabilityIcons = getCapabilitiesHTML(model);
 
     const cardIndex = index + 1;
@@ -1146,14 +1211,14 @@ function updateRunningModelsDisplay(models) {
               <i class="fas fa-brain model-icon-main"></i>
             </div>
             <div class="model-meta">
-              <span class="status-indicator running">
+              <span class="status-indicator running" data-dashboard-tooltip="Model weights are resident in memory; this card reflects the running process.">
                 <i class="fas fa-circle"></i>Loaded
               </span>
             </div>
           </div>
           <div class="model-title">${safeNameText}${
             hasCustom
-              ? '<span class="badge bg-info text-dark ms-2" title="Custom settings configured">⚙️</span>'
+              ? '<span class="badge bg-info text-dark ms-2" data-dashboard-tooltip="Saved per-model options (temperature, context length, etc.) in this dashboard.">⚙️</span>'
               : ""
           }</div>
           <div class="model-capabilities">
@@ -1166,7 +1231,7 @@ function updateRunningModelsDisplay(models) {
                   <i class="fas fa-cogs"></i>
                 </div>
                 <div class="spec-content">
-                  <div class="spec-label">Family</div>
+                  <div class="spec-label" data-dashboard-tooltip="Model family name from Ollama metadata (e.g. llama, mistral).">Family</div>
                   <div class="spec-value">${
                     typeof escapeHtml === "function"
                       ? escapeHtml(String(family))
@@ -1179,7 +1244,7 @@ function updateRunningModelsDisplay(models) {
                   <i class="fas fa-weight"></i>
                 </div>
                 <div class="spec-content">
-                  <div class="spec-label">Parameters</div>
+                  <div class="spec-label" data-dashboard-tooltip="Approximate parameter size or class (e.g. 7B) from metadata.">Parameters</div>
                   <div class="spec-value">${
                     typeof escapeHtml === "function"
                       ? escapeHtml(String(parameterSize))
@@ -1188,13 +1253,14 @@ function updateRunningModelsDisplay(models) {
                 </div>
               </div>
             </div>
+            ${quantRow}
             <div class="spec-row compact-hide">
               <div class="spec-item">
                 <div class="spec-icon">
                   <i class="fas fa-hdd"></i>
                 </div>
                 <div class="spec-content">
-                  <div class="spec-label">Size</div>
+                  <div class="spec-label" data-dashboard-tooltip="On-disk size of this model’s files.">Size</div>
                   <div class="spec-value text-nowrap model-size">${
                     typeof escapeHtml === "function"
                       ? escapeHtml(String(formattedSize))
@@ -1207,7 +1273,7 @@ function updateRunningModelsDisplay(models) {
                   <i class="fas fa-microchip"></i>
                 </div>
                 <div class="spec-content">
-                  <div class="spec-label text-nowrap">GPU Allocation</div>
+                  <div class="spec-label text-nowrap" data-dashboard-tooltip="While loaded: fraction of weights in GPU memory vs model size (from Ollama).">GPU Allocation</div>
                   <div class="spec-value text-nowrap" id="model-gpu-${cardIndex}">
                     ${gpuPercent}% (${formattedSizeVram})
                   </div>
@@ -1220,7 +1286,7 @@ function updateRunningModelsDisplay(models) {
                   <i class="fas fa-align-left"></i>
                 </div>
                 <div class="spec-content">
-                  <div class="spec-label">Context</div>
+                  <div class="spec-label" data-dashboard-tooltip="Maximum context length (tokens) for this model; may differ from your saved default.">Context</div>
                   <div class="spec-value" id="model-context-${cardIndex}">${
                     contextLength != null && contextLength !== ""
                       ? String(contextLength)
@@ -1236,18 +1302,18 @@ function updateRunningModelsDisplay(models) {
               </div>
             </div>
           </div>
-          <div class="model-actions">
-            <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information">
-              <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
+          <div class="model-actions model-actions--running">
+            <button type="button" class="btn btn-primary" data-model-action="restart" onclick="restartModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Reload this model in memory (applies updated settings from disk).">
+              <i class="fas fa-redo"></i> <span class="model-action-btn-label">Restart</span>
             </button>
-            <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings">
-              <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
+            <button type="button" class="btn btn-warning" data-model-action="stop" onclick="stopModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Unload from VRAM (ollama stop). Model files stay installed.">
+              <i class="fas fa-stop"></i> <span class="model-action-btn-label">Stop</span>
             </button>
-            <button class="btn btn-primary" onclick="restartModel(this.closest('.model-card').dataset.modelName)" title="Restart model">
-              <i class="fas fa-redo"></i> <span class="d-none d-sm-inline">Restart</span>
+            <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Open a modal with raw Ollama model details (JSON).">
+              <i class="fas fa-info-circle"></i> <span class="model-action-btn-label">Info</span>
             </button>
-            <button class="btn btn-warning" onclick="stopModel(this.closest('.model-card').dataset.modelName)" title="Stop model">
-              <i class="fas fa-stop"></i> <span class="d-none d-sm-inline">Stop</span>
+            <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Edit temperature, context, and other options stored for this dashboard.">
+              <i class="fas fa-cog"></i> <span class="model-action-btn-label">Settings</span>
             </button>
           </div>
           ${
@@ -1264,6 +1330,7 @@ function updateRunningModelsDisplay(models) {
     .map((m, idx) => buildRunningModelCardHTML(m, idx))
     .join("");
   runningModelsContainer.innerHTML = cardsHtml;
+  afterModelCardsRendered();
 }
 
 function buildAvailableModelCardHTML(model) {
@@ -1292,6 +1359,29 @@ function buildAvailableModelCardHTML(model) {
     model?.context_length ?? details.context_length ?? "Unknown";
   const contextStr =
     contextVal != null && contextVal !== "" ? String(contextVal) : "Unknown";
+  const quantRaw =
+    details?.quantization_level ??
+    model?.quantization_level ??
+    (details?.quantization != null ? String(details.quantization) : "");
+  const quantEsc =
+    quantRaw !== "" && quantRaw != null
+      ? typeof escapeHtml === "function"
+        ? escapeHtml(String(quantRaw))
+        : String(quantRaw)
+      : "";
+  const quantRowAvail =
+    quantEsc !== ""
+      ? `<div class="spec-row compact-hide">
+            <div class="spec-item">
+              <div class="spec-icon"><i class="fas fa-layer-group"></i></div>
+              <div class="spec-content">
+                <div class="spec-label" data-dashboard-tooltip="Quantization or precision tag when Ollama exposes it.">Quantization</div>
+                <div class="spec-value">${quantEsc}</div>
+              </div>
+            </div>
+            <div class="spec-item opacity-0"><div class="spec-content"><div class="spec-label">&nbsp;</div><div class="spec-value">&nbsp;</div></div></div>
+          </div>`
+      : "";
   const capabilityIcons = getCapabilitiesHTML(model);
   return `
     <div class="col-md-6 col-lg-4">
@@ -1301,14 +1391,14 @@ function buildAvailableModelCardHTML(model) {
             <i class="fas fa-box model-icon-main"></i>
           </div>
           <div class="model-meta">
-            <span class="status-indicator available">
+            <span class="status-indicator available" data-dashboard-tooltip="Installed on disk but not loaded into GPU/RAM until you start it.">
               <i class="fas fa-circle"></i>Available
             </span>
           </div>
         </div>
         <div class="model-title">${safeName}${
           hasCustom
-            ? '<span class="badge bg-info text-dark ms-2" title="Custom settings configured">⚙️</span>'
+            ? '<span class="badge bg-info text-dark ms-2" data-dashboard-tooltip="Saved per-model options (temperature, context length, etc.) in this dashboard.">⚙️</span>'
             : ""
         }</div>
         <div class="model-capabilities">
@@ -1319,50 +1409,51 @@ function buildAvailableModelCardHTML(model) {
             <div class="spec-item">
               <div class="spec-icon"><i class="fas fa-cogs"></i></div>
               <div class="spec-content">
-                <div class="spec-label">Family</div>
+                <div class="spec-label" data-dashboard-tooltip="Model family from Ollama metadata.">Family</div>
                 <div class="spec-value">${typeof escapeHtml === "function" ? escapeHtml(family) : family}</div>
               </div>
             </div>
             <div class="spec-item">
               <div class="spec-icon"><i class="fas fa-weight"></i></div>
               <div class="spec-content">
-                <div class="spec-label">Parameters</div>
+                <div class="spec-label" data-dashboard-tooltip="Parameter class from metadata (e.g. 7B).">Parameters</div>
                 <div class="spec-value">${typeof escapeHtml === "function" ? escapeHtml(parameterSize) : parameterSize}</div>
               </div>
             </div>
           </div>
+          ${quantRowAvail}
           <div class="spec-row spec-row-size-context compact-hide">
             <div class="spec-item">
               <div class="spec-icon"><i class="fas fa-hdd"></i></div>
               <div class="spec-content">
-                <div class="spec-label">Size</div>
+                <div class="spec-label" data-dashboard-tooltip="Disk space used by this model’s files.">Size</div>
                 <div class="spec-value text-nowrap">${typeof escapeHtml === "function" ? escapeHtml(formattedSize) : formattedSize}</div>
               </div>
             </div>
             <div class="spec-item">
               <div class="spec-icon"><i class="fas fa-align-left"></i></div>
               <div class="spec-content">
-                <div class="spec-label">Context</div>
+                <div class="spec-label" data-dashboard-tooltip="Default or reported max context (tokens) for this tag.">Context</div>
                 <div class="spec-value">${typeof escapeHtml === "function" ? escapeHtml(contextStr) : contextStr}</div>
               </div>
             </div>
           </div>
         </div>
-        <div class="model-actions">
-          <button class="btn btn-success" onclick="startModel(this.closest('.model-card').dataset.modelName)" title="Start model" aria-label="Start model">
-            <i class="fas fa-play"></i> <span class="d-none d-sm-inline">Start</span>
+        <div class="model-actions model-actions--available">
+          <button type="button" class="btn btn-success" onclick="startModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Load into memory so you can use it via API, CLI, or apps (ollama run)." aria-label="Start model">
+            <i class="fas fa-play"></i> <span class="model-action-btn-label">Start</span>
           </button>
-          <button class="btn btn-primary" onclick="restartModel(this.closest('.model-card').dataset.modelName)" title="Restart model" aria-label="Restart model">
-            <i class="fas fa-redo"></i> <span class="d-none d-sm-inline">Restart</span>
+          <button type="button" class="btn btn-primary" data-model-action="restart" onclick="restartModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="If already running: reload weights. If not running, same as Start." aria-label="Restart model">
+            <i class="fas fa-redo"></i> <span class="model-action-btn-label">Restart</span>
           </button>
-          <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information" aria-label="View model information">
-            <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
+          <button type="button" class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Modal with full Ollama model JSON." aria-label="View model information">
+            <i class="fas fa-info-circle"></i> <span class="model-action-btn-label">Info</span>
           </button>
-          <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings" aria-label="Settings">
-            <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
+          <button type="button" class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Per-model defaults for this dashboard (applied on next load/start)." aria-label="Settings">
+            <i class="fas fa-cog"></i> <span class="model-action-btn-label">Settings</span>
           </button>
-          <button class="btn btn-danger" onclick="deleteModel(this.closest('.model-card').dataset.modelName)" title="Delete model" aria-label="Delete model">
-            <i class="fas fa-trash"></i> <span class="d-none d-sm-inline">Delete</span>
+          <button type="button" class="btn btn-danger" data-model-action="delete" onclick="deleteModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Remove from disk (ollama rm). Cannot be undone." aria-label="Delete model">
+            <i class="fas fa-trash"></i> <span class="model-action-btn-label">Delete</span>
           </button>
         </div>
       </div>
@@ -1404,6 +1495,7 @@ function updateAvailableModelsDisplay(models) {
         .join("");
     }
     applyCapabilityFilters("availableModelsContainer");
+    afterModelCardsRendered();
     return;
   }
 
@@ -1437,11 +1529,14 @@ function updateAvailableModelsDisplay(models) {
                 : `${label}: Unknown`;
           el.classList.remove("enabled", "disabled", "unknown");
           el.classList.add(state);
-          el.setAttribute("title", title);
+          el.removeAttribute("title");
+          el.setAttribute("data-dashboard-tooltip", title);
+          el.dataset.dashboardTooltipMigrated = "1";
         }
       }
     });
     applyCapabilityFilters("availableModelsContainer");
+    afterModelCardsRendered();
   } catch (err) {
     console.log("Failed to update capability icons for available models", err);
   }
@@ -1458,21 +1553,30 @@ function updateVersionDisplay(version) {
 
 // Service management functions moved to serviceControl.js
 
-// Compact mode functionality
+// Compact mode: CSS remains in styles.css; the #compactToggle button is omitted from index.html by default.
+// See docs/UI.md to restore the toggle. compactMode in localStorage applies only when the toggle is present;
+// without it, the layout always loads expanded so users are not stuck in compact with no control.
 function initializeCompactMode() {
   const compactToggle = document.getElementById("compactToggle");
   const body = document.body;
-
-  // Check if compact mode was previously enabled
-  const isCompact = localStorage.getItem("compactMode") === "true";
+  const isCompact =
+    Boolean(compactToggle) && localStorage.getItem("compactMode") === "true";
 
   if (isCompact) {
     body.classList.add("compact-mode");
+  } else {
+    body.classList.remove("compact-mode");
+  }
+
+  if (!compactToggle) {
+    return;
+  }
+
+  if (isCompact) {
     compactToggle.classList.add("active");
     compactToggle.innerHTML = '<i class="fas fa-expand"></i>';
   }
 
-  // Toggle compact mode on button click
   compactToggle.addEventListener("click", function () {
     const isCurrentlyCompact = body.classList.contains("compact-mode");
 
@@ -1492,8 +1596,8 @@ function initializeCompactMode() {
 
 // updateHealthStatus & updateServiceControlButtons moved to serviceControl.js
 
-// Downloadable models: fetched once on init, show first 12 then "View More"
-const INITIAL_DOWNLOADABLE_VISIBLE = 12;
+// Downloadable models: initial grid size before "View More" (see docs/UI.md)
+const INITIAL_DOWNLOADABLE_VISIBLE = 48;
 let cachedDownloadableModels = [];
 let extendedModelsLoaded = false;
 
@@ -1512,6 +1616,7 @@ function renderExtendedModels(models, container) {
     )
     .join("");
   applyCapabilityFilters("extendedModelsContainer");
+  afterModelCardsRendered();
 }
 
 function updateViewMoreButtonVisibility() {
@@ -1590,6 +1695,7 @@ function renderDownloadableModels(models) {
     )
     .join("");
   applyCapabilityFilters("downloadableModelsContainer");
+  afterModelCardsRendered();
 }
 
 function openFindModelModal() {
@@ -1651,12 +1757,11 @@ async function pullModel(modelName) {
         card = document.querySelector(
           `.model-card[data-model-name="${cssEscape(modelName)}"]`,
         );
+        afterModelCardsRendered();
       }
     }
   }
-  const button = card
-    ? card.querySelector('button[title="Download model"]')
-    : null;
+  const button = card ? card.querySelector(".btn-dashboard-download") : null;
   const progressContainer = card
     ? card.querySelector(".download-progress")
     : null;

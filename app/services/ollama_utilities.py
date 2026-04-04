@@ -11,6 +11,7 @@ import requests
 from app.services.model_fetcher import get_best_models_live as _get_best
 from app.services.model_fetcher import get_all_downloadable_models_live as _get_all
 from app.services.model_fetcher import get_downloadable_models_live as _get_dl
+from app.services.model_helpers import context_length_as_int
 from app.services.model_settings_helpers import (
     delete_model_settings_entry,
     ensure_model_settings_exists,
@@ -375,14 +376,6 @@ class OllamaServiceUtilities:
     def _recommend_settings_for_model(self, _model_info):
         """Recommend default settings for a model based on its characteristics."""
         info = _model_info or {}
-
-        def recommend_settings_for_model(self, model_info):
-            """Public method to recommend default settings for a model based on its characteristics."""
-            return self._recommend_settings_for_model(model_info)
-
-        def _recommend_settings_for_model(self, _model_info):
-            """Recommend default settings for a model based on its characteristics (internal)."""
-            info = _model_info or {}
         details = info.get('details', {}) if isinstance(info, dict) else {}
         families = [f.lower() for f in details.get('families', []) or []]
         name = (info.get('name') or '') if isinstance(info, dict) else str(info)
@@ -401,36 +394,41 @@ class OllamaServiceUtilities:
 
         settings = get_default_settings_template()
 
-        # Base heuristics by parameter size
+        # Base heuristics by parameter size (billions)
         param_size = _param_size_to_float(details.get('parameter_size'))
         if param_size is not None:
             if param_size <= 2:
-                settings['temperature'] = max(settings['temperature'], 0.75)
-                settings['num_ctx'] = max(settings['num_ctx'], 2048)
-                settings['num_predict'] = max(settings['num_predict'], 256)
+                settings['temperature'] = max(settings['temperature'], 0.78)
+                settings['num_predict'] = max(settings['num_predict'], 512)
             elif param_size <= 8:
-                settings['temperature'] = min(max(settings['temperature'], 0.65), 0.75)
-                settings['num_ctx'] = max(settings['num_ctx'], 2048)
-                settings['num_predict'] = max(settings['num_predict'], 300)
+                settings['temperature'] = min(max(settings['temperature'], 0.68), 0.78)
+                settings['num_predict'] = max(settings['num_predict'], 640)
             else:
-                settings['temperature'] = min(settings['temperature'], 0.65)
-                settings['num_ctx'] = max(settings['num_ctx'], 4096)
-                settings['num_predict'] = max(settings['num_predict'], 320)
+                settings['temperature'] = min(settings['temperature'], 0.62)
+                settings['num_predict'] = max(settings['num_predict'], 768)
 
         # Capabilities heuristics
         if info.get('has_vision') or 'vision' in families or 'llava' in name_l:
             settings['num_ctx'] = max(settings['num_ctx'], 4096)
-            settings['top_p'] = max(settings['top_p'], 0.9)
+            settings['top_p'] = max(settings['top_p'], 0.92)
         if info.get('has_reasoning') or 'deepseek' in name_l:
-            settings['num_ctx'] = max(settings['num_ctx'], 4096)
-            settings['temperature'] = min(settings['temperature'], 0.65)
+            settings['num_ctx'] = max(settings['num_ctx'], 8192)
+            settings['temperature'] = min(settings['temperature'], 0.6)
+            settings['num_predict'] = max(settings['num_predict'], 1024)
         if info.get('has_tools') or 'tool' in name_l:
             settings['top_k'] = min(settings.get('top_k', 40), 20)
+            settings['temperature'] = min(settings['temperature'], 0.55)
 
         # Family-specific nudges
         if 'qwen' in families or 'qwen' in name_l:
-            settings['repeat_penalty'] = max(settings['repeat_penalty'], 1.05)
-            settings['num_predict'] = max(settings['num_predict'], 320)
+            settings['repeat_penalty'] = max(settings['repeat_penalty'], 1.08)
+            settings['num_predict'] = max(settings['num_predict'], 640)
+
+        # Respect model context window from Ollama /api/show (first save after download)
+        max_ctx = context_length_as_int(info)
+        if max_ctx is not None:
+            target = min(max_ctx, max(settings['num_ctx'], min(8192, max_ctx)))
+            settings['num_ctx'] = target
 
         return settings
 

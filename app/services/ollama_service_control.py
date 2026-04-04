@@ -71,6 +71,7 @@ class OllamaServiceControl:
             methods_tried.append('installation path')
             common_paths = [
                 r"C:\Program Files\Ollama\ollama.exe",
+                r"C:\Program Files (x86)\Ollama\ollama.exe",
                 r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe",
                 r"C:\Users\%USERNAME%\AppData\Local\Programs\Ollama\ollama.exe",
                 os.path.expanduser(r"~\AppData\Local\Programs\Ollama\ollama.exe")
@@ -334,6 +335,7 @@ class OllamaServiceControl:
             if platform.system() == "Windows":
                 common_paths = [
                     r"C:\Program Files\Ollama\ollama.exe",
+                    r"C:\Program Files (x86)\Ollama\ollama.exe",
                     r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe",
                     r"C:\Users\%USERNAME%\AppData\Local\Programs\Ollama\ollama.exe",
                     os.path.expanduser(r"~\AppData\Local\Programs\Ollama\ollama.exe"),
@@ -342,6 +344,13 @@ class OllamaServiceControl:
                     expanded = os.path.expandvars(os.path.expanduser(path))
                     if expanded and os.path.isfile(expanded):
                         return True
+                # PATHEXT + process PATH (often finds Ollama when `where` fails in restricted contexts)
+                try:
+                    which_ollama = shutil.which("ollama")
+                    if which_ollama and os.path.isfile(which_ollama):
+                        return True
+                except (OSError, TypeError):
+                    pass
                 try:
                     result = subprocess.run(
                         ["where", "ollama"],

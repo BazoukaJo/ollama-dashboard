@@ -1,6 +1,6 @@
 # Ollama Dashboard
 
-## Version 1.0001
+## Version 1.0003
 
 ![Ollama Dashboard](Screenshot.png)
 
@@ -24,7 +24,7 @@ A web dashboard for monitoring, controlling, and managing Ollama language models
 - **Responsive Design**: Mobile-friendly, touch-optimized controls
 - **Real-time Updates**: Auto-refresh for model data and system stats
 - **Capability Icons**: Visual indicators for model capabilities (vision, tools, reasoning)
-- **Compact Mode**: Space-efficient layout toggle
+- **Compact mode**: Styles and `body.compact-mode` remain available via the floating toggle (off by default in `index.html`). Without the toggle, the dashboard always loads expanded. See **[docs/UI.md](docs/UI.md)** to re-enable the button or change how many downloadable models appear before “View More”.
 
 ---
 

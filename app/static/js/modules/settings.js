@@ -25,7 +25,7 @@
               <form id="modelSettingsForm">
                 <div class="mb-3">
                   <label class="form-label">Temperature</label>
-                  <input type="number" step="0.01" min="0" max="1" class="form-control" id="ms-temperature" value="${settings.temperature ?? 0.7}">
+                  <input type="number" step="0.01" min="0" max="1" class="form-control" id="ms-temperature" value="${settings.temperature ?? 0.75}">
                 </div>
                 <div class="mb-3">
                   <label class="form-label">Top K</label>
@@ -37,7 +37,7 @@
                 </div>
                 <div class="mb-3">
                   <label class="form-label">Context (num_ctx)</label>
-                  <input type="number" class="form-control" id="ms-num-ctx" value="${settings.num_ctx ?? 2048}">
+                  <input type="number" class="form-control" id="ms-num-ctx" value="${settings.num_ctx ?? 4096}">
                 </div>
                 <div class="mb-3">
                   <label class="form-label">Seed</label>
@@ -47,9 +47,9 @@
                 <button type="button" class="btn btn-sm btn-outline-info mb-2" id="ms-toggle-advanced"><i class="fas fa-sliders-h me-1"></i> Advanced Settings</button>
                 <div id="ms-advanced" style="display:none;">
                   <div class="row g-2">
-                    ${buildAdvancedField('Num Predict','ms-num-predict', settings.num_predict ?? 256,'number',{min:1})}
+                    ${buildAdvancedField('Num Predict','ms-num-predict', settings.num_predict ?? 512,'number',{min:1})}
                     ${buildAdvancedField('Repeat Last N','ms-repeat-last-n', settings.repeat_last_n ?? 64,'number',{min:0})}
-                    ${buildAdvancedField('Repeat Penalty','ms-repeat-penalty', settings.repeat_penalty ?? 1.1,'number',{step:0.01})}
+                    ${buildAdvancedField('Repeat Penalty','ms-repeat-penalty', settings.repeat_penalty ?? 1.05,'number',{step:0.01})}
                     ${buildAdvancedField('Presence Penalty','ms-presence-penalty', settings.presence_penalty ?? 0.0,'number',{step:0.01})}
                     ${buildAdvancedField('Frequency Penalty','ms-frequency-penalty', settings.frequency_penalty ?? 0.0,'number',{step:0.01})}
                     ${buildAdvancedField('Min P','ms-min-p', settings.min_p ?? 0.05,'number',{step:0.01})}
@@ -135,14 +135,14 @@
     const stopArr = !stopRaw ? [] : stopRaw.split(',').map(s=>s.trim()).filter(s=>s).slice(0,10);
     const penalizeEl = g('ms-penalize-newline');
     return {
-      temperature: safeFloat('ms-temperature', 0.7),
+      temperature: safeFloat('ms-temperature', 0.75),
       top_k: safeInt('ms-top-k', 40),
       top_p: safeFloat('ms-top-p', 0.9),
-      num_ctx: safeInt('ms-num-ctx', 2048),
+      num_ctx: safeInt('ms-num-ctx', 4096),
       seed: safeInt('ms-seed', 0),
-      num_predict: safeInt('ms-num-predict', 256),
+      num_predict: safeInt('ms-num-predict', 512),
       repeat_last_n: safeInt('ms-repeat-last-n', 64),
-      repeat_penalty: safeFloat('ms-repeat-penalty', 1.1),
+      repeat_penalty: safeFloat('ms-repeat-penalty', 1.05),
       presence_penalty: safeFloat('ms-presence-penalty', 0),
       frequency_penalty: safeFloat('ms-frequency-penalty', 0),
       min_p: safeFloat('ms-min-p', 0.05),
@@ -177,8 +177,8 @@
     try {
       const r = await fetch(`/api/models/settings/recommended/${encodeURIComponent(modelName)}`);
       const dataRec = await r.json(); const s = dataRec.settings || {}; const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.value=val; };
-      set('ms-temperature', s.temperature ?? 0.7); set('ms-top-k', s.top_k ?? 40); set('ms-top-p', s.top_p ?? 0.9); set('ms-num-ctx', s.num_ctx ?? 2048); set('ms-seed', s.seed ?? 0);
-      set('ms-num-predict', s.num_predict ?? 256); set('ms-repeat-last-n', s.repeat_last_n ?? 64); set('ms-repeat-penalty', s.repeat_penalty ?? 1.1);
+      set('ms-temperature', s.temperature ?? 0.75); set('ms-top-k', s.top_k ?? 40); set('ms-top-p', s.top_p ?? 0.9); set('ms-num-ctx', s.num_ctx ?? 4096); set('ms-seed', s.seed ?? 0);
+      set('ms-num-predict', s.num_predict ?? 512); set('ms-repeat-last-n', s.repeat_last_n ?? 64); set('ms-repeat-penalty', s.repeat_penalty ?? 1.05);
       set('ms-presence-penalty', s.presence_penalty ?? 0.0); set('ms-frequency-penalty', s.frequency_penalty ?? 0.0); set('ms-min-p', s.min_p ?? 0.05); set('ms-typical-p', s.typical_p ?? 1.0);
       set('ms-mirostat', s.mirostat ?? 0); set('ms-mirostat-tau', s.mirostat_tau ?? 5.0); set('ms-mirostat-eta', s.mirostat_eta ?? 0.1);
       const stopEl = document.getElementById('ms-stop'); if(stopEl) stopEl.value = (s.stop && Array.isArray(s.stop)) ? s.stop.join(',') : '';

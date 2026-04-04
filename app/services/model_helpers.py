@@ -39,6 +39,57 @@ def _extract_context_length(entry):
     return None
 
 
+def _coerce_context_int(value):
+    """Parse a context length to a positive int (handles 8192, '8K', '128K', etc.)."""
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, float):
+        return int(value) if value > 0 else None
+    if isinstance(value, str):
+        s = value.strip().upper().replace(",", "").replace(" ", "")
+        if not s:
+            return None
+        mult = 1
+        if s.endswith("M"):
+            mult = 1_000_000
+            s = s[:-1]
+        elif s.endswith("K"):
+            mult = 1000
+            s = s[:-1]
+        try:
+            n = int(float(s) * mult)
+            return n if n > 0 else None
+        except ValueError:
+            return None
+    return None
+
+
+def context_length_as_int(entry):
+    """Numeric context window for settings logic (prefers raw API fields over display strings)."""
+    if not isinstance(entry, dict):
+        return None
+    details = entry.get("details") if isinstance(entry.get("details"), dict) else {}
+    for candidate in (details.get("context_length"), entry.get("context_length")):
+        n = _coerce_context_int(candidate)
+        if n is not None:
+            return n
+    raw = _extract_context_length(entry)
+    n = _coerce_context_int(raw)
+    if n is not None:
+        return n
+    mi = entry.get("model_info")
+    if isinstance(mi, dict):
+        for key, val in mi.items():
+            kl = key.lower()
+            if "context" in kl and "length" in kl:
+                n = _coerce_context_int(val)
+                if n is not None:
+                    return n
+    return None
+
+
 def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflict=False):
     if not isinstance(entry, dict):
         return {'name': str(entry), 'has_vision': False, 'has_tools': False, 'has_reasoning': False}

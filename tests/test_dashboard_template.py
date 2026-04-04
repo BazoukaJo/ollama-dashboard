@@ -1,5 +1,7 @@
 """Tests for dashboard template structure: capability filters, model cards, section headers."""
 
+import re
+
 import pytest
 from unittest.mock import patch
 
@@ -134,11 +136,11 @@ class TestModelCardStructure:
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert 'class="spec-label">Family' in html
-        assert 'class="spec-label">Parameters' in html
-        assert 'class="spec-label">Size' in html
-        assert 'GPU Allocation' in html or 'spec-label' in html
-        assert 'class="spec-label">Context' in html
+        assert re.search(r'class="spec-label"[^>]*>\s*Family', html)
+        assert re.search(r'class="spec-label"[^>]*>\s*Parameters', html)
+        assert re.search(r'class="spec-label"[^>]*>\s*Size', html)
+        assert 'GPU Allocation' in html
+        assert re.search(r'class="spec-label"[^>]*>\s*Context', html)
         assert 'spec-row' in html
 
     @patch('app.routes.main.ollama_service.get_running_models')
@@ -160,8 +162,8 @@ class TestModelCardStructure:
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert 'class="spec-label">Family' in html
-        assert 'class="spec-label">Context' in html
+        assert re.search(r'class="spec-label"[^>]*>\s*Family', html)
+        assert re.search(r'class="spec-label"[^>]*>\s*Context', html)
 
 
 class TestSectionHeaders:
@@ -184,7 +186,7 @@ class TestSectionHeaders:
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert 'Ollama Dashboard' in html
+        assert 'Dashboard v' in html
         assert 'System Resources' in html
         assert 'Downloadable Models' in html
         assert 'section-title-text' in html

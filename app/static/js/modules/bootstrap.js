@@ -28,6 +28,16 @@
     if (typeof initializeCompactMode === "function") initializeCompactMode();
     if (typeof loadDownloadableModels === "function") loadDownloadableModels();
     if (typeof updateModelData === "function") updateModelData();
+    if (window.modelCardActions) {
+      if (typeof modelCardActions.renderRecentErrorsBar === "function") {
+        modelCardActions.renderRecentErrorsBar();
+      }
+      setTimeout(function () {
+        if (typeof modelCardActions.enhanceAllModelCards === "function") {
+          modelCardActions.enhanceAllModelCards();
+        }
+      }, 0);
+    }
     startPolling();
   }
 

@@ -68,6 +68,24 @@ def test_recommendations_small_medium_large(tmp_path):
     assert entry_large['temperature'] <= 0.65
     assert entry_large['num_ctx'] >= 4096
 
+def test_recommendation_clamps_num_ctx_to_model_window(tmp_path):
+    """num_ctx must not exceed the model's reported context (e.g. 2K display string)."""
+    app = create_app()
+    svc = OllamaService()
+    svc.init_app(app)
+    model_file = tmp_path / "model_settings.json"
+    app.config["MODEL_SETTINGS_FILE"] = str(model_file)
+
+    rec = svc._recommend_settings_for_model(
+        {
+            "name": "small-ctx",
+            "details": {"parameter_size": "7B"},
+            "context_length": "2K",
+        }
+    )
+    assert rec["num_ctx"] <= 2048
+
+
 def test_recommendations_for_vision_and_reasoning_and_tools(tmp_path):
     app = create_app()
     svc = OllamaService()

@@ -1,56 +1,100 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Ollama Dashboard</title>
+    <script>
+    (function () {
+      try {
+        if (typeof localStorage !== "undefined") {
+          var theme = localStorage.getItem("theme") || "dark";
+          if (theme !== "light" && theme !== "dark") theme = "dark";
+          var root = document.documentElement;
+          root.classList.remove("light", "dark");
+          root.classList.add(theme);
+          root.setAttribute("data-bs-theme", theme);
+        }
+      } catch (e) {
+        console.warn("Theme script error:", e);
+      }
+    })();
+    </script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v={{ timestamp }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v={{ timestamp }}">
 </head>
-<body>
-    <!-- Compact Mode Toggle Button -->
-    <button id="compactToggle" class="compact-toggle-btn" title="Toggle Compact Mode">
-        <i class="fas fa-compress"></i>
-    </button>
-    <!-- Settings button removed (deprecated global settings page) -->
+<body id="dashboard-body" data-ollama-api-base="{{ ollama_api_base }}" data-ollama-host="{{ ollama_public_host }}" data-ollama-port="{{ ollama_public_port }}">
+    {# Compact mode toggle removed from DOM by default; styles remain in styles.css. See docs/UI.md to re-enable. #}
 
-    <div class="container py-3">
-        <header class="title-container text-center mb-1" role="banner">
-            <div class="dashboard-brand-row d-flex align-items-center justify-content-center gap-2 flex-wrap">
-                <div class="title-logo-small">
-                    <img src="{{ url_for('static', filename='ollama-logo.png') }}" alt="Ollama">
+    <div class="container px-3 pb-3 pt-0" id="dashboard-page">
+        <header class="dashboard-header-banner" role="banner">
+            <div class="dashboard-header-toolbar d-flex align-items-center flex-wrap gap-2 w-100">
+                <div class="dashboard-header-toolbar-main d-flex align-items-center flex-wrap gap-2 flex-grow-1 justify-content-start min-w-0">
+                    <span class="dashboard-meta-logo" data-dashboard-tooltip="Ollama" aria-hidden="true">
+                        <img src="{{ url_for('static', filename='ollama-logo.png') }}" alt="" width="24" height="24" decoding="async">
+                    </span>
+                    <div id="healthStatus" class="badge bg-secondary health-status-badge" data-dashboard-tooltip="Whether the Ollama HTTP API responds at the host:port in the version line below. This is not a speed or quality benchmark.">
+                        <i class="fas fa-heartbeat me-2"></i>
+                        <span id="healthText">Checking health...</span>
+                    </div>
+                    <div class="service-controls d-flex gap-2 align-items-center">
+                        <button id="startServiceBtn" class="btn btn-sm btn-success" type="button" data-dashboard-tooltip="Start the Ollama system service on this machine (Windows service, launchd, systemd, etc.)." aria-label="Start Ollama service" onclick="startOllamaService()">
+                            <i class="fas fa-play" aria-hidden="true"></i>
+                        </button>
+                        <button id="stopServiceBtn" class="btn btn-sm btn-secondary" type="button" data-dashboard-tooltip="Stop the Ollama service. All loaded models are unloaded and in-flight requests may fail." aria-label="Stop Ollama service" onclick="stopOllamaService()">
+                            <i class="fas fa-stop" aria-hidden="true"></i>
+                        </button>
+                        <button id="restartServiceBtn" class="btn btn-sm btn-warning" type="button" data-dashboard-tooltip="Restart the Ollama service. Brief downtime; running models and requests are interrupted." aria-label="Restart Ollama service" onclick="showRestartConfirm()">
+                            <i class="fas fa-sync-alt" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    {% if not ollama_installed %}
+                    <button type="button" class="btn btn-sm btn-success" id="installOllamaBtn" data-dashboard-tooltip="Download and install Ollama (winget, Homebrew, or official script), then start the service. May require administrator approval on Windows." onclick="showInstallOllamaConfirm()">
+                        <i class="fas fa-download me-1"></i>Install Ollama
+                    </button>
+                    {% elif ollama_update_available %}
+                    <button type="button" class="btn btn-sm btn-outline-info" id="updateOllamaBtn" data-dashboard-tooltip="{% if ollama_update_latest_version %}Latest: {{ ollama_update_latest_version }} — {% endif %}Stop Ollama, upgrade, then restart" onclick="showUpdateOllamaConfirm()">
+                        <i class="fas fa-arrow-circle-up me-1"></i>Update Ollama
+                    </button>
+                    {% endif %}
                 </div>
-                <h2 class="page-title-minimal mb-0">Ollama Dashboard</h2>
-            </div>
-            <div class="dashboard-meta-row d-flex align-items-center justify-content-center flex-wrap gap-2 gap-md-3 mt-2">
-                <small class="text-muted fw-light">Dashboard v{{ dashboard_version|default('1.0001') }}</small>
-                <span class="dashboard-meta-sep text-muted" aria-hidden="true">·</span>
-                {% if ollama_version != 'Unknown' %}
-                <small class="text-muted fw-light">Ollama v{{ ollama_version }}</small>
-                {% elif not ollama_installed %}
-                <small class="text-warning fw-light">Ollama not detected</small>
-                {% else %}
-                <small class="text-muted fw-light">Ollama</small>
-                {% endif %}
-                {% if not ollama_installed %}
-                <button type="button" class="btn btn-sm btn-success" id="installOllamaBtn" title="Download and install Ollama (winget, Homebrew, or official script), then start the service. May require administrator approval on Windows." onclick="showInstallOllamaConfirm()">
-                    <i class="fas fa-download me-1"></i>Install Ollama
+                <button type="button" id="themeToggleBtn" class="theme-toggle-btn flex-shrink-0 ms-auto" data-dashboard-tooltip="Switch to light mode" aria-label="Switch to light mode">
+                    <i class="fas fa-sun theme-toggle-icon theme-toggle-icon--sun" aria-hidden="true"></i>
+                    <i class="fas fa-moon theme-toggle-icon theme-toggle-icon--moon" aria-hidden="true"></i>
                 </button>
-                {% elif ollama_update_available %}
-                <button type="button" class="btn btn-sm btn-outline-info" id="updateOllamaBtn" title="{% if ollama_update_latest_version %}Latest: {{ ollama_update_latest_version }} — {% endif %}Stop Ollama, upgrade, then restart" onclick="showUpdateOllamaConfirm()">
-                    <i class="fas fa-arrow-circle-up me-1"></i>Update Ollama
-                </button>
-                {% endif %}
             </div>
         </header>
 
-        <div class="refresh-indicator mb-2 {% if error %}error{% endif %} d-flex align-items-center gap-2" data-timezone="{{ timezone }}" data-poll-interval="10">
-            <div class="dot"></div>
-            <span>Updated <span id="lastUpdate"></span> · next poll <span id="nextRefresh">10</span>s</span>
-            <button type="button" class="btn btn-sm btn-outline-secondary btn-refresh" id="refreshDashboardBtn" title="Refresh dashboard data" onclick="refreshDashboardData()" aria-label="Refresh dashboard">
-                <i class="fas fa-sync-alt"></i>
-            </button>
+        <div class="dashboard-version-meta text-center">
+            <div class="dashboard-meta-row dashboard-version-meta-line d-flex align-items-center justify-content-center flex-wrap">
+                <small class="text-muted fw-light" data-dashboard-tooltip="Version of this dashboard web app.">Dashboard v{{ dashboard_version|default('1.0003') }}</small>
+                <span class="dashboard-meta-sep text-muted" aria-hidden="true">·</span>
+                {% if ollama_version != 'Unknown' %}
+                <small class="text-muted fw-light" data-dashboard-tooltip="Ollama server version returned by the API at the address on the right.">Ollama v{{ ollama_version }}</small>
+                <span class="dashboard-meta-sep text-muted" aria-hidden="true">·</span>
+                <small class="text-muted fw-light font-monospace dashboard-meta-host" data-dashboard-tooltip="Ollama API (OLLAMA_HOST:OLLAMA_PORT)">{{ ollama_public_host }}:{{ ollama_public_port }}</small>
+                {% elif not ollama_installed %}
+                <small class="text-warning fw-light" data-dashboard-tooltip="No Ollama install found on this machine, or the service is not reachable at the target host:port.">Ollama not detected</small>
+                <span class="dashboard-meta-sep text-muted" aria-hidden="true">·</span>
+                <small class="text-muted fw-light font-monospace dashboard-meta-host" data-dashboard-tooltip="Target Ollama API (OLLAMA_HOST:OLLAMA_PORT)">{{ ollama_public_host }}:{{ ollama_public_port }}</small>
+                {% else %}
+                <small class="text-muted fw-light">Ollama</small>
+                <span class="dashboard-meta-sep text-muted" aria-hidden="true">·</span>
+                <small class="text-muted fw-light font-monospace dashboard-meta-host" data-dashboard-tooltip="Ollama API (OLLAMA_HOST:OLLAMA_PORT)">{{ ollama_public_host }}:{{ ollama_public_port }}</small>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="refresh-indicator mb-2 {% if error %}error{% endif %}" data-timezone="{{ timezone }}" data-poll-interval="10" data-dashboard-tooltip="Green dot: last update succeeded. Time is local. Countdown is seconds until the next automatic refresh (stats + model lists). Use the button to refresh immediately.">
+            <div class="refresh-indicator-cluster">
+                <div class="dot" aria-hidden="true"></div>
+                <span class="refresh-indicator-text">Updated <span id="lastUpdate"></span> · next poll <span id="nextRefresh">10</span>s</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary btn-refresh" id="refreshDashboardBtn" data-dashboard-tooltip="Fetch latest system stats and model lists now (same as waiting for the countdown)." onclick="refreshDashboardData()" aria-label="Refresh dashboard">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
         </div>
 
         <!-- Restart confirmation modal -->
@@ -130,7 +174,7 @@
                         <p class="text-muted mb-3">Enter a model name from the <a href="https://ollama.com/library" target="_blank" rel="noopener" class="text-info">Ollama library</a> to download it.</p>
                         <div class="input-group">
                             <span class="input-group-text bg-secondary border-secondary text-light"><i class="fas fa-cube"></i></span>
-                            <input type="text" class="form-control bg-dark text-light border-secondary" id="findModelInput" placeholder="e.g. llama3, mistral, gemma2:2b" autocomplete="off">
+                            <input type="text" class="form-control bg-dark text-light border-secondary" id="findModelInput" placeholder="e.g. llama3, mistral, gemma2:2b" autocomplete="off" data-dashboard-tooltip="Use the exact tag from the library (include variant, e.g. llama3.2:3b). Pull runs in the background.">
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -143,42 +187,23 @@
             </div>
         </div>
 
-        <!-- Health Status Indicator and Service Controls -->
-        <div class="d-flex justify-content-center mb-2 align-items-center gap-2">
-            <div id="healthStatus" class="badge bg-secondary health-status-badge">
-                <i class="fas fa-heartbeat me-2"></i>
-                <span id="healthText">Checking health...</span>
-            </div>
-            <div class="service-controls d-flex gap-2 align-items-center">
-                <button id="startServiceBtn" class="btn btn-sm btn-success" type="button" title="Start Ollama service" aria-label="Start Ollama service" onclick="startOllamaService()">
-                    <i class="fas fa-play" aria-hidden="true"></i>
-                </button>
-                <button id="stopServiceBtn" class="btn btn-sm btn-secondary" type="button" title="Stop Ollama service" aria-label="Stop Ollama service" onclick="stopOllamaService()">
-                    <i class="fas fa-stop" aria-hidden="true"></i>
-                </button>
-                <button id="restartServiceBtn" class="btn btn-sm btn-warning" type="button" title="Restart Ollama service" aria-label="Restart Ollama service" onclick="showRestartConfirm()">
-                    <i class="fas fa-sync-alt" aria-hidden="true"></i>
-                </button>
-            </div>
-        </div>
+        <div id="recentErrorsHost" class="d-none"></div>
 
         <!-- Models Management Section -->
         <div class="models-section">
                 <!-- Compact System Resources -->
                 <div class="compact-system-resources mb-2">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <div class="d-flex align-items-center gap-2">
+                    <div class="d-flex justify-content-between align-items-center mb-0 compact-resources-head">
+                        <div class="d-flex align-items-center gap-1" data-dashboard-tooltip="Live usage on this computer: CPU, RAM, GPU memory (if any), and GPU 3D engine. Sparklines show recent history.">
                             <i class="fas fa-server text-primary section-icon"></i>
                             <span class="fw-semibold text-light section-title-text">System Resources</span>
                         </div>
-                        <small class="text-muted last-update-time" id="lastUpdateTime">Updated just now</small>
+                        <small class="text-muted last-update-time" id="lastUpdateTime" data-dashboard-tooltip="When system stats were last fetched (updates with the refresh countdown).">Updated just now</small>
                     </div>
-
-
 
                     <div class="compact-metrics-grid">
                         <!-- CPU -->
-                        <div class="compact-metric">
+                        <div class="compact-metric" data-dashboard-tooltip="All-core CPU usage on this host.">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-1">
                                     <i class="fas fa-microchip resource-icon resource-icon-cpu"></i>
@@ -186,11 +211,11 @@
                                 </div>
                                     <span class="metric-value-compact" id="cpuPercent">{{ system_stats.cpu_percent|round(1) }}%</span>
                             </div>
-                            <canvas class="timeline-canvas" id="cpuTimeline" width="200" height="20"></canvas>
+                            <canvas class="timeline-canvas" id="cpuTimeline" width="200" height="12"></canvas>
                         </div>
 
                         <!-- RAM -->
-                        <div class="compact-metric">
+                        <div class="compact-metric" data-dashboard-tooltip="System RAM in use vs total.">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-1">
                                     <i class="fas fa-memory resource-icon resource-icon-ram"></i>
@@ -198,11 +223,11 @@
                                 </div>
                                 <span class="metric-value-compact" id="memoryPercent">{{ system_stats.memory.percent|round(1) }}%</span>
                             </div>
-                            <canvas class="timeline-canvas" id="memoryTimeline" width="200" height="20"></canvas>
+                            <canvas class="timeline-canvas" id="memoryTimeline" width="200" height="12"></canvas>
                         </div>
 
                         <!-- VRAM -->
-                        <div class="compact-metric">
+                        <div class="compact-metric" data-dashboard-tooltip="GPU video memory used (when a GPU with VRAM is detected).">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-1">
                                     <i class="fas fa-palette resource-icon resource-icon-gpu"></i>
@@ -210,11 +235,11 @@
                                 </div>
                                 <span class="metric-value-compact" id="vramPercent">{{ system_stats.vram.percent|round(1) if system_stats.vram is defined and system_stats.vram.total is defined and system_stats.vram.total > 0 else '--' }}%</span>
                             </div>
-                            <canvas class="timeline-canvas" id="vramTimeline" width="200" height="20"></canvas>
+                            <canvas class="timeline-canvas" id="vramTimeline" width="200" height="12"></canvas>
                         </div>
 
                         <!-- GPU -->
-                        <div class="compact-metric">
+                        <div class="compact-metric" data-dashboard-tooltip="GPU 3D engine busy % when the OS reports it (may stay low for pure inference workloads).">
                             <div class="d-flex align-items-center justify-content-between">
                                 <div class="d-flex align-items-center gap-1">
                                     <i class="fas fa-microchip resource-icon resource-icon-gpu"></i>
@@ -222,7 +247,7 @@
                                 </div>
                                 <span class="metric-value-compact" id="gpu3dPercent">{{ system_stats.vram.gpu_3d|round(1) }}%</span>
                             </div>
-                            <canvas class="timeline-canvas" id="gpu3dTimeline" width="200" height="20"></canvas>
+                            <canvas class="timeline-canvas" id="gpu3dTimeline" width="200" height="12"></canvas>
                         </div>
                     </div>
                 </div>
@@ -235,8 +260,8 @@
                         <div class="d-flex align-items-center justify-content-between mb-3">
                             <div class="d-flex align-items-center gap-2">
                                 <i class="fas fa-play-circle text-success section-icon"></i>
-                                <span class="fw-semibold text-light section-title-text">Running Models</span>
-                                <span class="badge bg-primary text-white ms-2" id="runningModelsCount">{{ models|length }}</span>
+                                <span class="fw-semibold text-light section-title-text" data-dashboard-tooltip="Models with a context loaded in memory / on the GPU (equivalent to the ollama ps command).">Running Models</span>
+                                <span class="badge bg-primary text-white ms-2" id="runningModelsCount" data-dashboard-tooltip="Number of models currently loaded.">{{ models|length }}</span>
                             </div>
                         </div>
                         <div class="row g-3" id="runningModelsContainer">
@@ -248,24 +273,24 @@
                                             <i class="fas fa-brain model-icon-main"></i>
                                         </div>
                                         <div class="model-meta">
-                                            <span class="status-indicator running">
+                                            <span class="status-indicator running" data-dashboard-tooltip="Model weights are resident in memory; this card reflects the running process.">
                                                 <i class="fas fa-circle"></i>Loaded
                                             </span>
                                         </div>
                                     </div>
                                     <div class="model-title">{{ model.name }}
                                         {% if model.has_custom_settings %}
-                                        <span class="badge bg-info text-dark ms-2" title="Custom settings configured">⚙️</span>
+                                        <span class="badge bg-info text-dark ms-2" data-dashboard-tooltip="Saved per-model options (temperature, context length, etc.) in this dashboard.">⚙️</span>
                                         {% endif %}
                                     </div>
                                     <div class="model-capabilities">
-                                        <span class="capability-icon {{ 'enabled' if model.has_reasoning is true else ('disabled' if model.has_reasoning is false else 'unknown') }}" title="Reasoning: {{ 'Available' if model.has_reasoning is true else ('Not available' if model.has_reasoning is false else 'Unknown') }}">
+                                        <span class="capability-icon {{ 'enabled' if model.has_reasoning is true else ('disabled' if model.has_reasoning is false else 'unknown') }}" data-dashboard-tooltip="Reasoning: {{ 'Available' if model.has_reasoning is true else ('Not available' if model.has_reasoning is false else 'Unknown') }}">
                                             <i class="fas fa-brain"></i>
                                         </span>
-                                        <span class="capability-icon {{ 'enabled' if model.has_vision is true else ('disabled' if model.has_vision is false else 'unknown') }}" title="Image Processing: {{ 'Available' if model.has_vision is true else ('Not available' if model.has_vision is false else 'Unknown') }}">
+                                        <span class="capability-icon {{ 'enabled' if model.has_vision is true else ('disabled' if model.has_vision is false else 'unknown') }}" data-dashboard-tooltip="Image Processing: {{ 'Available' if model.has_vision is true else ('Not available' if model.has_vision is false else 'Unknown') }}">
                                             <i class="fas fa-image"></i>
                                         </span>
-                                        <span class="capability-icon {{ 'enabled' if model.has_tools is true else ('disabled' if model.has_tools is false else 'unknown') }}" title="Tool Usage: {{ 'Available' if model.has_tools is true else ('Not available' if model.has_tools is false else 'Unknown') }}">
+                                        <span class="capability-icon {{ 'enabled' if model.has_tools is true else ('disabled' if model.has_tools is false else 'unknown') }}" data-dashboard-tooltip="Tool Usage: {{ 'Available' if model.has_tools is true else ('Not available' if model.has_tools is false else 'Unknown') }}">
                                             <i class="fas fa-tools"></i>
                                         </span>
                                     </div>
@@ -276,7 +301,7 @@
                                                     <i class="fas fa-cogs"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label">Family</div>
+                                                    <div class="spec-label" data-dashboard-tooltip="Model family name from Ollama metadata (e.g. llama, mistral).">Family</div>
                                                     <div class="spec-value">{{ model.details.family if model.details is defined and model.details.family is defined else 'Unknown' }}</div>
                                                 </div>
                                             </div>
@@ -285,7 +310,7 @@
                                                     <i class="fas fa-weight"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label">Parameters</div>
+                                                    <div class="spec-label" data-dashboard-tooltip="Approximate parameter size or class (e.g. 7B) from metadata.">Parameters</div>
                                                     <div class="spec-value">{{ model.details.parameter_size if model.details is defined and model.details.parameter_size is defined else 'Unknown' }}</div>
                                                 </div>
                                             </div>
@@ -296,7 +321,7 @@
                                                     <i class="fas fa-hdd"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label">Size</div>
+                                                    <div class="spec-label" data-dashboard-tooltip="On-disk size of this model’s files.">Size</div>
                                                     <div class="spec-value text-nowrap">{{ model.formatted_size|default(model.size|default('Unknown')) }}</div>
                                                 </div>
                                             </div>
@@ -305,7 +330,7 @@
                                                     <i class="fas fa-microchip"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label text-nowrap">GPU Allocation</div>
+                                                    <div class="spec-label text-nowrap" data-dashboard-tooltip="While loaded: fraction of weights in GPU memory vs model size (from Ollama).">GPU Allocation</div>
                                                     <div class="spec-value text-nowrap" id="model-gpu-{{ loop.index }}">
                                                         {% if model.size_vram is defined and model.size is defined and model.size > 0 %}
                                                             {{ (model.size_vram / model.size * 100)|round(1) }}% ({{ model.formatted_size_vram|default('0 B') }})
@@ -322,7 +347,7 @@
                                                     <i class="fas fa-align-left"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label">Context</div>
+                                                    <div class="spec-label" data-dashboard-tooltip="Maximum context length (tokens) this model can use; may differ from your saved default.">Context</div>
                                                     <div class="spec-value" id="model-context-{{ loop.index }}">{{ model.context_length|default('Unknown') }}</div>
                                                 </div>
                                             </div>
@@ -334,18 +359,18 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="model-actions">
-                                        <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information">
-                                            <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
+                                    <div class="model-actions model-actions--running">
+                                        <button type="button" class="btn btn-primary" data-model-action="restart" onclick="restartModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Reload this model in memory (applies updated settings from disk).">
+                                            <i class="fas fa-redo"></i> <span class="model-action-btn-label">Restart</span>
                                         </button>
-                                        <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings">
-                                            <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
+                                        <button type="button" class="btn btn-warning" data-model-action="stop" onclick="stopModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Unload from VRAM (ollama stop). Model files stay installed.">
+                                            <i class="fas fa-stop"></i> <span class="model-action-btn-label">Stop</span>
                                         </button>
-                                        <button class="btn btn-primary" onclick="restartModel(this.closest('.model-card').dataset.modelName)" title="Restart model">
-                                            <i class="fas fa-redo"></i> <span class="d-none d-sm-inline">Restart</span>
+                                        <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Open a modal with raw Ollama model details (JSON).">
+                                            <i class="fas fa-info-circle"></i> <span class="model-action-btn-label">Info</span>
                                         </button>
-                                        <button class="btn btn-warning" onclick="stopModel(this.closest('.model-card').dataset.modelName)" title="Stop model">
-                                            <i class="fas fa-stop"></i> <span class="d-none d-sm-inline">Stop</span>
+                                        <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Edit temperature, context, and other options stored for this dashboard.">
+                                            <i class="fas fa-cog"></i> <span class="model-action-btn-label">Settings</span>
                                         </button>
                                     </div>
                                 </div>
@@ -358,31 +383,28 @@
                     <!-- Available Models -->
                     {% if available_models %}
                     <div class="mb-4">
-                        <div class="d-flex align-items-center justify-content-between mb-3">
-                            <div class="d-flex align-items-center gap-2">
-                                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshModelsBtn" title="Refresh model list" onclick="refreshDashboardData()" aria-label="Refresh models">
+                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 models-mgmt-toolbar">
+                            <div class="d-flex align-items-center gap-2 flex-wrap models-mgmt-toolbar-primary">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshModelsBtn" data-dashboard-tooltip="Reload installed model list from Ollama without a full page refresh." onclick="refreshDashboardData()" aria-label="Refresh models">
                                     <i class="fas fa-sync-alt"></i>
                                 </button>
                                 <i class="fas fa-box text-primary section-icon"></i>
-                                <span class="fw-semibold text-light section-title-text">Available Models</span>
-                                <span class="badge bg-primary text-white ms-2" id="availableModelsCount">{{ available_models|length }}</span>
+                                <span class="fw-semibold text-light section-title-text" data-dashboard-tooltip="Models on disk that you can start (`ollama list`). Not all are loaded into memory.">Available Models</span>
+                                <span class="badge bg-primary text-white ms-2" id="availableModelsCount" data-dashboard-tooltip="Count of installed models.">{{ available_models|length }}</span>
                             </div>
-                            <div class="d-flex align-items-center gap-3">
+                            <div class="d-flex align-items-center gap-2 gap-md-3 flex-wrap models-mgmt-toolbar-secondary justify-content-md-end">
                                 <div class="capability-filters d-flex align-items-center gap-1" id="availableModelsFilters">
-                                    <span class="text-muted small me-2">Filters</span>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" title="Toggle Reasoning" onclick="toggleCapabilityFilter('reasoning')">
+                                    <span class="text-muted small me-2" data-dashboard-tooltip="Click an icon to hide models that lack that capability (per Ollama metadata). Active = filter on.">Filters</span>
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" data-dashboard-tooltip="Filter by reasoning / thinking support (metadata)." onclick="toggleCapabilityFilter('reasoning')">
                                         <i class="fas fa-brain"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" title="Toggle Vision" onclick="toggleCapabilityFilter('vision')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" data-dashboard-tooltip="Filter by image / vision support (metadata)." onclick="toggleCapabilityFilter('vision')">
                                         <i class="fas fa-image"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" title="Toggle Tool Usage" onclick="toggleCapabilityFilter('tools')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" data-dashboard-tooltip="Filter by tool or function-calling support (metadata)." onclick="toggleCapabilityFilter('tools')">
                                         <i class="fas fa-tools"></i>
                                     </button>
                                 </div>
-                                <button class="btn btn-sm btn-outline-primary" title="Find and download a model by name" onclick="openFindModelModal()">
-                                    <i class="fas fa-search me-1"></i>Find Model
-                                </button>
                             </div>
                         </div>
                         <div class="row g-3" id="availableModelsContainer">
@@ -394,24 +416,24 @@
                                             <i class="fas fa-box model-icon-main"></i>
                                         </div>
                                         <div class="model-meta">
-                                            <span class="status-indicator available">
+                                            <span class="status-indicator available" data-dashboard-tooltip="Installed on disk but not loaded into GPU/RAM until you start it.">
                                                 <i class="fas fa-circle"></i>Available
                                             </span>
                                         </div>
                                     </div>
                                     <div class="model-title">{{ model.name }}
                                         {% if model.has_custom_settings %}
-                                        <span class="badge bg-info text-dark ms-2" title="Custom settings configured">⚙️</span>
+                                        <span class="badge bg-info text-dark ms-2" data-dashboard-tooltip="Saved per-model options (temperature, context length, etc.) in this dashboard.">⚙️</span>
                                         {% endif %}
                                     </div>
                                     <div class="model-capabilities">
-                                        <span class="capability-icon {{ 'enabled' if model.has_reasoning is true else ('disabled' if model.has_reasoning is false else 'unknown') }}" title="Reasoning: {{ 'Available' if model.has_reasoning is true else ('Not available' if model.has_reasoning is false else 'Unknown') }}">
+                                        <span class="capability-icon {{ 'enabled' if model.has_reasoning is true else ('disabled' if model.has_reasoning is false else 'unknown') }}" data-dashboard-tooltip="Reasoning: {{ 'Available' if model.has_reasoning is true else ('Not available' if model.has_reasoning is false else 'Unknown') }}">
                                             <i class="fas fa-brain"></i>
                                         </span>
-                                        <span class="capability-icon {{ 'enabled' if model.has_vision is true else ('disabled' if model.has_vision is false else 'unknown') }}" title="Image Processing: {{ 'Available' if model.has_vision is true else ('Not available' if model.has_vision is false else 'Unknown') }}">
+                                        <span class="capability-icon {{ 'enabled' if model.has_vision is true else ('disabled' if model.has_vision is false else 'unknown') }}" data-dashboard-tooltip="Image Processing: {{ 'Available' if model.has_vision is true else ('Not available' if model.has_vision is false else 'Unknown') }}">
                                             <i class="fas fa-image"></i>
                                         </span>
-                                        <span class="capability-icon {{ 'enabled' if model.has_tools is true else ('disabled' if model.has_tools is false else 'unknown') }}" title="Tool Usage: {{ 'Available' if model.has_tools is true else ('Not available' if model.has_tools is false else 'Unknown') }}">
+                                        <span class="capability-icon {{ 'enabled' if model.has_tools is true else ('disabled' if model.has_tools is false else 'unknown') }}" data-dashboard-tooltip="Tool Usage: {{ 'Available' if model.has_tools is true else ('Not available' if model.has_tools is false else 'Unknown') }}">
                                             <i class="fas fa-tools"></i>
                                         </span>
                                     </div>
@@ -422,7 +444,7 @@
                                                     <i class="fas fa-cogs"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label">Family</div>
+                                                    <div class="spec-label" data-dashboard-tooltip="Model family from Ollama metadata.">Family</div>
                                                     <div class="spec-value">{{ model.details.family|default('Unknown') }}</div>
                                                 </div>
                                             </div>
@@ -431,7 +453,7 @@
                                                     <i class="fas fa-weight"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label">Parameters</div>
+                                                    <div class="spec-label" data-dashboard-tooltip="Parameter class from metadata (e.g. 7B).">Parameters</div>
                                                     <div class="spec-value">{{ model.details.parameter_size if model.details is defined and model.details.parameter_size is defined else 'Unknown' }}</div>
                                                 </div>
                                             </div>
@@ -442,7 +464,7 @@
                                                     <i class="fas fa-hdd"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label">Size</div>
+                                                    <div class="spec-label" data-dashboard-tooltip="Disk space used by this model’s files.">Size</div>
                                                     <div class="spec-value text-nowrap">{{ model.formatted_size|default(model.size|filesizeformat if model.size else 'Unknown') }}</div>
                                                 </div>
                                             </div>
@@ -451,27 +473,27 @@
                                                     <i class="fas fa-align-left"></i>
                                                 </div>
                                                 <div class="spec-content">
-                                                    <div class="spec-label">Context</div>
+                                                    <div class="spec-label" data-dashboard-tooltip="Default or reported max context (tokens) for this tag.">Context</div>
                                                     <div class="spec-value">{{ model.context_length or (model.details or {}).get('context_length') or 'Unknown' }}</div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="model-actions">
-                                        <button class="btn btn-success" onclick="startModel(this.closest('.model-card').dataset.modelName)" title="Start model" aria-label="Start model">
-                                            <i class="fas fa-play"></i> <span class="d-none d-sm-inline">Start</span>
+                                    <div class="model-actions model-actions--available">
+                                        <button class="btn btn-success" onclick="startModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Load into memory so you can use it via API, CLI, or apps (ollama run)." aria-label="Start model">
+                                            <i class="fas fa-play"></i> <span class="model-action-btn-label">Start</span>
                                         </button>
-                                        <button class="btn btn-primary" onclick="restartModel(this.closest('.model-card').dataset.modelName)" title="Restart model" aria-label="Restart model">
-                                            <i class="fas fa-redo"></i> <span class="d-none d-sm-inline">Restart</span>
+                                        <button type="button" class="btn btn-primary" data-model-action="restart" onclick="restartModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="If already running: reload weights (e.g. after changing files). If not running, same as Start." aria-label="Restart model">
+                                            <i class="fas fa-redo"></i> <span class="model-action-btn-label">Restart</span>
                                         </button>
-                                        <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" title="View model information" aria-label="View model information">
-                                            <i class="fas fa-info-circle"></i> <span class="d-none d-sm-inline">Info</span>
+                                        <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Modal with full Ollama model JSON." aria-label="View model information">
+                                            <i class="fas fa-info-circle"></i> <span class="model-action-btn-label">Info</span>
                                         </button>
-                                        <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" title="Settings" aria-label="Settings">
-                                            <i class="fas fa-cog"></i> <span class="d-none d-sm-inline">Settings</span>
+                                        <button class="btn btn-secondary" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Per-model defaults for this dashboard (applied on next load/start)." aria-label="Settings">
+                                            <i class="fas fa-cog"></i> <span class="model-action-btn-label">Settings</span>
                                         </button>
-                                        <button class="btn btn-danger" onclick="deleteModel(this.closest('.model-card').dataset.modelName)" title="Delete model" aria-label="Delete model">
-                                            <i class="fas fa-trash"></i> <span class="d-none d-sm-inline">Delete</span>
+                                        <button type="button" class="btn btn-danger" data-model-action="delete" onclick="deleteModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Remove from disk (ollama rm). This cannot be undone." aria-label="Delete model">
+                                            <i class="fas fa-trash"></i> <span class="model-action-btn-label">Delete</span>
                                         </button>
                                     </div>
                                 </div>
@@ -483,25 +505,28 @@
 
                     <!-- Downloadable Models -->
                     <div class="mb-4">
-                        <div class="d-flex align-items-center justify-content-between mb-3">
-                            <div class="d-flex align-items-center gap-2">
+                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 models-mgmt-toolbar">
+                            <div class="d-flex align-items-center gap-2 models-mgmt-toolbar-primary">
                                 <i class="fas fa-star text-warning section-icon"></i>
-                                <span class="fw-semibold text-light section-title-text">Downloadable Models</span>
+                                <span class="fw-semibold text-light section-title-text" data-dashboard-tooltip="Curated suggestions you can pull with Ollama. Use Find Model or CLI for any tag from the full library.">Downloadable Models</span>
                             </div>
-                            <div class="d-flex align-items-center gap-3">
+                            <div class="d-flex align-items-center gap-2 gap-md-3 flex-wrap models-mgmt-toolbar-secondary justify-content-md-end">
                                 <div class="capability-filters d-flex align-items-center gap-1" id="bestModelsFilters">
-                                    <span class="text-muted small me-2">Filters</span>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" title="Toggle Reasoning" onclick="toggleCapabilityFilter('reasoning')">
+                                    <span class="text-muted small me-2" data-dashboard-tooltip="Same as Available: filter the list by capability flags in model metadata.">Filters</span>
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" data-dashboard-tooltip="Filter by reasoning / thinking support (metadata)." onclick="toggleCapabilityFilter('reasoning')">
                                         <i class="fas fa-brain"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" title="Toggle Vision" onclick="toggleCapabilityFilter('vision')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" data-dashboard-tooltip="Filter by image / vision support (metadata)." onclick="toggleCapabilityFilter('vision')">
                                         <i class="fas fa-image"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" title="Toggle Tool Usage" onclick="toggleCapabilityFilter('tools')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" data-dashboard-tooltip="Filter by tool or function-calling support (metadata)." onclick="toggleCapabilityFilter('tools')">
                                         <i class="fas fa-tools"></i>
                                     </button>
                                 </div>
-                                <small class="text-muted d-none d-sm-block">Ollama library</small>
+                                <small class="text-muted models-meta-hint text-center text-md-start" data-dashboard-tooltip="Models listed here align with tags published on ollama.com/library.">Ollama library</small>
+                                <button type="button" class="btn btn-sm btn-outline-primary" data-dashboard-tooltip="Search by model name and pull it with Ollama (any library tag)." onclick="openFindModelModal()">
+                                    <i class="fas fa-search me-1"></i>Find Model
+                                </button>
                             </div>
                         </div>
                         <div class="row g-3" id="downloadableModelsContainer">
@@ -515,7 +540,7 @@
 
                         <!-- View More Button -->
                         <div class="text-center mt-3">
-                            <button id="viewMoreModelsBtn" class="btn btn-outline-secondary" onclick="toggleExtendedModels()">
+                            <button id="viewMoreModelsBtn" class="btn btn-outline-secondary" data-dashboard-tooltip="Load additional downloadable entries below (larger catalog than the default list)." onclick="toggleExtendedModels()">
                                 <i class="fas fa-plus-circle me-2"></i>View More Models
                             </button>
                         </div>
@@ -543,7 +568,10 @@
     </div>
     {% endif %}
 
+    <script src="{{ url_for('static', filename='js/theme.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/tooltips.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/utils.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/modelCardActions.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/modelCards.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/serviceControl.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/settings.js') }}?v={{ timestamp }}"></script>
