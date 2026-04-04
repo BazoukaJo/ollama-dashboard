@@ -56,3 +56,4 @@ To start the dashboard with Windows, copy `StartupFolder\Start Ollama Dashboard.
 ### Feedback
 
 - [GitHub Issues](https://github.com/bazoukajo/ollama-dashboard/issues)
+- [Buy Me a Coffee ☕](https://buymeacoffee.com/bazoukajo)
