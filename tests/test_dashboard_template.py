@@ -3,6 +3,15 @@
 import pytest
 from unittest.mock import patch
 
+# index.html uses system_stats.vram.gpu_3d|round(1); missing keys raise in Jinja and index()
+# falls back to error render with empty models — assertions on running/available cards then fail.
+MOCK_INDEX_SYSTEM_STATS = {
+    'cpu_percent': 0,
+    'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0},
+    'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0, 'gpu_3d': 0},
+    'disk': {'percent': 0},
+}
+
 
 @pytest.fixture
 def app():
@@ -19,6 +28,22 @@ def client(app):
     return app.test_client()
 
 
+@pytest.fixture(autouse=True)
+def _mock_ollama_installed_for_dashboard(app):  # pylint: disable=unused-argument
+    """Stable index(): installed Ollama + no GitHub call (avoids flaky CI / sandbox)."""
+    from app.routes import main
+    fake_upd = {
+        'update_available': False,
+        'current_version': '0.17.0',
+        'latest_version': None,
+    }
+    with patch.object(main.ollama_service, 'is_ollama_installed', return_value=True), patch(
+        'app.routes.main.run_startup_ollama_update_check',
+        return_value=fake_upd,
+    ):
+        yield
+
+
 class TestCapabilityFiltersVisibility:
     """Capability filters should appear only in the first section with content."""
 
@@ -29,21 +54,20 @@ class TestCapabilityFiltersVisibility:
     def test_filters_in_running_when_running_has_models(
         self, mock_version, mock_stats, mock_available, mock_running, client
     ):
-        """When Running has models, filters appear only in Running section."""
+        """When Running has models, section and per-card capability icons are present."""
         mock_running.return_value = [{'name': 'llama3.1:8b'}]
         mock_available.return_value = []
-        mock_stats.return_value = {
-            'cpu_percent': 0, 'memory': {'percent': 0},
-            'vram': {'percent': 0}, 'disk': {'percent': 0},
-        }
+        mock_stats.return_value = dict(MOCK_INDEX_SYSTEM_STATS)
         mock_version.return_value = '0.17.0'
 
         response = client.get('/')
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert 'runningModelsFilters' in html
-        assert 'capability-filters' in html
+        assert 'runningModelsContainer' in html
+        assert 'Running Models' in html
+        assert 'llama3.1:8b' in html
+        assert 'capability-icon' in html
 
     @patch('app.routes.main.ollama_service.get_running_models')
     @patch('app.routes.main.ollama_service.get_available_models')
@@ -57,10 +81,7 @@ class TestCapabilityFiltersVisibility:
         mock_available.return_value = [
             {'name': 'llama3.1:8b', 'size': 1000, 'details': {}}
         ]
-        mock_stats.return_value = {
-            'cpu_percent': 0, 'memory': {'percent': 0},
-            'vram': {'percent': 0}, 'disk': {'percent': 0},
-        }
+        mock_stats.return_value = dict(MOCK_INDEX_SYSTEM_STATS)
         mock_version.return_value = '0.17.0'
 
         response = client.get('/')
@@ -80,10 +101,7 @@ class TestCapabilityFiltersVisibility:
         """When no Running and no Available, filters in Downloadable Models."""
         mock_running.return_value = []
         mock_available.return_value = []
-        mock_stats.return_value = {
-            'cpu_percent': 0, 'memory': {'percent': 0},
-            'vram': {'percent': 0}, 'disk': {'percent': 0},
-        }
+        mock_stats.return_value = dict(MOCK_INDEX_SYSTEM_STATS)
         mock_version.return_value = '0.17.0'
 
         response = client.get('/')
@@ -109,21 +127,18 @@ class TestModelCardStructure:
             {'name': 'llama3.1:8b', 'details': {'family': 'llama'}, 'parameter_size': '8B'}
         ]
         mock_available.return_value = []
-        mock_stats.return_value = {
-            'cpu_percent': 0, 'memory': {'percent': 0},
-            'vram': {'percent': 0}, 'disk': {'percent': 0},
-        }
+        mock_stats.return_value = dict(MOCK_INDEX_SYSTEM_STATS)
         mock_version.return_value = '0.17.0'
 
         response = client.get('/')
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert 'spec-label">Family' in html
-        assert 'spec-label">Parameters' in html
-        assert 'spec-label">Size' in html
+        assert 'class="spec-label">Family' in html
+        assert 'class="spec-label">Parameters' in html
+        assert 'class="spec-label">Size' in html
         assert 'GPU Allocation' in html or 'spec-label' in html
-        assert 'spec-label">Context' in html
+        assert 'class="spec-label">Context' in html
         assert 'spec-row' in html
 
     @patch('app.routes.main.ollama_service.get_running_models')
@@ -138,18 +153,15 @@ class TestModelCardStructure:
         mock_available.return_value = [
             {'name': 'llama3.1:8b', 'size': 5000000000, 'details': {'family': 'llama'}}
         ]
-        mock_stats.return_value = {
-            'cpu_percent': 0, 'memory': {'percent': 0},
-            'vram': {'percent': 0}, 'disk': {'percent': 0},
-        }
+        mock_stats.return_value = dict(MOCK_INDEX_SYSTEM_STATS)
         mock_version.return_value = '0.17.0'
 
         response = client.get('/')
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert 'spec-label">Family' in html
-        assert 'spec-label">Context' in html
+        assert 'class="spec-label">Family' in html
+        assert 'class="spec-label">Context' in html
 
 
 class TestSectionHeaders:
@@ -165,10 +177,7 @@ class TestSectionHeaders:
         """Dashboard has System Resources, model sections, and header."""
         mock_running.return_value = []
         mock_available.return_value = []
-        mock_stats.return_value = {
-            'cpu_percent': 0, 'memory': {'percent': 0},
-            'vram': {'percent': 0}, 'disk': {'percent': 0},
-        }
+        mock_stats.return_value = dict(MOCK_INDEX_SYSTEM_STATS)
         mock_version.return_value = '0.17.0'
 
         response = client.get('/')

@@ -107,8 +107,10 @@ class OllamaServiceModels:
                 f"Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct. ({exc})"
             ) from exc
 
-    def get_ollama_version(self):
+    def get_ollama_version(self, force_refresh=False):
         """Get the Ollama server version."""
+        if force_refresh:
+            self.clear_cache('ollama_version')
         cached = self._get_cached('ollama_version', ttl_seconds=300)
         if cached is not None:
             return cached

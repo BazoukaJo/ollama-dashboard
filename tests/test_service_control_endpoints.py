@@ -35,6 +35,24 @@ class TestServiceControls(unittest.TestCase):
         self.assertIn('success', data)
         self.assertTrue(data['success'])
 
+    @patch('app.routes.main.ollama_service.update_ollama')
+    def test_update_ollama_endpoint(self, mock_update):
+        mock_update.return_value = {"success": True, "message": "Ollama is already up to date (winget). Ollama started successfully."}
+        response = self.client.post('/api/service/update-ollama')
+        self.assertEqual(response.status_code, 200)
+        data = response.json
+        self.assertIn('success', data)
+        self.assertTrue(data['success'])
+
+    @patch('app.routes.main.ollama_service.install_ollama')
+    def test_install_ollama_endpoint(self, mock_install):
+        mock_install.return_value = {"success": True, "message": "Ollama installed via winget. Ollama started successfully."}
+        response = self.client.post('/api/service/install-ollama')
+        self.assertEqual(response.status_code, 200)
+        data = response.json
+        self.assertIn('success', data)
+        self.assertTrue(data['success'])
+
 
 if __name__ == '__main__':
     unittest.main()

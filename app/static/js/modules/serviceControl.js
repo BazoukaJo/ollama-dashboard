@@ -163,12 +163,142 @@
     modal.show();
   }
 
+  const UPDATE_FETCH_MS = 900000; // 15 minutes (winget/install script can be slow)
+
+  async function updateOllamaService(){
+    const btn = document.getElementById('updateOllamaBtn');
+    const original = btn ? btn.innerHTML : null;
+    if(btn){ btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>'; btn.disabled=true; }
+    const ctrl = new AbortController();
+    const timer = setTimeout(function(){ ctrl.abort(); }, UPDATE_FETCH_MS);
+    try {
+      const resp = await fetch('/api/service/update-ollama', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      let data = {};
+      try { data = await resp.json(); } catch(_){}
+      if(data.success){
+        window.showNotification(data.message || 'Ollama updated.', 'success');
+        const startTime = Date.now();
+        const poll = async function(){
+          if(Date.now() - startTime > 120000){ location.reload(); return; }
+          try {
+            const h = await fetch('/api/health');
+            if(h.ok){
+              const hj = await h.json();
+              if(hj.status === 'healthy'){ location.reload(); return; }
+            }
+          } catch(_){}
+          setTimeout(poll, 2000);
+        };
+        setTimeout(poll, 2000);
+      } else {
+        window.showNotification(data.message || ('Update failed: ' + (resp.statusText || 'error')), 'error');
+        if(btn) btn.disabled = false;
+      }
+    } catch(e){
+      clearTimeout(timer);
+      const msg = e && e.name === 'AbortError' ? 'Update timed out (waited 15 minutes).' : ('Failed to update Ollama: ' + (e.message || 'Network error'));
+      window.showNotification(msg, 'error');
+      if(btn) btn.disabled = false;
+    } finally {
+      if(btn && original !== null) btn.innerHTML = original;
+    }
+  }
+
+  function showUpdateOllamaConfirm(){
+    const confirmBtn = document.getElementById('confirmUpdateOllamaBtn');
+    const modalEl = document.getElementById('updateOllamaModal');
+    if(!confirmBtn || !modalEl){ updateOllamaService(); return; }
+    const handler = async function(){
+      confirmBtn.disabled = true;
+      await updateOllamaService();
+      const m = bootstrap.Modal.getInstance(modalEl);
+      if(m) m.hide();
+      confirmBtn.disabled = false;
+      confirmBtn.removeEventListener('click', handler);
+    };
+    confirmBtn.addEventListener('click', handler);
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+  }
+
+  const INSTALL_FETCH_MS = 900000;
+
+  async function installOllamaService(){
+    const btn = document.getElementById('installOllamaBtn');
+    const original = btn ? btn.innerHTML : null;
+    if(btn){ btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>'; btn.disabled=true; }
+    const ctrl = new AbortController();
+    const timer = setTimeout(function(){ ctrl.abort(); }, INSTALL_FETCH_MS);
+    try {
+      const resp = await fetch('/api/service/install-ollama', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      let data = {};
+      try { data = await resp.json(); } catch(_){}
+      if(data.success){
+        window.showNotification(data.message || 'Ollama installed.', 'success');
+        const startTime = Date.now();
+        const poll = async function(){
+          if(Date.now() - startTime > 120000){ location.reload(); return; }
+          try {
+            const h = await fetch('/api/health');
+            if(h.ok){
+              const hj = await h.json();
+              if(hj.status === 'healthy'){ location.reload(); return; }
+            }
+          } catch(_){}
+          setTimeout(poll, 2000);
+        };
+        setTimeout(poll, 2000);
+      } else {
+        window.showNotification(data.message || ('Install failed: ' + (resp.statusText || 'error')), 'error');
+        if(btn) btn.disabled = false;
+      }
+    } catch(e){
+      clearTimeout(timer);
+      const msg = e && e.name === 'AbortError' ? 'Install timed out (waited 15 minutes).' : ('Failed to install Ollama: ' + (e.message || 'Network error'));
+      window.showNotification(msg, 'error');
+      if(btn) btn.disabled = false;
+    } finally {
+      if(btn && original !== null) btn.innerHTML = original;
+    }
+  }
+
+  function showInstallOllamaConfirm(){
+    const confirmBtn = document.getElementById('confirmInstallOllamaBtn');
+    const modalEl = document.getElementById('installOllamaModal');
+    if(!confirmBtn || !modalEl){ installOllamaService(); return; }
+    const handler = async function(){
+      confirmBtn.disabled = true;
+      await installOllamaService();
+      const m = bootstrap.Modal.getInstance(modalEl);
+      if(m) m.hide();
+      confirmBtn.disabled = false;
+      confirmBtn.removeEventListener('click', handler);
+    };
+    confirmBtn.addEventListener('click', handler);
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+  }
+
   function init(){ updateHealthStatus(); }
 
-  window.serviceControl = { updateHealthStatus, updateServiceControlButtons, startOllamaService, stopOllamaService, restartOllamaService, showRestartConfirm, init };
+  window.serviceControl = { updateHealthStatus, updateServiceControlButtons, startOllamaService, stopOllamaService, restartOllamaService, showRestartConfirm, updateOllamaService, showUpdateOllamaConfirm, installOllamaService, showInstallOllamaConfirm, init };
   // Expose legacy globals for existing inline onclick handlers
   window.startOllamaService = startOllamaService;
   window.stopOllamaService = stopOllamaService;
   window.restartOllamaService = restartOllamaService;
   window.showRestartConfirm = showRestartConfirm;
+  window.updateOllamaService = updateOllamaService;
+  window.showUpdateOllamaConfirm = showUpdateOllamaConfirm;
+  window.installOllamaService = installOllamaService;
+  window.showInstallOllamaConfirm = showInstallOllamaConfirm;
 })();

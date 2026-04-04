@@ -20,6 +20,7 @@ from flask import Blueprint, Response, current_app, jsonify, render_template, re
 
 from app import __version__ as DASHBOARD_VERSION
 from app.routes import bp
+from app.services.ollama_update_check import run_startup_ollama_update_check
 from app.services.validators import InputValidator
 from app.services.error_handling import (
     TransientErrorDetector,
@@ -64,8 +65,10 @@ def index():
         svc = _get_ollama_service()
         running_models = svc.get_running_models()
         available_models = svc.get_available_models()
-        version = svc.get_ollama_version()
         system_stats = svc.get_system_stats()
+        _upd = run_startup_ollama_update_check(svc, refresh_installed_version=True)
+        version = _upd.get('current_version') or 'Unknown'
+        ollama_installed = svc.is_ollama_installed()
         return render_template(
             'index.html',
             models=running_models,
@@ -74,6 +77,9 @@ def index():
             error=None,
             timezone=_get_timezone_name(),
             ollama_version=version,
+            ollama_installed=ollama_installed,
+            ollama_update_available=bool(_upd.get('update_available')),
+            ollama_update_latest_version=_upd.get('latest_version'),
             dashboard_version=DASHBOARD_VERSION,
             timestamp=int(time.time()),
         )
@@ -83,6 +89,18 @@ def index():
             'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0},
             'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0, 'gpu_3d': 0},
         }
+        _upd = {'update_available': False, 'latest_version': None}
+        try:
+            _upd = run_startup_ollama_update_check(
+                _get_ollama_service(),
+                refresh_installed_version=True,
+            )
+        except Exception:
+            pass
+        try:
+            ollama_installed = _get_ollama_service().is_ollama_installed()
+        except Exception:
+            ollama_installed = False
         return render_template(
             'index.html',
             models=[],
@@ -91,6 +109,9 @@ def index():
             error=str(e),
             timezone=_get_timezone_name(),
             ollama_version='Unknown',
+            ollama_installed=ollama_installed,
+            ollama_update_available=bool(_upd.get('update_available')),
+            ollama_update_latest_version=_upd.get('latest_version'),
             dashboard_version=DASHBOARD_VERSION,
             timestamp=int(time.time()),
         )
@@ -1100,6 +1121,27 @@ def restart_service():
         return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
     except Exception as e:
         return {"success": False, "message": f"Unexpected error restarting service: {str(e)}"}, 500
+
+
+@bp.route('/api/service/update-ollama', methods=['POST'])
+def update_ollama():
+    """Stop Ollama, run platform upgrade (winget/brew/install.sh), then start again."""
+    try:
+        result = _get_ollama_service().update_ollama()
+        return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
+    except Exception as e:
+        return {"success": False, "message": f"Unexpected error updating Ollama: {str(e)}"}, 500
+
+
+@bp.route('/api/service/install-ollama', methods=['POST'])
+def install_ollama():
+    """Install Ollama via winget/choco/brew/install.sh when not detected, then start service."""
+    try:
+        result = _get_ollama_service().install_ollama()
+        return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
+    except Exception as e:
+        return {"success": False, "message": f"Unexpected error installing Ollama: {str(e)}"}, 500
+
 
 @bp.route('/api/full/restart', methods=['POST'])
 def full_restart():

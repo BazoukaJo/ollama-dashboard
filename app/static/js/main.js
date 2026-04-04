@@ -38,7 +38,13 @@ function updateTimes() {
     const nextEl = document.getElementById("nextRefresh");
     if (nextEl) {
       refreshCountdown--;
-      if (refreshCountdown <= 0) refreshCountdown = getPollIntervalSec();
+      if (refreshCountdown <= 0) {
+        refreshCountdown = getPollIntervalSec();
+        // Keep running / available lists in sync when models change outside this app (CLI, other UIs).
+        if (typeof updateModelData === "function") {
+          void updateModelData();
+        }
+      }
       nextEl.textContent = String(refreshCountdown);
     }
   };
@@ -1005,7 +1011,8 @@ async function updateSystemStats() {
 }
 
 let _versionPollCounter = 0;
-const VERSION_POLL_EVERY_N = 12; // ~60s at 5s interval
+// Version fetch every N model polls (default poll interval 10s from data-poll-interval → ~120s).
+const VERSION_POLL_EVERY_N = 12;
 
 // Model data update function
 async function updateModelData() {

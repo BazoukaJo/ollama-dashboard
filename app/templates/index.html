@@ -16,23 +16,39 @@
     <!-- Settings button removed (deprecated global settings page) -->
 
     <div class="container py-3">
-        <div class="title-container text-center mb-1">
-            <div class="d-flex align-items-center justify-content-center gap-2">
+        <header class="title-container text-center mb-1" role="banner">
+            <div class="dashboard-brand-row d-flex align-items-center justify-content-center gap-2 flex-wrap">
                 <div class="title-logo-small">
                     <img src="{{ url_for('static', filename='ollama-logo.png') }}" alt="Ollama">
                 </div>
                 <h2 class="page-title-minimal mb-0">Ollama Dashboard</h2>
-                <small class="text-muted fw-light ms-2">v{{ dashboard_version|default('1.0001') }}</small>
+            </div>
+            <div class="dashboard-meta-row d-flex align-items-center justify-content-center flex-wrap gap-2 gap-md-3 mt-2">
+                <small class="text-muted fw-light">Dashboard v{{ dashboard_version|default('1.0001') }}</small>
+                <span class="dashboard-meta-sep text-muted" aria-hidden="true">·</span>
                 {% if ollama_version != 'Unknown' %}
-                <small class="text-muted fw-light ms-2">Ollama v{{ ollama_version }}</small>
+                <small class="text-muted fw-light">Ollama v{{ ollama_version }}</small>
+                {% elif not ollama_installed %}
+                <small class="text-warning fw-light">Ollama not detected</small>
+                {% else %}
+                <small class="text-muted fw-light">Ollama</small>
+                {% endif %}
+                {% if not ollama_installed %}
+                <button type="button" class="btn btn-sm btn-success" id="installOllamaBtn" title="Download and install Ollama (winget, Homebrew, or official script), then start the service. May require administrator approval on Windows." onclick="showInstallOllamaConfirm()">
+                    <i class="fas fa-download me-1"></i>Install Ollama
+                </button>
+                {% elif ollama_update_available %}
+                <button type="button" class="btn btn-sm btn-outline-info" id="updateOllamaBtn" title="{% if ollama_update_latest_version %}Latest: {{ ollama_update_latest_version }} — {% endif %}Stop Ollama, upgrade, then restart" onclick="showUpdateOllamaConfirm()">
+                    <i class="fas fa-arrow-circle-up me-1"></i>Update Ollama
+                </button>
                 {% endif %}
             </div>
-        </div>
+        </header>
 
         <div class="refresh-indicator mb-2 {% if error %}error{% endif %} d-flex align-items-center gap-2" data-timezone="{{ timezone }}" data-poll-interval="10">
             <div class="dot"></div>
-            <span>Last updated: <span id="lastUpdate"></span> • Next refresh in <span id="nextRefresh">10</span>s</span>
-            <button type="button" class="btn btn-sm btn-outline-secondary btn-refresh" id="refreshDashboardBtn" title="Refresh dashboard data" onclick="refreshDashboardData()" aria-label="Refresh">
+            <span>Updated <span id="lastUpdate"></span> · next poll <span id="nextRefresh">10</span>s</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary btn-refresh" id="refreshDashboardBtn" title="Refresh dashboard data" onclick="refreshDashboardData()" aria-label="Refresh dashboard">
                 <i class="fas fa-sync-alt"></i>
             </button>
         </div>
@@ -55,6 +71,52 @@
                 </div>
             </div>
         </div>
+
+        {% if not ollama_installed %}
+        <div class="modal fade" id="installOllamaModal" tabindex="-1" aria-labelledby="installOllamaModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content bg-dark text-light">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="installOllamaModalLabel">Install Ollama</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>This will run the platform installer (e.g. <code class="text-info">winget install Ollama.Ollama</code>, Homebrew cask, or the <a href="https://ollama.com/download" target="_blank" rel="noopener" class="text-info">official install script</a> on Linux), then start the Ollama service. It can take several minutes.</p>
+                        <p class="text-muted small mb-0">Windows may show a UAC or installer prompt. You can still use <strong>Start</strong>, <strong>Stop</strong>, and <strong>Restart</strong> next to the health badge after Ollama is installed.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button id="confirmInstallOllamaBtn" type="button" class="btn btn-success">Install now</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if ollama_update_available %}
+        <!-- Update Ollama confirmation modal (only when startup check found a newer release) -->
+        <div class="modal fade" id="updateOllamaModal" tabindex="-1" aria-labelledby="updateOllamaModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content bg-dark text-light">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="updateOllamaModalLabel">Update Ollama</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        {% if ollama_update_latest_version %}
+                        <p class="text-info small">Newer release available: <strong>{{ ollama_update_latest_version }}</strong> (you have v{{ ollama_version }}).</p>
+                        {% endif %}
+                        <p>This will stop the Ollama service, run the platform updater (e.g. winget, Homebrew, or the official install script), then start Ollama again. Running models and in-flight requests will be interrupted. The step can take several minutes.</p>
+                        <p class="text-muted small mb-0">On Windows, elevation may be required if the updater prompts for administrator approval.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button id="confirmUpdateOllamaBtn" type="button" class="btn btn-info">Update now</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Find Model modal -->
         <div class="modal fade" id="findModelModal" tabindex="-1" aria-labelledby="findModelModalLabel" aria-hidden="true">
@@ -88,14 +150,14 @@
                 <span id="healthText">Checking health...</span>
             </div>
             <div class="service-controls d-flex gap-2 align-items-center">
-                <button id="startServiceBtn" class="btn btn-sm btn-success" title="Start Ollama service" onclick="startOllamaService()">
-                    <i class="fas fa-play"></i>
+                <button id="startServiceBtn" class="btn btn-sm btn-success" type="button" title="Start Ollama service" aria-label="Start Ollama service" onclick="startOllamaService()">
+                    <i class="fas fa-play" aria-hidden="true"></i>
                 </button>
-                <button id="stopServiceBtn" class="btn btn-sm btn-secondary" title="Stop Ollama service" onclick="stopOllamaService()">
-                    <i class="fas fa-stop"></i>
+                <button id="stopServiceBtn" class="btn btn-sm btn-secondary" type="button" title="Stop Ollama service" aria-label="Stop Ollama service" onclick="stopOllamaService()">
+                    <i class="fas fa-stop" aria-hidden="true"></i>
                 </button>
-                <button id="restartServiceBtn" class="btn btn-sm btn-warning" title="Restart Ollama service" onclick="showRestartConfirm()">
-                    <i class="fas fa-sync-alt"></i>
+                <button id="restartServiceBtn" class="btn btn-sm btn-warning" type="button" title="Restart Ollama service" aria-label="Restart Ollama service" onclick="showRestartConfirm()">
+                    <i class="fas fa-sync-alt" aria-hidden="true"></i>
                 </button>
             </div>
         </div>

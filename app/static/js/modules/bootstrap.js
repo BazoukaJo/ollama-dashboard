@@ -33,6 +33,7 @@
 
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") {
+      if (typeof updateModelData === "function") updateModelData();
       startPolling();
     } else {
       stopPolling();

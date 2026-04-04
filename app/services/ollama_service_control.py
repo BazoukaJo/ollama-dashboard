@@ -3,9 +3,10 @@
 
 import os
 import platform
+import shutil
 import subprocess
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Tuple
 
 import requests
 
@@ -326,6 +327,57 @@ class OllamaServiceControl:
                 return False, f"API verification error: {str(e)[:100]}"
 
         return False, "API verification failed after retries"
+
+    def is_ollama_installed(self) -> bool:
+        """True if the Ollama CLI/binary is present (not whether the service is running)."""
+        try:
+            if platform.system() == "Windows":
+                common_paths = [
+                    r"C:\Program Files\Ollama\ollama.exe",
+                    r"%LOCALAPPDATA%\Programs\Ollama\ollama.exe",
+                    r"C:\Users\%USERNAME%\AppData\Local\Programs\Ollama\ollama.exe",
+                    os.path.expanduser(r"~\AppData\Local\Programs\Ollama\ollama.exe"),
+                ]
+                for path in common_paths:
+                    expanded = os.path.expandvars(os.path.expanduser(path))
+                    if expanded and os.path.isfile(expanded):
+                        return True
+                try:
+                    result = subprocess.run(
+                        ["where", "ollama"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        check=False,
+                    )
+                    if result.returncode == 0 and (result.stdout or "").strip():
+                        return True
+                except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                    pass
+                return False
+            try:
+                result = subprocess.run(
+                    ["which", "ollama"],
+                    capture_output=True,
+                    text=True,
+                    timeout=8,
+                    check=False,
+                )
+                if result.returncode == 0 and (result.stdout or "").strip():
+                    return True
+            except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+                pass
+            for path in (
+                "/usr/local/bin/ollama",
+                "/usr/bin/ollama",
+                os.path.expanduser("~/.local/bin/ollama"),
+            ):
+                if path and os.path.isfile(path) and os.access(path, os.X_OK):
+                    return True
+            return False
+        except Exception:
+            self.logger.debug("is_ollama_installed check failed", exc_info=True)
+            return False
 
     def get_service_status(self) -> bool:
         """Check if Ollama service is running."""
@@ -669,6 +721,353 @@ class OllamaServiceControl:
 
         except Exception as e:
             return {"success": False, "message": f"Unexpected error restarting service: {str(e)}"}
+
+    def _run_ollama_upgrade(self) -> Tuple[bool, str]:
+        """Run platform-specific Ollama upgrade (service must be stopped). Returns (ok, detail)."""
+        system = platform.system()
+        if system == "Windows":
+            return self._upgrade_ollama_windows()
+        if system == "Darwin":
+            return self._upgrade_ollama_darwin()
+        return self._upgrade_ollama_linux()
+
+    def _upgrade_ollama_windows(self) -> Tuple[bool, str]:
+        winget_err: Optional[str] = None
+        winget = shutil.which("winget")
+        if winget:
+            try:
+                proc = subprocess.run(
+                    [
+                        winget,
+                        "upgrade",
+                        "-e",
+                        "--id",
+                        "Ollama.Ollama",
+                        "--accept-package-agreements",
+                        "--accept-source-agreements",
+                        "--silent",
+                        "--disable-interactivity",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "winget upgrade timed out (over 15 minutes)."
+            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+            low = combined.lower()
+            if proc.returncode == 0:
+                return True, combined or "Ollama upgraded via winget."
+            if any(
+                phrase in low
+                for phrase in (
+                    "no newer package",
+                    "no applicable upgrade",
+                    "no updates found",
+                    "already installed",
+                    "is already installed",
+                )
+            ):
+                return True, "Ollama is already up to date (winget)."
+            self.logger.warning("winget upgrade failed: %s", combined[-2000:])
+            winget_err = (combined or f"winget exit {proc.returncode}")[-1500:]
+
+        choco = shutil.which("choco")
+        if choco:
+            try:
+                proc = subprocess.run(
+                    [choco, "upgrade", "ollama", "-y"],
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "Chocolatey upgrade timed out (over 15 minutes)."
+            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+            if proc.returncode == 0:
+                return True, combined or "Ollama upgraded via Chocolatey."
+            self.logger.warning("choco upgrade failed: %s", combined[-2000:])
+            choco_err = f"Chocolatey failed (exit {proc.returncode}). {combined[-800:]}"
+            if winget_err:
+                return False, f"{winget_err} | {choco_err}"
+            return False, choco_err
+
+        if winget_err:
+            return False, winget_err
+        return (
+            False,
+            "Neither winget nor choco found. Install updates from https://ollama.com/download/windows",
+        )
+
+    def _upgrade_ollama_darwin(self) -> Tuple[bool, str]:
+        brew = shutil.which("brew")
+        if not brew:
+            return False, "Homebrew not found. Update from https://ollama.com/download/mac"
+        for args in (["upgrade", "--cask", "ollama"], ["upgrade", "ollama"]):
+            try:
+                proc = subprocess.run(
+                    [brew] + args,
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "brew upgrade timed out (over 15 minutes)."
+            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+            low = combined.lower()
+            if proc.returncode == 0:
+                return True, combined or "Ollama upgraded via Homebrew."
+            if "already up-to-date" in low or "already installed" in low:
+                return True, "Ollama is already up to date (Homebrew)."
+        return False, f"brew upgrade failed: {combined[-800:]}"
+
+    def _upgrade_ollama_linux(self) -> Tuple[bool, str]:
+        try:
+            proc = subprocess.run(
+                ["/bin/sh", "-c", "curl -fsSL https://ollama.com/install.sh | sh"],
+                capture_output=True,
+                text=True,
+                timeout=900,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return False, "Install script timed out (over 15 minutes)."
+        combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        if proc.returncode == 0:
+            return True, combined or "Ollama updated via official install script."
+        return False, f"Install script failed (exit {proc.returncode}). {combined[-800:]}"
+
+    def update_ollama(self):
+        """Stop Ollama, run platform upgrade, then start the service again."""
+        try:
+            try:
+                if self._background_stats and self._background_stats.is_alive():
+                    self._stop_background.set()
+                    self._background_stats.join(timeout=5)
+            except Exception:
+                pass
+
+            if self.get_service_status():
+                self._force_kill_ollama_process()
+                time.sleep(2)
+                for _ in range(15):
+                    if not self.get_service_status():
+                        break
+                    time.sleep(1)
+                if self.get_service_status():
+                    self.stop_service()
+                    for _ in range(10):
+                        if not self.get_service_status():
+                            break
+                        time.sleep(1)
+                if self.get_service_status():
+                    try:
+                        self._stop_background.clear()
+                        self._start_background_updates()
+                    except Exception:
+                        pass
+                    return {"success": False, "message": "Ollama could not be stopped before update."}
+                time.sleep(10)
+
+            ok, upgrade_msg = self._run_ollama_upgrade()
+            start_result = self.start_service()
+
+            try:
+                if hasattr(self, "clear_all_caches") and callable(getattr(self, "clear_all_caches", None)):
+                    self.clear_all_caches()
+            except Exception:
+                pass
+            try:
+                self._stop_background.clear()
+                self._start_background_updates()
+            except Exception:
+                pass
+
+            if not ok:
+                msg = f"Update step failed: {upgrade_msg}"
+                if start_result.get("success"):
+                    return {"success": False, "message": f"{msg} Ollama was started again."}
+                return {
+                    "success": False,
+                    "message": f"{msg} Could not restart Ollama: {start_result.get('message', 'unknown')}.",
+                }
+
+            if start_result.get("success"):
+                return {
+                    "success": True,
+                    "message": f"{upgrade_msg} Ollama started successfully.",
+                }
+            return {
+                "success": False,
+                "message": f"Update reported success but start failed: {start_result.get('message')}. {upgrade_msg}",
+            }
+        except Exception as e:
+            try:
+                self._stop_background.clear()
+                self._start_background_updates()
+            except Exception:
+                pass
+            return {"success": False, "message": f"Unexpected error during Ollama update: {str(e)}"}
+
+    def _run_ollama_install(self) -> Tuple[bool, str]:
+        """Run platform-specific first-time install. Returns (ok, detail)."""
+        system = platform.system()
+        if system == "Windows":
+            return self._install_ollama_windows()
+        if system == "Darwin":
+            return self._install_ollama_darwin()
+        return self._install_ollama_linux()
+
+    def _install_ollama_windows(self) -> Tuple[bool, str]:
+        winget_err: Optional[str] = None
+        winget = shutil.which("winget")
+        if winget:
+            try:
+                proc = subprocess.run(
+                    [
+                        winget,
+                        "install",
+                        "-e",
+                        "--id",
+                        "Ollama.Ollama",
+                        "--accept-package-agreements",
+                        "--accept-source-agreements",
+                        "--silent",
+                        "--disable-interactivity",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "winget install timed out (over 15 minutes)."
+            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+            low = combined.lower()
+            if proc.returncode == 0:
+                return True, combined or "Ollama installed via winget."
+            if any(
+                phrase in low
+                for phrase in (
+                    "already installed",
+                    "is already installed",
+                    "no applicable upgrade",
+                    "a newer version was not found",
+                    "no newer package",
+                )
+            ):
+                return True, "Ollama is already installed (winget)."
+            self.logger.warning("winget install failed: %s", combined[-2000:])
+            winget_err = (combined or f"winget exit {proc.returncode}")[-1500:]
+
+        choco = shutil.which("choco")
+        if choco:
+            try:
+                proc = subprocess.run(
+                    [choco, "install", "ollama", "-y"],
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "Chocolatey install timed out (over 15 minutes)."
+            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+            low = combined.lower()
+            if proc.returncode == 0:
+                return True, combined or "Ollama installed via Chocolatey."
+            if "already installed" in low or "nothing to do" in low:
+                return True, "Ollama is already installed (Chocolatey)."
+            choco_err = f"Chocolatey failed (exit {proc.returncode}). {combined[-800:]}"
+            if winget_err:
+                return False, f"{winget_err} | {choco_err}"
+            return False, choco_err
+
+        if winget_err:
+            return False, winget_err
+        return (
+            False,
+            "Neither winget nor choco found. Install from https://ollama.com/download/windows",
+        )
+
+    def _install_ollama_darwin(self) -> Tuple[bool, str]:
+        brew = shutil.which("brew")
+        if not brew:
+            return False, "Homebrew not found. Install from https://ollama.com/download/mac"
+        for args in (["install", "--cask", "ollama"], ["install", "ollama"]):
+            try:
+                proc = subprocess.run(
+                    [brew] + args,
+                    capture_output=True,
+                    text=True,
+                    timeout=900,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "brew install timed out (over 15 minutes)."
+            combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+            low = combined.lower()
+            if proc.returncode == 0:
+                return True, combined or "Ollama installed via Homebrew."
+            if "already installed" in low or "is already installed" in low:
+                return True, "Ollama is already installed (Homebrew)."
+        return False, f"brew install failed: {combined[-800:]}" if combined else "brew install failed."
+
+    def _install_ollama_linux(self) -> Tuple[bool, str]:
+        return self._upgrade_ollama_linux()
+
+    def install_ollama(self):
+        """Install Ollama via platform package manager or official script, then start the service."""
+        try:
+            try:
+                if self._background_stats and self._background_stats.is_alive():
+                    self._stop_background.set()
+                    self._background_stats.join(timeout=5)
+            except Exception:
+                pass
+
+            ok, detail = self._run_ollama_install()
+            start_result = self.start_service()
+
+            try:
+                if hasattr(self, "clear_all_caches") and callable(getattr(self, "clear_all_caches", None)):
+                    self.clear_all_caches()
+            except Exception:
+                pass
+            try:
+                self._stop_background.clear()
+                self._start_background_updates()
+            except Exception:
+                pass
+
+            if not ok:
+                msg = f"Install step failed: {detail}"
+                if start_result.get("success"):
+                    return {"success": False, "message": f"{msg} Ollama service was started anyway."}
+                return {
+                    "success": False,
+                    "message": f"{msg} {start_result.get('message', 'Could not start Ollama.')}",
+                }
+
+            if start_result.get("success"):
+                return {
+                    "success": True,
+                    "message": f"{detail} Ollama started successfully.",
+                }
+            return {
+                "success": False,
+                "message": f"Install reported success but start failed: {start_result.get('message')}. {detail}",
+            }
+        except Exception as e:
+            try:
+                self._stop_background.clear()
+                self._start_background_updates()
+            except Exception:
+                pass
+            return {"success": False, "message": f"Unexpected error during Ollama install: {str(e)}"}
 
     def full_restart(self):
         """Comprehensive application restart: clear caches, reload model settings, restart background thread, return health. Does NOT restart Ollama service."""

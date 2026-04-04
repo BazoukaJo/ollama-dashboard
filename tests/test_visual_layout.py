@@ -11,6 +11,21 @@ from pathlib import Path
 import pytest
 from unittest.mock import patch
 
+# Must include vram.gpu_3d (and related keys) or index.html raises during render and /
+# returns the error branch with empty models — layout assertions then fail.
+_MOCK_INDEX_SYSTEM_STATS = {
+    "cpu_percent": 0,
+    "memory": {"percent": 0, "total": 0, "available": 0, "used": 0},
+    "vram": {"percent": 0, "total": 0, "used": 0, "free": 0, "gpu_3d": 0},
+    "disk": {"percent": 0},
+}
+
+_FAKE_STARTUP_UPDATE = {
+    "update_available": False,
+    "current_version": "0.17.0",
+    "latest_version": None,
+}
+
 
 @pytest.fixture
 def app():
@@ -28,6 +43,11 @@ def client(app):
 def _run_with_mocks(client, running=None, available=None):
     """GET / with mocked ollama services. Returns (status_code, html)."""
     with (
+        patch(
+            "app.routes.main.run_startup_ollama_update_check",
+            return_value=dict(_FAKE_STARTUP_UPDATE),
+        ),
+        patch("app.routes.main.ollama_service.is_ollama_installed", return_value=True),
         patch("app.routes.main.ollama_service.get_running_models") as mock_running,
         patch("app.routes.main.ollama_service.get_available_models") as mock_available,
         patch("app.routes.main.ollama_service.get_system_stats") as mock_stats,
@@ -35,12 +55,7 @@ def _run_with_mocks(client, running=None, available=None):
     ):
         mock_running.return_value = running if running is not None else []
         mock_available.return_value = available if available is not None else []
-        mock_stats.return_value = {
-            "cpu_percent": 0,
-            "memory": {"percent": 0},
-            "vram": {"percent": 0},
-            "disk": {"percent": 0},
-        }
+        mock_stats.return_value = dict(_MOCK_INDEX_SYSTEM_STATS)
         mock_version.return_value = "0.17.0"
         r = client.get("/")
     return r.status_code, r.get_data(as_text=True)
