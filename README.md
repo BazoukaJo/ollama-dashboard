@@ -1,6 +1,6 @@
 # Ollama Dashboard
 
-## Version 1.0004
+## Version 1.0005
 
 [![CI](https://github.com/BazoukaJo/ollama-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/BazoukaJo/ollama-dashboard/actions/workflows/ci.yml)
 

@@ -11,16 +11,11 @@
   async function openModelSettingsModal(modelName){
     try {
       const resp = await fetch('/api/models/settings?model=' + encodeURIComponent(modelName));
-      if (!resp.ok) {
-        const text = await resp.text();
-        let msg = `HTTP ${resp.status}`;
-        try {
-          const body = JSON.parse(text);
-          msg = body.message || body.error || msg;
-        } catch (_) { /* not JSON */ }
-        throw new Error(msg);
+      const gr = await readApiJson(resp);
+      if (!gr.responseOk) {
+        throw new Error(gr.message || `HTTP ${gr.status}`);
       }
-      const data = await resp.json();
+      const data = gr.data;
       const settings = data.settings || {};
       const modalHtml = `
       <div class="modal fade" id="modelSettingsModal" tabindex="-1">
@@ -111,9 +106,10 @@
       document.getElementById('ms-apply-recommended').onclick = async ()=>{
         try {
           const r = await fetch('/api/models/settings/reset?model=' + encodeURIComponent(modelName),{method:'POST'});
-          const jr = await r.json();
-          if(jr.success){ window.showNotification(jr.message,'success'); modal.hide(); }
-          else { window.showNotification(jr.message || 'Failed to apply recommended','error'); }
+          const jr = await readApiJson(r);
+          if(!jr.responseOk){ window.showNotification(jr.message || 'Failed to apply recommended','error'); return; }
+          if(jr.data.success){ window.showNotification(jr.data.message,'success'); modal.hide(); }
+          else { window.showNotification(jr.data.message || 'Failed to apply recommended','error'); }
         } catch(err){ window.showNotification('Failed: '+err.message,'error'); }
       };
       modalEl.addEventListener('hidden.bs.modal',()=>{ modalEl.remove(); setTimeout(()=>location.reload(),500); });
@@ -167,7 +163,9 @@
   async function submitModelSettings(modelName,payload){
     try {
       const r = await fetch('/api/models/settings?model=' + encodeURIComponent(modelName),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-      const data = await r.json();
+      const sr = await readApiJson(r);
+      if(!sr.responseOk){ window.showNotification(sr.message || 'Failed to save settings','error'); return; }
+      const data = sr.data;
       if(data.success) {
         window.showNotification(data.message,'success');
         if (typeof updateModelData === 'function') void updateModelData();
@@ -179,7 +177,9 @@
   async function deleteModelSettings(modelName){
     try {
       const r = await fetch('/api/models/settings?model=' + encodeURIComponent(modelName),{method:'DELETE'});
-      const data = await r.json();
+      const dr = await readApiJson(r);
+      if(!dr.responseOk){ window.showNotification(dr.message || 'Failed to delete settings','error'); return; }
+      const data = dr.data;
       if(data.success) {
         window.showNotification(data.message,'success');
         if (typeof updateModelData === 'function') void updateModelData();
@@ -191,7 +191,9 @@
   async function loadRecommendedIntoForm(modelName){
     try {
       const r = await fetch('/api/models/settings/recommended?model=' + encodeURIComponent(modelName));
-      const dataRec = await r.json(); const s = dataRec.settings || {}; const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.value=val; };
+      const rr = await readApiJson(r);
+      if(!rr.responseOk){ window.showNotification(rr.message || 'Failed to load recommended','error'); return; }
+      const dataRec = rr.data; const s = dataRec.settings || {}; const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.value=val; };
       set('ms-temperature', s.temperature ?? 0.75); set('ms-top-k', s.top_k ?? 40); set('ms-top-p', s.top_p ?? 0.9); set('ms-num-ctx', s.num_ctx ?? 4096); set('ms-seed', s.seed ?? 0);
       set('ms-num-predict', s.num_predict ?? 512); set('ms-repeat-last-n', s.repeat_last_n ?? 64); set('ms-repeat-penalty', s.repeat_penalty ?? 1.05);
       set('ms-presence-penalty', s.presence_penalty ?? 0.0); set('ms-frequency-penalty', s.frequency_penalty ?? 0.0); set('ms-min-p', s.min_p ?? 0.05); set('ms-typical-p', s.typical_p ?? 1.0);

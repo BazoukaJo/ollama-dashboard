@@ -1,6 +1,6 @@
 [project]
 name = "ollama-dashboard"
-version = "1.0004"
+version = "1.0005"
 description = "Web dashboard for Ollama — models, settings, system stats"
 readme = "README.md"
 requires-python = ">=3.8"

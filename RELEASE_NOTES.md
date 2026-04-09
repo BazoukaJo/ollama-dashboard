@@ -1,5 +1,11 @@
 # Release Notes
 
+## Version 1.0005 (2026)
+
+- **Client robustness** — Shared `readApiJson()` (`js/modules/utils.js`): every dashboard `fetch` path reads the body once, tolerates non-JSON errors, and avoids `response.json()` throws. Applied across `main.js`, `serviceControl.js`, `settings.js`, and `modelCardActions.js`.
+- **System stats** — Defensive numeric handling when `/api/system/stats` returns an unexpected shape (no thrown `toFixed` on `undefined`).
+- **Health / service actions** — Restart, install, and update flows use the same safe parsing; health polling treats missing `uptime_seconds` as zero.
+
 ## Version 1.0004 (2026)
 
 - **Quality bar** — `ruff check` on `app/`, `tests/`, and `scripts/` in CI (`lint` job); config in `pyproject.toml` (Python 3.8–compatible rule set).

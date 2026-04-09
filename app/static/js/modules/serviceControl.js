@@ -25,7 +25,8 @@
   async function updateHealthStatus(){
     try {
       const response = await fetch('/api/health');
-      const health = await response.json();
+      const hr = await readApiJson(response);
+      const health = hr.responseOk && hr.data ? hr.data : { status: 'unhealthy', error: hr.message || 'Invalid response' };
       const healthBadge = document.getElementById('healthStatus');
       const healthText = document.getElementById('healthText');
       if(!healthBadge || !healthText) return;
@@ -36,7 +37,7 @@
       if (health.status === 'healthy') {
         healthBadge.className = 'badge bg-success health-status-badge dashboard-header-health';
         clearInlineSizing();
-        const uptimeMin = Math.floor(health.uptime_seconds / 60);
+        const uptimeMin = Math.floor((health.uptime_seconds || 0) / 60);
         const uptimeHr = Math.floor(uptimeMin / 60);
         const uptimeDisplay =
           uptimeHr > 0 ? `${uptimeHr}h ${uptimeMin % 60}m` : `${uptimeMin}m`;
@@ -73,13 +74,13 @@
     if(btn){ btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>'; btn.disabled=true; }
     try {
       const resp = await fetch('/api/service/start',{method:'POST',headers:{'Content-Type':'application/json'}});
-      if(!resp.ok){
-        const errorText = await resp.text().catch(()=>'Unknown error');
-        window.showNotification('Failed to start service: '+errorText,'error');
+      const sr = await readApiJson(resp);
+      if(!sr.responseOk){
+        window.showNotification(sr.message || ('Failed to start service: HTTP '+resp.status),'error');
         if(btn) btn.disabled=false;
         return;
       }
-      const data = await resp.json();
+      const data = sr.data;
       if(data.success){ 
         window.showNotification(data.message,'success'); 
         // Update health status and reload after delay
@@ -102,13 +103,13 @@
     if(btn){ btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>'; btn.disabled=true; }
     try {
       const resp = await fetch('/api/service/stop',{method:'POST',headers:{'Content-Type':'application/json'}});
-      if(!resp.ok){
-        const errorText = await resp.text().catch(()=>'Unknown error');
-        window.showNotification('Failed to stop service: '+errorText,'error');
+      const sr = await readApiJson(resp);
+      if(!sr.responseOk){
+        window.showNotification(sr.message || ('Failed to stop service: HTTP '+resp.status),'error');
         if(btn) btn.disabled=false;
         return;
       }
-      const data = await resp.json();
+      const data = sr.data;
       if(data.success){ 
         window.showNotification(data.message,'success'); 
         setTimeout(()=>{ updateHealthStatus(); setTimeout(()=>location.reload(),2000); },2000);
@@ -131,7 +132,13 @@
     try {
       // Only restart Ollama service, not the whole app
       let resp = await fetch('/api/service/restart',{method:'POST',headers:{'Content-Type':'application/json'}});
-      const data = await resp.json();
+      const rr = await readApiJson(resp);
+      if(!rr.responseOk){
+        window.showNotification(rr.message || 'Failed to restart service','error');
+        if(btn) btn.disabled=false;
+        return;
+      }
+      const data = rr.data;
       if(data.success){
         window.showNotification(data.message,'success');
         // Poll health until healthy or timeout then reload
@@ -140,10 +147,8 @@
           if(Date.now() - startTime > 30000){ location.reload(); return; }
           try {
             const h = await fetch('/api/health');
-            if(h.ok){
-              const hj = await h.json();
-              if(hj.status === 'healthy'){ location.reload(); return; }
-            }
+            const hj = await readApiJson(h);
+            if(hj.responseOk && hj.data && hj.data.status === 'healthy'){ location.reload(); return; }
           } catch(_){}
           setTimeout(poll, 1000);
         };
@@ -186,8 +191,8 @@
         signal: ctrl.signal,
       });
       clearTimeout(timer);
-      let data = {};
-      try { data = await resp.json(); } catch(_){}
+      const ur = await readApiJson(resp);
+      const data = ur.responseOk ? ur.data : {};
       if(data.success){
         window.showNotification(data.message || 'Ollama updated.', 'success');
         const startTime = Date.now();
@@ -195,16 +200,14 @@
           if(Date.now() - startTime > 120000){ location.reload(); return; }
           try {
             const h = await fetch('/api/health');
-            if(h.ok){
-              const hj = await h.json();
-              if(hj.status === 'healthy'){ location.reload(); return; }
-            }
+            const hj = await readApiJson(h);
+            if(hj.responseOk && hj.data && hj.data.status === 'healthy'){ location.reload(); return; }
           } catch(_){}
           setTimeout(poll, 2000);
         };
         setTimeout(poll, 2000);
       } else {
-        window.showNotification(data.message || ('Update failed: ' + (resp.statusText || 'error')), 'error');
+        window.showNotification(data.message || ur.message || ('Update failed: ' + (resp.statusText || 'error')), 'error');
         if(btn) btn.disabled = false;
       }
     } catch(e){
@@ -249,8 +252,8 @@
         signal: ctrl.signal,
       });
       clearTimeout(timer);
-      let data = {};
-      try { data = await resp.json(); } catch(_){}
+      const ir = await readApiJson(resp);
+      const data = ir.responseOk ? ir.data : {};
       if(data.success){
         window.showNotification(data.message || 'Ollama installed.', 'success');
         const startTime = Date.now();
@@ -258,16 +261,14 @@
           if(Date.now() - startTime > 120000){ location.reload(); return; }
           try {
             const h = await fetch('/api/health');
-            if(h.ok){
-              const hj = await h.json();
-              if(hj.status === 'healthy'){ location.reload(); return; }
-            }
+            const hj = await readApiJson(h);
+            if(hj.responseOk && hj.data && hj.data.status === 'healthy'){ location.reload(); return; }
           } catch(_){}
           setTimeout(poll, 2000);
         };
         setTimeout(poll, 2000);
       } else {
-        window.showNotification(data.message || ('Install failed: ' + (resp.statusText || 'error')), 'error');
+        window.showNotification(data.message || ir.message || ('Install failed: ' + (resp.statusText || 'error')), 'error');
         if(btn) btn.disabled = false;
       }
     } catch(e){

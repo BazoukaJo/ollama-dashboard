@@ -95,8 +95,9 @@ async function pollForModelStatus(modelName, shouldBeRunning) {
 
     try {
       const response = await fetch("/api/models/running");
-      if (response.ok) {
-        const data = await response.json();
+      const pr = await readApiJson(response);
+      if (pr.responseOk) {
+        const data = pr.data;
         const runningModels = Array.isArray(data.models) ? data.models : [];
         const want = String(modelName || "").trim();
         const isRunning = runningModels.some(
@@ -129,8 +130,9 @@ async function pollForModelDeleted(
     await new Promise((resolve) => setTimeout(resolve, delayMs));
     try {
       const response = await fetch("/api/models/available");
-      if (response.ok) {
-        const data = await response.json();
+      const pr = await readApiJson(response);
+      if (pr.responseOk) {
+        const data = pr.data;
         const models = Array.isArray(data.models) ? data.models : [];
         const stillPresent = models.some(
           (m) =>
@@ -156,7 +158,15 @@ async function startModel(modelName) {
         },
       },
     );
-    const result = await response.json();
+    const r = await readApiJson(response);
+    if (!r.responseOk) {
+      showNotification(
+        r.message || `Failed to start model (HTTP ${r.status})`,
+        "error",
+      );
+      return;
+    }
+    const result = r.data;
     if (result.success) {
       showNotification(result.message, "success");
       await pollForModelStatus(modelName, true);
@@ -195,21 +205,12 @@ async function stopModel(modelName) {
       },
     );
 
-    // Check if response is OK before parsing JSON
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "Unknown error");
-      let errorMessage = `Failed to stop model: HTTP ${response.status}`;
-      try {
-        const errorJson = JSON.parse(errorText);
-        if (errorJson.message) {
-          errorMessage = errorJson.message;
-        }
-      } catch {
-        if (errorText) {
-          errorMessage = errorText;
-        }
-      }
-      showNotification(errorMessage, "error");
+    const sr = await readApiJson(response);
+    if (!sr.responseOk) {
+      showNotification(
+        sr.message || `Failed to stop model (HTTP ${sr.status})`,
+        "error",
+      );
       if (stopButton && originalText !== null) {
         stopButton.innerHTML = originalText;
         stopButton.disabled = false;
@@ -217,8 +218,7 @@ async function stopModel(modelName) {
       return;
     }
 
-    const result = await response.json();
-
+    const result = sr.data;
     if (result.success) {
       showNotification(
         result.message || `Model ${modelName} stopped successfully`,
@@ -279,15 +279,18 @@ async function restartModel(modelName) {
         },
       },
     );
-    const result = await response.json();
-
-    if (!response.ok) {
-      showNotification(result.message || `HTTP ${response.status}`, "error");
-    } else if (result.success) {
+    const r = await readApiJson(response);
+    if (!r.responseOk) {
+      showNotification(
+        r.message || `Failed to restart model (HTTP ${r.status})`,
+        "error",
+      );
+    } else if (r.data.success) {
+      const result = r.data;
       showNotification(result.message, "success");
       await pollForModelStatus(modelName, true);
     } else {
-      showNotification(result.message || "Restart failed", "error");
+      showNotification(r.data.message || "Restart failed", "error");
     }
   } catch (error) {
     showNotification("Failed to restart model: " + error.message, "error");
@@ -333,17 +336,15 @@ async function deleteModel(modelName) {
         },
       },
     );
-    let result;
-    try {
-      result = await response.json();
-    } catch (jsonErr) {
-      result = {
-        success: false,
-        message: await response.text().catch(() => "Unknown error"),
-      };
-    }
+    const dr = await readApiJson(response);
+    const result = dr.responseOk
+      ? dr.data
+      : {
+          success: false,
+          message: dr.message || `HTTP ${dr.status}`,
+        };
 
-    if (!response.ok) {
+    if (!dr.responseOk) {
       showNotification(result.message || `HTTP ${response.status}`, "error");
     } else if (result.success) {
       showNotification(result.message, "success");
@@ -370,9 +371,17 @@ async function showModelInfo(modelName) {
     const response = await fetch(
       `/api/models/info/${encodeURIComponent(modelName)}`,
     );
-    const info = await response.json();
+    const ir = await readApiJson(response);
+    if (!ir.responseOk) {
+      showNotification(
+        ir.message || `Failed to get model info (HTTP ${ir.status})`,
+        "error",
+      );
+      return;
+    }
+    const info = ir.data;
 
-    if (response.ok) {
+    {
       // Fetch backend cards data to ensure capability flags match the main cards
       let flagsFromCards = null;
       const normalizeName = (n) => {
@@ -403,8 +412,9 @@ async function showModelInfo(modelName) {
           fetch("/api/models/running"),
           fetch("/api/models/downloadable?category=best"),
         ]);
-        if (availResp.ok) {
-          const availJson = await availResp.json();
+        const availR = await readApiJson(availResp);
+        if (availR.responseOk) {
+          const availJson = availR.data;
           const list = Array.isArray(availJson.models) ? availJson.models : [];
           const match = list.find((m) => {
             const mn = normalizeName(m?.name || m?.model || "");
@@ -412,8 +422,9 @@ async function showModelInfo(modelName) {
           });
           if (match) flagsFromCards = match;
         }
-        if (!flagsFromCards && runningResp.ok) {
-          const runningJson = await runningResp.json();
+        const runR = await readApiJson(runningResp);
+        if (!flagsFromCards && runR.responseOk) {
+          const runningJson = runR.data;
           const runningList = Array.isArray(runningJson.models)
             ? runningJson.models
             : [];
@@ -424,8 +435,9 @@ async function showModelInfo(modelName) {
             }) || null;
           if (rmatch) flagsFromCards = rmatch;
         }
-        if (!flagsFromCards && dlBestResp.ok) {
-          const dlJson = await dlBestResp.json();
+        const dlR = await readApiJson(dlBestResp);
+        if (!flagsFromCards && dlR.responseOk) {
+          const dlJson = dlR.data;
           const dlList = Array.isArray(dlJson.models) ? dlJson.models : [];
           const dmatch = dlList.find((m) => {
             const dn = normalizeName(m?.name || m?.model || "");
@@ -547,8 +559,6 @@ async function showModelInfo(modelName) {
       modalRoot.addEventListener("hidden.bs.modal", function () {
         this.remove();
       });
-    } else {
-      showNotification("Failed to get model info: " + info.error, "error");
     }
   } catch (error) {
     showNotification("Failed to get model info: " + error.message, "error");
@@ -1066,40 +1076,61 @@ function drawTimeline(canvas, data, color) {
 async function updateSystemStats() {
   try {
     const response = await fetch("/api/system/stats");
-    const stats = await response.json();
+    const sr = await readApiJson(response);
+    if (!sr.responseOk || !sr.data) {
+      return;
+    }
+    const stats = sr.data;
+    const cpu =
+      typeof stats.cpu_percent === "number" && Number.isFinite(stats.cpu_percent)
+        ? stats.cpu_percent
+        : 0;
+    const mem =
+      stats.memory && typeof stats.memory === "object" ? stats.memory : {};
+    const memPct =
+      typeof mem.percent === "number" && Number.isFinite(mem.percent)
+        ? mem.percent
+        : 0;
+    const vram =
+      stats.vram && typeof stats.vram === "object" ? stats.vram : {};
+    const vramTotal =
+      typeof vram.total === "number" && Number.isFinite(vram.total)
+        ? vram.total
+        : 0;
+    const vramPct =
+      typeof vram.percent === "number" && Number.isFinite(vram.percent)
+        ? vram.percent
+        : 0;
+    const gpu3d =
+      typeof vram.gpu_3d === "number" && Number.isFinite(vram.gpu_3d)
+        ? vram.gpu_3d
+        : 0;
 
-    if (response.ok) {
+    {
       // Update percentages
       const cpuPercentEl = document.getElementById("cpuPercent");
       const memoryPercentEl = document.getElementById("memoryPercent");
       const vramPercentEl = document.getElementById("vramPercent");
       const gpu3dPercentEl = document.getElementById("gpu3dPercent");
 
-      if (cpuPercentEl)
-        cpuPercentEl.textContent = `${stats.cpu_percent.toFixed(1)}%`;
+      if (cpuPercentEl) cpuPercentEl.textContent = `${cpu.toFixed(1)}%`;
       if (memoryPercentEl)
-        memoryPercentEl.textContent = `${stats.memory.percent.toFixed(1)}%`;
+        memoryPercentEl.textContent = `${memPct.toFixed(1)}%`;
       if (vramPercentEl)
         vramPercentEl.textContent =
-          stats.vram && stats.vram.total > 0
-            ? `${stats.vram.percent.toFixed(1)}%`
-            : "--%";
+          vramTotal > 0 ? `${vramPct.toFixed(1)}%` : "--%";
       if (gpu3dPercentEl)
         gpu3dPercentEl.textContent =
-          stats.vram && typeof stats.vram.gpu_3d === "number"
-            ? `${stats.vram.gpu_3d.toFixed(1)}%`
+          typeof vram.gpu_3d === "number"
+            ? `${gpu3d.toFixed(1)}%`
             : "--%";
 
       // Store historical data
-      timelineData.cpu.push(stats.cpu_percent);
-      timelineData.memory.push(stats.memory.percent);
-      timelineData.vram.push(
-        stats.vram && stats.vram.total > 0 ? stats.vram.percent : 0,
-      );
+      timelineData.cpu.push(cpu);
+      timelineData.memory.push(memPct);
+      timelineData.vram.push(vramTotal > 0 ? vramPct : 0);
       timelineData.gpu3d.push(
-        stats.vram && typeof stats.vram.gpu_3d === "number"
-          ? stats.vram.gpu_3d
-          : 0,
+        typeof vram.gpu_3d === "number" ? gpu3d : 0,
       );
 
       // Limit data points
@@ -1147,8 +1178,9 @@ async function updateModelData() {
       fetch("/api/models/available"),
     ]);
 
-    if (runningResponse.ok) {
-      const runningData = await runningResponse.json();
+    const runR = await readApiJson(runningResponse);
+    if (runR.responseOk) {
+      const runningData = runR.data;
       runningModels = Array.isArray(runningData.models)
         ? runningData.models
         : [];
@@ -1156,9 +1188,12 @@ async function updateModelData() {
       updateRunningModelsDisplay(runningModels);
     }
 
-    if (availableResponse.ok) {
-      const availableData = await availableResponse.json();
-      availableModels = availableData.models || [];
+    const availR = await readApiJson(availableResponse);
+    if (availR.responseOk) {
+      const availableData = availR.data;
+      availableModels = Array.isArray(availableData.models)
+        ? availableData.models
+        : [];
       updateAvailableModelsDisplay(availableModels);
     }
   } catch (error) {
@@ -1170,9 +1205,9 @@ async function updateModelData() {
     _versionPollCounter = 0;
     try {
       const versionResponse = await fetch("/api/version");
-      if (versionResponse.ok) {
-        const versionData = await versionResponse.json();
-        updateVersionDisplay(versionData.version || "Unknown");
+      const vr = await readApiJson(versionResponse);
+      if (vr.responseOk && vr.data) {
+        updateVersionDisplay(vr.data.version || "Unknown");
       }
     } catch (error) {
       console.log("Failed to update Ollama version:", error);
@@ -1770,8 +1805,9 @@ async function loadDownloadableModels() {
 
   try {
     const response = await fetch("/api/models/downloadable?category=best");
-    if (response.ok) {
-      const data = await response.json();
+    const dr = await readApiJson(response);
+    if (dr.responseOk) {
+      const data = dr.data;
       const list = Array.isArray(data.models) ? data.models : [];
       cachedDownloadableModels = list;
       extendedModelsLoaded = false;
@@ -1922,7 +1958,10 @@ async function pullModel(modelName) {
       { method: "POST" },
     );
     if (!pullResp.ok) {
-      throw new Error(`Failed to start download (${pullResp.status})`);
+      const pr = await readApiJson(pullResp);
+      throw new Error(
+        pr.message || `Failed to start download (${pullResp.status})`,
+      );
     }
 
     let pullSucceeded = false;
@@ -2001,9 +2040,10 @@ async function pullModel(modelName) {
         `/api/models/pull/${encodeURIComponent(modelName)}`,
         { method: "POST" },
       );
-      const fallbackResult = await fallback.json();
+      const fr = await readApiJson(fallback);
+      const fallbackResult = fr.responseOk ? fr.data : {};
       pullSucceeded = !!fallbackResult.success;
-      pullMessage = fallbackResult.message || pullMessage;
+      pullMessage = fallbackResult.message || fr.message || pullMessage;
     }
 
     if (!pullSucceeded) {

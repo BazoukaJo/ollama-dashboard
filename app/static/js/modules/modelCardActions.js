@@ -214,12 +214,15 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ model: modelName, prompt: prompt.trim(), stream: false }),
         });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) {
-          out.textContent = data.error || data.message || "Request failed";
+        const cr = await readApiJson(r);
+        if (!cr.responseOk) {
+          const data = cr.data || {};
+          out.textContent =
+            cr.message || data.error || data.message || "Request failed";
           recordRecentModelError(String(out.textContent));
           return;
         }
+        const data = cr.data;
         const text =
           data.response != null
             ? String(data.response)
@@ -245,7 +248,8 @@
     let options = '<option value="">— pick source model —</option>';
     try {
       const r = await fetch("/api/models/available");
-      const j = await r.json();
+      const ar = await readApiJson(r);
+      const j = ar.responseOk ? ar.data : {};
       const list = Array.isArray(j.models) ? j.models : [];
       list.forEach(function (m) {
         const n = m && m.name;
@@ -302,7 +306,14 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ from: raw, to: targetModel }),
         });
-        const data = await r.json();
+        const cp = await readApiJson(r);
+        if (!cp.responseOk) {
+          if (typeof showNotification === "function") {
+            showNotification(cp.message || "Copy failed", "error");
+          }
+          return;
+        }
+        const data = cp.data;
         if (data.success) {
           if (typeof showNotification === "function") {
             showNotification(data.message, "success");

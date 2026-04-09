@@ -4,7 +4,7 @@ Initializes Flask app with configuration, services, and route blueprints.
 Single initialization point - ensures no duplicate service creation.
 """
 
-__version__ = "1.0004"
+__version__ = "1.0005"
 
 import html
 import logging
