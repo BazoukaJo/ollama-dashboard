@@ -1005,6 +1005,12 @@ const timelineData = {
 
 const MAX_TIMELINE_POINTS = 60; // 60 seconds of data
 
+// System Resources sparklines — same palette as Claude-Hybrid header-ui timelines
+const TIMELINE_COLOR_CPU = "#3b82f6";
+const TIMELINE_COLOR_MEMORY = "#22c55e";
+const TIMELINE_COLOR_VRAM = "#06b6d4";
+const TIMELINE_COLOR_GPU3D = "#f59e0b";
+
 // Timeline drawing function
 function drawTimeline(canvas, data, color) {
   const ctx = canvas.getContext("2d");
@@ -1147,11 +1153,12 @@ async function updateSystemStats() {
       const vramCanvas = document.getElementById("vramTimeline");
       const gpu3dCanvas = document.getElementById("gpu3dTimeline");
 
-      if (cpuCanvas) drawTimeline(cpuCanvas, timelineData.cpu, "#0d6efd");
+      if (cpuCanvas) drawTimeline(cpuCanvas, timelineData.cpu, TIMELINE_COLOR_CPU);
       if (memoryCanvas)
-        drawTimeline(memoryCanvas, timelineData.memory, "#198754");
-      if (vramCanvas) drawTimeline(vramCanvas, timelineData.vram, "#0dcaf0");
-      if (gpu3dCanvas) drawTimeline(gpu3dCanvas, timelineData.gpu3d, "#f39c12");
+        drawTimeline(memoryCanvas, timelineData.memory, TIMELINE_COLOR_MEMORY);
+      if (vramCanvas) drawTimeline(vramCanvas, timelineData.vram, TIMELINE_COLOR_VRAM);
+      if (gpu3dCanvas)
+        drawTimeline(gpu3dCanvas, timelineData.gpu3d, TIMELINE_COLOR_GPU3D);
 
       // Update last update time
       const lastUpdateTimeEl = document.getElementById("lastUpdateTime");

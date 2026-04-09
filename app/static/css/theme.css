@@ -515,8 +515,18 @@ html.light .compact-system-resources:hover {
   border-color: var(--border-hover);
 }
 
-html.light .resource-icon-cpu,
-html.light .resource-icon-ram,
+html.light .resource-icon-cpu {
+  color: #3b82f6;
+}
+html.light .resource-icon-ram {
+  color: #22c55e;
+}
+html.light .resource-icon-vram {
+  color: #06b6d4;
+}
+html.light .resource-icon-gpu3d {
+  color: #f59e0b;
+}
 html.light .resource-icon-gpu,
 html.light .resource-icon-disk {
   color: var(--spec-icon-color);

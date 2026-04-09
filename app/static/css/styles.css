@@ -3817,8 +3817,19 @@ body.compact-mode .compact-hide {
   font-size: 0.8rem;
 }
 
-.resource-icon-cpu,
-.resource-icon-ram,
+/* Match Claude-Hybrid system resource sparkline colors */
+.resource-icon-cpu {
+  color: #3b82f6;
+}
+.resource-icon-ram {
+  color: #22c55e;
+}
+.resource-icon-vram {
+  color: #06b6d4;
+}
+.resource-icon-gpu3d {
+  color: #f59e0b;
+}
 .resource-icon-gpu,
 .resource-icon-disk {
   color: #bcbec0;
