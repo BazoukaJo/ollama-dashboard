@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.1.0 (2026)
+
+- **Python package** — `pyproject.toml` is a full setuptools project: runtime dependencies, `package-data` for `app` templates/static/JSON, and console script **`ollama-dashboard`** (`ollama_dashboard_cli.py`). Version is **PEP 440**–compliant (`1.1.0`; legacy tags like `1.0005` normalize to `1.5` on PyPI). Build with `python -m build`; install with `pip install dist/*.whl` or publish via `twine` (see README).
+
 ## Version 1.0005 (2026)
 
 - **Client robustness** — Shared `readApiJson()` (`js/modules/utils.js`): every dashboard `fetch` path reads the body once, tolerates non-JSON errors, and avoids `response.json()` throws. Applied across `main.js`, `serviceControl.js`, `settings.js`, and `modelCardActions.js`.

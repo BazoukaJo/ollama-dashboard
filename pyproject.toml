@@ -1,9 +1,65 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "ollama-dashboard"
-version = "1.0005"
+# PEP 440: use dotted releases (e.g. 1.0006 normalizes to 1.6 on PyPI).
+version = "1.1.0"
 description = "Web dashboard for Ollama — models, settings, system stats"
 readme = "README.md"
 requires-python = ">=3.8"
+keywords = ["ollama", "flask", "dashboard", "llm", "local"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Flask",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+]
+
+dependencies = [
+    "flask==3.0.0",
+    "flask-cors==4.0.0",
+    "waitress==3.0.2",
+    "pytz==2023.3",
+    "requests==2.31.0",
+    "psutil==5.9.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.3",
+    "ruff>=0.9.0",
+]
+
+[project.scripts]
+ollama-dashboard = "ollama_dashboard_cli:main"
+
+[project.urls]
+Homepage = "https://github.com/BazoukaJo/ollama-dashboard"
+Repository = "https://github.com/BazoukaJo/ollama-dashboard"
+Issues = "https://github.com/BazoukaJo/ollama-dashboard/issues"
+
+[tool.setuptools]
+py-modules = ["ollama_dashboard_cli"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = [
+    "templates/**/*",
+    "static/**/*",
+    "services/*.json",
+]
 
 [tool.ruff]
 target-version = "py38"

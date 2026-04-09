@@ -1,3 +1,4 @@
 # Development / CI quality gate (optional locally; CI installs ruff via pip)
 -r requirements.txt
 ruff>=0.9.0
+build>=1.0.0

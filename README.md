@@ -1,6 +1,6 @@
 # Ollama Dashboard
 
-## Version 1.0005
+## Version 1.1.0
 
 [![CI](https://github.com/BazoukaJo/ollama-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/BazoukaJo/ollama-dashboard/actions/workflows/ci.yml)
 
@@ -64,6 +64,32 @@ cd ollama-dashboard
 pip install -r requirements.txt
 python OllamaDashboard.py
 # Open in browser: http://localhost:5000
+```
+
+### Install from PyPI (when published) or from a wheel
+
+```bash
+pip install ollama-dashboard
+ollama-dashboard
+# http://127.0.0.1:5000 — override host/port with OLLAMA_DASHBOARD_HOST / OLLAMA_DASHBOARD_PORT
+```
+
+Build a wheel from a git checkout:
+
+```bash
+pip install build
+python -m build
+# dist/ollama_dashboard-<version>-py3-none-any.whl
+pip install dist/ollama_dashboard-*-py3-none-any.whl
+ollama-dashboard
+```
+
+Publish to PyPI (maintainers only; requires [PyPI API token](https://pypi.org/manage/account/token/)):
+
+```bash
+pip install build twine
+python -m build
+python -m twine upload dist/*
 ```
 
 ### Docker
