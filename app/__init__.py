@@ -32,6 +32,11 @@ def create_app(config_name='development'):
         - Registers blueprints and middleware
         - Sets up CORS and security headers
     """
+    _log_name = os.getenv("LOG_LEVEL", "INFO").strip().upper()
+    _log_level = getattr(logging, _log_name, logging.INFO)
+    if isinstance(_log_level, int):
+        logging.getLogger().setLevel(_log_level)
+
     app = Flask(
         __name__,
         static_folder='static',

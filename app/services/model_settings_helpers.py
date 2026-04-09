@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import os
+import tempfile
 # Remove unused and invalid imports; _recommend_settings_for_model should be accessed via the service instance
 
 # Default template retained from service logic
@@ -78,20 +79,45 @@ def load_model_settings(service):
         return {}
 
 def write_model_settings_file(service, model_settings_dict):
+    """Atomically replace the settings file (temp in same dir, fsync, os.replace)."""
+    ok, err = validate_json_before_write(model_settings_dict)
+    if not ok:
+        service.logger.error("Refusing to write invalid model settings JSON: %s", err)
+        return False
     path = model_settings_file_path(service)
-    tmp_path = path + '.tmp'
+    abs_path = os.path.abspath(path)
+    dirpath = os.path.dirname(abs_path) or "."
     try:
-        with open(tmp_path, 'w', encoding='utf-8') as f:
+        os.makedirs(dirpath, exist_ok=True)
+    except OSError as e:
+        service.logger.exception("Cannot create settings directory %s: %s", dirpath, e)
+        return False
+    fd, tmp_path = tempfile.mkstemp(
+        prefix="model_settings_",
+        suffix=".tmp",
+        dir=dirpath,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(model_settings_dict, f, indent=2)
-        os.replace(tmp_path, path)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, abs_path)
+        tmp_path = None
         try:
-            service._model_settings_disk_mtime = os.path.getmtime(path)
+            service._model_settings_disk_mtime = os.path.getmtime(abs_path)
         except OSError:
             service._model_settings_disk_mtime = None
         return True
     except (OSError, TypeError) as e:
         service.logger.exception("Error writing model settings: %s", e)
         return False
+    finally:
+        if tmp_path and os.path.isfile(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 def validate_json_before_write(data):
     """Validate that data can be JSON serialized before writing to file."""

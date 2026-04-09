@@ -91,6 +91,7 @@ To start the dashboard when Windows starts, copy `StartupFolder\Start Ollama Das
 - **[Architecture Guide](docs/ARCHITECTURE.md)** — Service composition, data flow, caching strategy
 - **[Deployment Guide](docs/DEPLOYMENT.md)** — Windows, Docker, Gunicorn + Nginx
 - **[Security Guide](docs/SECURITY.md)** — Validation, CORS, TLS, secrets management
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** — Empty running list, settings/API errors, Ollama host, logging
 
 ---
 
@@ -164,12 +165,17 @@ The background thread is automatically managed and restarts on crash.
 # Run all tests
 python -m pytest -q
 
+# In-process smoke (no server): /api/test, API JSON 404, HTML 404
+python scripts/smoke_check.py
+
 # Run specific test
 python -m pytest tests/test_start_model_pytest.py::test_start_model_success -q
 
 # Coverage report
 python -m pytest --cov=app --cov-report=html
 ```
+
+CI runs `pytest` and `scripts/smoke_check.py` on Ubuntu and Windows (see `.github/workflows/ci.yml`).
 
 ### Workflow
 

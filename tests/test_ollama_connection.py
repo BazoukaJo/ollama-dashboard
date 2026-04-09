@@ -82,10 +82,17 @@ class TestAppConfig:
     """Verify that create_app() correctly exposes OLLAMA_HOST/PORT."""
 
     def test_default_host_and_port(self):
-        """create_app() should default to localhost:11434."""
-        app = create_app()
-        assert app.config.get('OLLAMA_HOST') == 'localhost'
-        assert app.config.get('OLLAMA_PORT') == 11434
+        """create_app() should default to localhost:11434 when env does not override."""
+        removed = {}
+        for key in ('OLLAMA_HOST', 'OLLAMA_PORT'):
+            if key in os.environ:
+                removed[key] = os.environ.pop(key)
+        try:
+            app = create_app()
+            assert app.config.get('OLLAMA_HOST') == 'localhost'
+            assert app.config.get('OLLAMA_PORT') == 11434
+        finally:
+            os.environ.update(removed)
 
     def test_env_override(self):
         """create_app() should pick up OLLAMA_HOST/PORT from env vars."""
