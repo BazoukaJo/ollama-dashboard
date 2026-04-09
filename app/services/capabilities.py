@@ -14,6 +14,7 @@ Reasoning/thinking is not in Ollama's capability list yet; we infer it from heur
 Default API→flags mapping is loaded from model_capability_defaults.json when present.
 """
 from __future__ import annotations
+
 import json
 import logging
 import re

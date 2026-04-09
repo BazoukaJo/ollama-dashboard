@@ -14,20 +14,18 @@ Key Improvements:
   - DistributedTracing: Request lifecycle tracking with trace IDs
 """
 
-import os
 import logging
-from typing import Dict, Any, Optional
+from typing import Any, Dict
+
+# Import enterprise improvement utilities
+from app.services.error_handling import TransientErrorDetector
 
 # Import mixin base classes (existing working code)
 from app.services.ollama_core import OllamaServiceCore
 from app.services.ollama_models import OllamaServiceModels
 from app.services.ollama_service_control import OllamaServiceControl
 from app.services.ollama_utilities import OllamaServiceUtilities
-
-# Import enterprise improvement utilities
-from app.services.error_handling import TransientErrorDetector
-from app.services.performance import RateLimiter, PerformanceMetrics
-from app.services.contracts import IOllamaService
+from app.services.performance import PerformanceMetrics, RateLimiter
 
 logger = logging.getLogger(__name__)
 

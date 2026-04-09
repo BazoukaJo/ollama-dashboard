@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch
+
 from app import create_app
+
 
 class TestOllamaService(unittest.TestCase):
     def setUp(self):

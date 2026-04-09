@@ -1,7 +1,7 @@
+from unittest.mock import patch
+
 from app import create_app
 from app.services.ollama import OllamaService
-from unittest.mock import patch
-import json
 
 
 def test_admin_model_defaults_page_render():

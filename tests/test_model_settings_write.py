@@ -1,12 +1,10 @@
 """Tests for atomic model_settings.json writes."""
 from __future__ import annotations
 
-import json
 import logging
 from unittest.mock import MagicMock
 
 import pytest
-
 from app.services.model_settings_helpers import load_model_settings, write_model_settings_file
 
 

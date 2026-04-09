@@ -55,6 +55,7 @@ def _windows_powershell_exe() -> Optional[str]:
 if TYPE_CHECKING:
     import logging
     import threading
+
     from requests import Session
 
 

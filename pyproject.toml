@@ -1,0 +1,27 @@
+[project]
+name = "ollama-dashboard"
+version = "1.0004"
+description = "Web dashboard for Ollama — models, settings, system stats"
+readme = "README.md"
+requires-python = ">=3.8"
+
+[tool.ruff]
+target-version = "py38"
+src = ["app", "tests", "scripts"]
+line-length = 120
+exclude = ["__pycache__", ".venv", "venv"]
+
+[tool.ruff.lint]
+# E/F/W: correctness; I: import order. UP omitted so Python 3.8 remains first-class (README).
+select = ["E4", "E7", "E9", "F", "W", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Flask registers routes by importing the module; imports follow Blueprint creation by design.
+"app/routes/__init__.py" = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+markers = [
+    "integration: tests that need a live server or Ollama (not run in default CI)",
+]

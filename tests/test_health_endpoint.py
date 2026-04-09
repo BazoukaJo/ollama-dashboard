@@ -3,6 +3,7 @@
 import pytest
 from app import create_app
 
+
 @pytest.fixture(scope="module", name="app_client")
 def fixture_app_client():
     """Yield a test client for the app."""

@@ -7,11 +7,10 @@ Provides:
 - Performance alerts and thresholds
 """
 
+import threading
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-import threading
-import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List
 
 
 class RateLimiter:

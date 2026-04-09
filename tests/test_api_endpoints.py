@@ -5,8 +5,9 @@ Mutating Ollama routes are intentionally omitted: unmocked POSTs to start/stop/r
 models or to service start/stop/restart hit a real Ollama (or OS service) and can download,
 unload, or delete models. Use the dedicated mocked tests in test_*model*.py for those behaviors.
 """
-import pytest
 import logging
+
+import pytest
 from app import create_app
 
 

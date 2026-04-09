@@ -3,7 +3,6 @@
 import os
 import sys
 import time
-import requests
 
 # Add parent directory to path when running directly (not via pytest)
 if __name__ == '__main__':
@@ -12,6 +11,7 @@ if __name__ == '__main__':
         sys.path.insert(0, parent_dir)
 
 from app import create_app
+
 
 def test_auto_start_config():
     """Test that AUTO_START_OLLAMA config is properly set."""
@@ -59,7 +59,7 @@ def test_api_verification():
 
         try:
             api_ok, api_msg = service._verify_ollama_api(max_retries=2, retry_delay=1)
-            print(f"✓ API verification completed")
+            print("✓ API verification completed")
             print(f"  Status: {'OK' if api_ok else 'Failed'}")
             print(f"  Message: {api_msg}")
         except Exception as e:

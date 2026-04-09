@@ -15,8 +15,10 @@ from typing import Dict, List, Optional
 import requests
 
 from app.services.model_catalog import (
-    get_best_models as _static_best,
     get_all_downloadable_models as _static_all,
+)
+from app.services.model_catalog import (
+    get_best_models as _static_best,
 )
 
 logger = logging.getLogger(__name__)

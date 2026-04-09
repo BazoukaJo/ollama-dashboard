@@ -77,7 +77,7 @@ def create_structured_logger(name: str, log_file: Optional[str] = None) -> loggi
             file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
-        except IOError as e:
+        except OSError as e:
             logger.warning(f"Could not create file handler for {log_file}: {e}")
 
     return logger

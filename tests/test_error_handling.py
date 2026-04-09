@@ -1,6 +1,5 @@
 """Unit tests for error handling utilities."""
-import pytest
-from app.services.error_handling import TransientErrorDetector, TIMEOUT_GENERATE, TIMEOUT_PULL
+from app.services.error_handling import TIMEOUT_GENERATE, TIMEOUT_PULL, TransientErrorDetector
 
 
 class TestTransientErrorDetector:

@@ -3,8 +3,9 @@
 All tests are fully mocked — no live Ollama server is required.
 Patches ``ollama_service._session.post`` (routes do not use ``requests.post``).
 """
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from app import create_app
 
 

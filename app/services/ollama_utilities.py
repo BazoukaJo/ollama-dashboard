@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 from typing import Any, Optional, Tuple
 
 import requests
-from app.services.model_fetcher import get_best_models_live as _get_best
+
 from app.services.model_fetcher import get_all_downloadable_models_live as _get_all
+from app.services.model_fetcher import get_best_models_live as _get_best
 from app.services.model_fetcher import get_downloadable_models_live as _get_dl
 from app.services.model_helpers import context_length_as_int
 from app.services.model_settings_helpers import (
@@ -22,7 +23,6 @@ from app.services.model_settings_helpers import (
     normalize_model_settings_key,
     normalize_setting_value,
     write_model_settings_file,
-    validate_json_before_write,
 )
 
 
@@ -61,7 +61,7 @@ class OllamaServiceUtilities:
         max_history = self.app.config['MAX_HISTORY']
 
         if os.path.exists(history_file):
-            with open(history_file, 'r', encoding='utf-8') as f:
+            with open(history_file, encoding='utf-8') as f:
                 history = json.load(f)
                 return deque(history, maxlen=max_history)
         else:
@@ -202,7 +202,7 @@ class OllamaServiceUtilities:
                 return []
             chat_history_file = os.path.join(os.path.dirname(self.app.config['HISTORY_FILE']), 'chat_history.json')
             if os.path.exists(chat_history_file):
-                with open(chat_history_file, 'r', encoding='utf-8') as f:
+                with open(chat_history_file, encoding='utf-8') as f:
                     return json.load(f)
             return []
         except Exception as e:
@@ -294,7 +294,7 @@ class OllamaServiceUtilities:
 
             # Initialize or load existing history
             if os.path.exists(stats_history_file):
-                with open(stats_history_file, 'r', encoding='utf-8') as f:
+                with open(stats_history_file, encoding='utf-8') as f:
                     history = json.load(f)
             else:
                 history = []

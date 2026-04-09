@@ -1,4 +1,3 @@
-import json
 from app import create_app
 from app.services.ollama import OllamaService
 

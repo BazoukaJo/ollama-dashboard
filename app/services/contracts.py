@@ -5,8 +5,8 @@ This ensures type safety and clear responsibilities across mixins.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any, Tuple
 from collections import deque
+from typing import Any, Dict, List, Optional
 
 
 class ICacheProvider(ABC):

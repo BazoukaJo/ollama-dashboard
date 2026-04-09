@@ -1,6 +1,8 @@
 # Ollama Dashboard
 
-## Version 1.0003
+## Version 1.0004
+
+[![CI](https://github.com/BazoukaJo/ollama-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/BazoukaJo/ollama-dashboard/actions/workflows/ci.yml)
 
 ![Ollama Dashboard — system metrics, running/available/downloadable models, and Settings status (Saved / Default) on each card](docs/images/dashboard.png)
 
@@ -92,6 +94,7 @@ To start the dashboard when Windows starts, copy `StartupFolder\Start Ollama Das
 - **[Deployment Guide](docs/DEPLOYMENT.md)** — Windows, Docker, Gunicorn + Nginx
 - **[Security Guide](docs/SECURITY.md)** — Validation, CORS, TLS, secrets management
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** — Empty running list, settings/API errors, Ollama host, logging
+- **[Contributing](CONTRIBUTING.md)** — Tests, Ruff lint, PR checklist
 
 ---
 
@@ -164,6 +167,9 @@ The background thread is automatically managed and restarts on crash.
 ```bash
 # Run all tests
 python -m pytest -q
+
+# Lint (same as CI lint job)
+pip install ruff && ruff check app tests scripts
 
 # Optional: same checks as tests/test_smoke_script.py (also run by pytest)
 python scripts/smoke_check.py

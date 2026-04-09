@@ -1,14 +1,16 @@
 import atexit
 import os
 import platform
-import psutil
 from datetime import datetime
+
+import psutil
+
 try:
-    import GPUtil # pyright: ignore[reportMissingImports]
+    import GPUtil  # pyright: ignore[reportMissingImports]
 except ImportError:
     GPUtil = None
 try:
-    import pynvml # pyright: ignore[reportMissingImports]
+    import pynvml  # pyright: ignore[reportMissingImports]
 except ImportError:
     pynvml = None
 
@@ -198,7 +200,7 @@ def append_system_stats_history(history_file_path):
     try:
         if os.path.exists(history_file_path):
             import json
-            with open(history_file_path, 'r') as f:
+            with open(history_file_path) as f:
                 history = json.load(f)
         else:
             history = []

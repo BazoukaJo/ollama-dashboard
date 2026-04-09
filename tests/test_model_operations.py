@@ -3,8 +3,9 @@ Comprehensive tests for model operations: start, stop, restart, delete.
 Tests cover success paths, error handling, and edge cases.
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 import requests
 from app import create_app
 

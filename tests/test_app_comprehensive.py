@@ -8,10 +8,10 @@ Tests verify:
 - Error handling for missing Ollama
 """
 
-import pytest
-import json
-from unittest.mock import patch, MagicMock, PropertyMock
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 
 @pytest.fixture(scope="session")
@@ -132,7 +132,7 @@ class TestHealthEndpoints:
             }
         }
         response = client.get('/api/health')
-        data = response.get_json()
+        response.get_json()
         assert response.status_code == 200
 
 
@@ -211,9 +211,8 @@ class TestModelEndpoints:
             status_code = 200
             def json(self): return {}
         mock_delete.return_value = MockResponse()
-        from app.routes.main import ollama_service
         try:
-            response = client.delete('/api/models/delete/old-model')
+            client.delete('/api/models/delete/old-model')
         except AttributeError:
             # If the session isn't mocked properly, bypass
             pass
@@ -518,7 +517,7 @@ class TestDashboardUI:
 
     def test_dashboard_has_script_references(self, client):
         """Dashboard should reference JS files."""
-        with patch('app.routes.main.ollama_service') as mock_service:
+        with patch('app.routes.main.ollama_service'):
             response = client.get('/')
             if response.status_code == 200:
                 text = response.get_data(as_text=True)

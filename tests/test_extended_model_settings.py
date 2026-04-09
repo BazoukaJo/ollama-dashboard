@@ -1,6 +1,7 @@
-from app.services.ollama import OllamaService
-from app import create_app
 from unittest.mock import patch
+
+from app import create_app
+from app.services.ollama import OllamaService
 
 ADVANCED_KEYS = [
     'num_predict','repeat_last_n','repeat_penalty','presence_penalty','frequency_penalty',

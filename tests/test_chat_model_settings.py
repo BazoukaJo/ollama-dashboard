@@ -1,5 +1,6 @@
-from app import create_app
 from unittest.mock import patch
+
+from app import create_app
 
 
 def test_chat_uses_per_model_settings(tmp_path):

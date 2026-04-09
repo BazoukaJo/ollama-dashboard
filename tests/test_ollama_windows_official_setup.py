@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
-
 from app.services.ollama_service_control import OLLAMA_WINDOWS_SETUP_EXE_URL, OllamaServiceControl
 
 

@@ -1,6 +1,5 @@
 """Tests for InputValidator model name rules."""
 import pytest
-
 from app.services.validators import InputValidator
 
 

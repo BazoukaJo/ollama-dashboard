@@ -4,14 +4,14 @@ Initializes Flask app with configuration, services, and route blueprints.
 Single initialization point - ensures no duplicate service creation.
 """
 
-__version__ = "1.0003"
+__version__ = "1.0004"
 
 import html
-import os
-import sys
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
+
 from flask import Flask, jsonify
 from flask_cors import CORS
 
@@ -98,7 +98,7 @@ def create_app(config_name='development'):
 
         @app.before_request
         def check_auth():
-            from flask import request, jsonify  # pylint: disable=import-outside-toplevel
+            from flask import jsonify, request  # pylint: disable=import-outside-toplevel
             path = request.path
             auth_svc = app.config.get('AUTH_SERVICE')
             if not auth_svc:

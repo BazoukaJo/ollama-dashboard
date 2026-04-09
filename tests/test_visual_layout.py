@@ -5,11 +5,10 @@ These tests validate that the dashboard layout stays correct without needing
 a real browser. Run with: pytest tests/test_visual_layout.py -v
 """
 
-import re
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 # Must include vram.gpu_3d (and related keys) or index.html raises during render and /
 # returns the error branch with empty models — layout assertions then fail.
@@ -42,17 +41,20 @@ def client(app):
 
 def _run_with_mocks(client, running=None, available=None):
     """GET / with mocked ollama services. Returns (status_code, html)."""
-    with (
-        patch(
-            "app.routes.main.run_startup_ollama_update_check",
-            return_value=dict(_FAKE_STARTUP_UPDATE),
-        ),
-        patch("app.routes.main.ollama_service.is_ollama_installed", return_value=True),
-        patch("app.routes.main.ollama_service.get_running_models") as mock_running,
-        patch("app.routes.main.ollama_service.get_available_models") as mock_available,
-        patch("app.routes.main.ollama_service.get_system_stats") as mock_stats,
-        patch("app.routes.main.ollama_service.get_ollama_version") as mock_version,
-    ):
+    with patch(
+        "app.routes.main.run_startup_ollama_update_check",
+        return_value=dict(_FAKE_STARTUP_UPDATE),
+    ), patch(
+        "app.routes.main.ollama_service.is_ollama_installed", return_value=True
+    ), patch(
+        "app.routes.main.ollama_service.get_running_models"
+    ) as mock_running, patch(
+        "app.routes.main.ollama_service.get_available_models"
+    ) as mock_available, patch(
+        "app.routes.main.ollama_service.get_system_stats"
+    ) as mock_stats, patch(
+        "app.routes.main.ollama_service.get_ollama_version"
+    ) as mock_version:
         mock_running.return_value = running if running is not None else []
         mock_available.return_value = available if available is not None else []
         mock_stats.return_value = dict(_MOCK_INDEX_SYSTEM_STATS)

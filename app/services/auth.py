@@ -7,12 +7,12 @@ Provides:
 - Stateless token verification
 """
 
+import logging
 import os
 import secrets
-import logging
-from functools import wraps
-from typing import Optional, Dict, List, Tuple
 from datetime import datetime
+from functools import wraps
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +204,8 @@ def require_auth(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        from flask import request, jsonify
+        from flask import request
+
         from app import current_app
 
         auth_service = current_app.config.get('AUTH_SERVICE')
@@ -234,7 +235,8 @@ def require_role(required_role: str):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            from flask import request, jsonify
+            from flask import request
+
             from app import current_app
 
             auth_service = current_app.config.get('AUTH_SERVICE')

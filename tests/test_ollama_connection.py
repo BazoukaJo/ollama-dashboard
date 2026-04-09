@@ -4,8 +4,9 @@ Tests _get_ollama_host_port() in isolation — no live Ollama server required.
 The old file was a diagnostic script; this replaces it with proper pytest tests.
 """
 import os
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from app import create_app
 from app.services.ollama_core import OllamaServiceCore
 

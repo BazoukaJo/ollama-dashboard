@@ -1,16 +1,14 @@
+import importlib.util
 import os
-import time
 import subprocess
-import requests
+import time
+
 import pytest
+import requests
 
 # Skip this test if pytest-playwright is not installed
 pytest_plugins = []
-try:
-    import playwright
-    PLAYWRIGHT_AVAILABLE = True
-except ImportError:
-    PLAYWRIGHT_AVAILABLE = False
+PLAYWRIGHT_AVAILABLE = importlib.util.find_spec("playwright") is not None
 
 pytestmark = pytest.mark.skipif(not PLAYWRIGHT_AVAILABLE, reason="Playwright not installed")
 

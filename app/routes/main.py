@@ -4,40 +4,25 @@ Main routes blueprint for Ollama Dashboard.
 This module is large and handles many endpoint variations; we relax a few
 lint rules to keep the legacy surface area stable while improving readability.
 """
-from datetime import datetime
 import json
 import os
 import platform
 import signal
-import subprocess
-import sys
-import threading
 import time
+from datetime import datetime
 
 import psutil
 import requests
-from flask import Blueprint, Response, current_app, jsonify, render_template, request, stream_with_context
+from flask import Response, current_app, jsonify, render_template, request, stream_with_context
 
 from app import __version__ as DASHBOARD_VERSION
 from app.routes import bp
-from app.services.ollama_update_check import run_startup_ollama_update_check
 from app.services.model_helpers import (
     attach_last_token_usage_to_model,
     attach_request_context_to_model,
 )
+from app.services.ollama_update_check import run_startup_ollama_update_check
 from app.services.validators import InputValidator
-from app.services.error_handling import (
-    TransientErrorDetector,
-    TIMEOUT_GENERATE,
-    TIMEOUT_GENERATE_RETRY,
-    TIMEOUT_PULL,
-    TIMEOUT_DELETE,
-    TIMEOUT_STOP,
-    TIMEOUT_PS,
-    TIMEOUT_DEFAULT,
-)
-
-import logging
 
 # Set by init_app from app.config['OLLAMA_SERVICE']; tests patch this
 ollama_service = None

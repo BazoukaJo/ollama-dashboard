@@ -1,4 +1,7 @@
-import platform, subprocess, time, os
+import os
+import platform
+import subprocess
+import time
 
 # Platform-specific start/stop helpers extracted from OllamaService.
 

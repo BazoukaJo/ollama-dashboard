@@ -4,10 +4,10 @@
 Uses mocks so no actual model is deleted. Tests the endpoint logic and response handling.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
-from app import create_app
+from unittest.mock import MagicMock, patch
 
+import pytest
+from app import create_app
 
 # Fake model name - never used for real deletion
 TEST_MODEL_NAME = "test-delete-dummy-model:0.1b"

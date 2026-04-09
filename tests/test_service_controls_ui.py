@@ -1,18 +1,18 @@
 import threading
 import time
 import unittest
-import requests
 from contextlib import suppress
 from typing import TYPE_CHECKING
 
+import requests
 from app import create_app
 
 # Conditional imports for optional dependencies
 try:
     from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.chrome.options import Options
     from selenium.common.exceptions import WebDriverException
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
     SELENIUM_AVAILABLE = True
 except ImportError:
     SELENIUM_AVAILABLE = False
@@ -20,9 +20,9 @@ except ImportError:
 # Type hints for static analysis (only when selenium is available)
 if TYPE_CHECKING:
     from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.chrome.options import Options
     from selenium.common.exceptions import WebDriverException
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.common.by import By
 
 
 @unittest.skipUnless(SELENIUM_AVAILABLE, "Selenium not available; skipping UI tests")
@@ -93,7 +93,7 @@ class TestServiceControlsUI(unittest.TestCase):
             # Some drivers may not support log retrieval
             logs = []
 
-        severe_logs = [l for l in logs if l.get('level') == 'SEVERE']
+        severe_logs = [entry for entry in logs if entry.get('level') == 'SEVERE']
         self.assertEqual(len(severe_logs), 0, f"Severe console logs found: {severe_logs}")
 
         # Find the first available model item and record its capabilities classes

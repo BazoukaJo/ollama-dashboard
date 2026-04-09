@@ -4,8 +4,9 @@ All tests are fully mocked — no live Ollama server required.
 Use fictitious model tags (not catalog names like llama2:latest) so an accidental
 unmocked call cannot trigger a real pull.
 """
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from app import create_app
 
 

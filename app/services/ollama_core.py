@@ -3,9 +3,9 @@
 Handles initialization, background updates, caching, and health monitoring.
 """
 # pylint: disable=line-too-long,unnecessary-ellipsis,broad-exception-caught
-import os
 import atexit
 import logging
+import os
 import threading
 import time
 from collections import deque
@@ -136,7 +136,7 @@ class OllamaServiceCore:
                 try:
                     loaded_history = self.load_history() or deque(maxlen=50)
                     self.history = loaded_history
-                except (OSError, IOError) as e:
+                except OSError as e:
                     self.logger.warning("Failed to load history: %s", e)
                     self.history = deque(maxlen=50)
             else:

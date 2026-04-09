@@ -1,8 +1,7 @@
-import os
 import json
+
 from app import create_app
 from app.services.ollama import OllamaService
-import tempfile
 
 
 def test_has_custom_settings_false_for_recommended_source(tmp_path):

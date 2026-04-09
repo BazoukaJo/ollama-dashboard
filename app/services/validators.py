@@ -7,10 +7,10 @@ Provides validators for:
 - Output sanitization (XSS prevention)
 """
 
-import re
 import html
 import logging
-from typing import Any, Tuple, Optional
+import re
+from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

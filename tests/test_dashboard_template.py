@@ -1,9 +1,9 @@
 """Tests for dashboard template structure: capability filters, model cards, section headers."""
 
 import re
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 # index.html uses system_stats.vram.gpu_3d|round(1); missing keys raise in Jinja and index()
 # falls back to error render with empty models — assertions on running/available cards then fail.

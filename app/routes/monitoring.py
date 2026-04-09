@@ -1,8 +1,8 @@
 """Phase 5 monitoring endpoints for performance tracking and metrics."""
 
-from flask import jsonify
-from functools import wraps
 import time
+
+from flask import jsonify
 
 
 def create_monitoring_endpoints(bp, ollama_service):

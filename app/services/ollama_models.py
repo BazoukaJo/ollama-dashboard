@@ -1,23 +1,21 @@
 """Model management functionality for OllamaService: model operations, info retrieval, and capabilities."""
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Protocol, Tuple
 
 import requests
-from app.services.system_stats import get_vram_info
-from app.services.system_stats import get_disk_info
-from app.services.capabilities import detect_capabilities
-from app.services.capabilities import ensure_capability_flags
-from app.services.capabilities import _caps_from_ollama_api
-from app.services.model_helpers import (_extract_context_length,
-                                        format_context_length,
-                                        format_running_model_entry,
-                                        normalize_available_model_entry)
+
+from app.services.capabilities import _caps_from_ollama_api, detect_capabilities, ensure_capability_flags
+from app.services.model_helpers import (
+    _extract_context_length,
+    format_context_length,
+    format_running_model_entry,
+    normalize_available_model_entry,
+)
 from app.services.model_settings_helpers import lookup_settings_entry
-from app.services.system_stats import collect_system_stats, models_memory_usage
+from app.services.system_stats import collect_system_stats, get_disk_info, get_vram_info, models_memory_usage
 
 
 class OllamaConnectionError(Exception):
@@ -457,7 +455,7 @@ class OllamaServiceModels:
                 entry = lookup_settings_entry(model_settings, model_name)
                 if not entry:
                     return False
-                src = str((entry.get('source') or '')).strip().lower()
+                src = str(entry.get('source') or '').strip().lower()
                 if src == 'user':
                     return True
                 # Auto-generated fallbacks are not "user saved" in the UI sense

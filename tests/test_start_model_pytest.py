@@ -1,6 +1,8 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from app import create_app
+
 
 @pytest.fixture(scope="module")
 def client():

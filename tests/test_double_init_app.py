@@ -3,11 +3,8 @@
 Calling init_app() twice must not start a second background thread or
 register additional atexit handlers (Bug 1 in the audit).
 """
-import atexit
-import threading
 import pytest
 from app import create_app
-from app.services.ollama import OllamaService
 
 
 class TestInitAppIdempotency:

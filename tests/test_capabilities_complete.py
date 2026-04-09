@@ -2,8 +2,9 @@
 Comprehensive tests for model capability detection and display system.
 Tests vision, tools, and reasoning capability detection across all model sources.
 """
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from app import create_app
 from app.services.ollama import OllamaService
 

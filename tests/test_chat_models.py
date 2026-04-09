@@ -1,5 +1,6 @@
-import requests
 import json
+
+import requests
 
 # Test the chat models API endpoint
 try:

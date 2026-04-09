@@ -1,5 +1,12 @@
 # Release Notes
 
+## Version 1.0004 (2026)
+
+- **Quality bar** — `ruff check` on `app/`, `tests/`, and `scripts/` in CI (`lint` job); config in `pyproject.toml` (Python 3.8–compatible rule set).
+- **Project metadata** — `pyproject.toml` documents the package name, version, and `pytest` markers; `requirements-dev.txt` for optional local lint (`pip install -r requirements-dev.txt`).
+- **Contributing** — [CONTRIBUTING.md](CONTRIBUTING.md) describes how to run tests and lint before opening a PR.
+- **Code hygiene** — Ruff-driven cleanup (unused imports, explicit re-exports in `app.routes`, safer `except` in helpers, Playwright availability via `importlib`).
+
 ## Version 1.0003 (2026)
 
 - **Header** — Sticky top bar with Ollama logo (left-aligned), health badge, and service controls; dashboard / Ollama versions and API host moved to a compact strip below that scrolls with the page. Narrow viewports use a fixed row layout (brand + theme, then full-width health, then controls) to avoid awkward flex wrapping.

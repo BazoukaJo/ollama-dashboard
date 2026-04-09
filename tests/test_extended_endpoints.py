@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 """Extended endpoint testing for Ollama Dashboard (skipped in CI)."""
-import json
 
 import pytest
 import requests
@@ -33,7 +32,7 @@ def test_endpoint(name, url, method='GET', data=None):
                 print(f"  Response keys: {list(data.keys())[:10]}")
                 if isinstance(data, dict) and 'models' in data:
                     print(f"  Models count: {len(data.get('models', []))}")
-            except:
+            except Exception:
                 print(f"  Response length: {len(response.text)} bytes")
         else:
             print(f"  Error: {response.text[:200]}")
@@ -58,7 +57,7 @@ def main():
             if models:
                 model_name = models[0].get('name')
                 test_endpoint(f"Model Info ({model_name})", f"{BASE_URL}/api/models/info/{model_name}")
-    except:
+    except Exception:
         pass
 
     # Test model status
@@ -69,7 +68,7 @@ def main():
             if models:
                 model_name = models[0].get('name')
                 test_endpoint(f"Model Status ({model_name})", f"{BASE_URL}/api/models/status/{model_name}")
-    except:
+    except Exception:
         pass
 
     # Test health endpoint structure

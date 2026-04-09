@@ -1,5 +1,6 @@
 import os
 
+
 class Config:
     OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'localhost')
     OLLAMA_PORT = int(os.getenv('OLLAMA_PORT', 11434))

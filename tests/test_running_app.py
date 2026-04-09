@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 """Test script for the running Ollama Dashboard app (skipped in CI)."""
-import json
 import sys
-import time
 
 import pytest
 import requests

@@ -1,6 +1,7 @@
 """API endpoint tests for Ollama Dashboard."""
-import requests
 import json
+
+import requests
 
 # Test the API endpoint
 try:
