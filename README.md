@@ -165,7 +165,7 @@ The background thread is automatically managed and restarts on crash.
 # Run all tests
 python -m pytest -q
 
-# In-process smoke (no server): /api/test, API JSON 404, HTML 404
+# Optional: same checks as tests/test_smoke_script.py (also run by pytest)
 python scripts/smoke_check.py
 
 # Run specific test
@@ -175,7 +175,7 @@ python -m pytest tests/test_start_model_pytest.py::test_start_model_success -q
 python -m pytest --cov=app --cov-report=html
 ```
 
-CI runs `pytest` and `scripts/smoke_check.py` on Ubuntu and Windows (see `.github/workflows/ci.yml`).
+CI runs `pytest -q` on Ubuntu and Windows; smoke checks run inside pytest via `tests/test_smoke_script.py` (see `.github/workflows/ci.yml`).
 
 ### Workflow
 

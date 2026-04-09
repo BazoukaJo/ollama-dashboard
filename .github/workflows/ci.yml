@@ -27,8 +27,5 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run tests
+      - name: Run tests (includes smoke_check via tests/test_smoke_script.py)
         run: pytest -q
-
-      - name: Smoke check (in-process)
-        run: python scripts/smoke_check.py
