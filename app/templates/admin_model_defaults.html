@@ -79,7 +79,7 @@
         recButton.className = 'btn btn-sm btn-outline-primary';
         recButton.innerText = 'Preview';
         recButton.onclick = async () => {
-          const r = await fetch(`/api/models/settings/recommended/${encodeURIComponent(m.name)}`);
+          const r = await fetch('/api/models/settings/recommended?model=' + encodeURIComponent(m.name));
           const rj = await r.json();
           alert('Recommended: ' + JSON.stringify(rj.settings));
         };
@@ -89,7 +89,7 @@
         applyBtn.className = 'btn btn-sm btn-primary';
         applyBtn.innerText = 'Apply';
         applyBtn.onclick = async () => {
-          const r = await fetch(`/api/models/settings/${encodeURIComponent(m.name)}/reset`, { method: 'POST' });
+          const r = await fetch('/api/models/settings/reset?model=' + encodeURIComponent(m.name), { method: 'POST' });
           const jr = await r.json();
           if (jr.success) alert('Applied recommended for ' + m.name);
           else alert('Failed to apply: ' + JSON.stringify(jr));

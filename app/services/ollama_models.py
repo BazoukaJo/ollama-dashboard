@@ -3,6 +3,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import os
+import time
 from typing import Any, Protocol, Tuple
 
 import requests
@@ -323,14 +324,29 @@ class OllamaServiceModels:
         """
         if not force_refresh:
             cached = self._get_cached('running_models', ttl_seconds=5)
-            if cached is not None:
+            # Never trust a cached empty list: a model may have loaded since the last poll.
+            if cached is not None and len(cached) > 0:
                 return cached
         try:
-            response = self._session.get(self.get_api_url(), timeout=5)
-            response.raise_for_status()
-            data = response.json()
-            models = data.get('models', [])
-            current_models = [self._format_running_model_entry(m) for m in models]
+            url = self.get_api_url()
+            current_models = []
+            # One quick retry if empty (scheduler race); avoid extra latency when truly idle.
+            for attempt in range(2):
+                response = self._session.get(url, timeout=15)
+                response.raise_for_status()
+                data = response.json()
+                if isinstance(data, list):
+                    models = data
+                elif isinstance(data, dict):
+                    models = data.get('models', [])
+                else:
+                    models = []
+                if not isinstance(models, list):
+                    models = []
+                current_models = [self._format_running_model_entry(m) for m in models]
+                if current_models or attempt == 1:
+                    break
+                time.sleep(0.25)
 
             # Enrich running models with static metadata (family, parameter_size, capabilities)
             # from the available models list when possible. If cache is empty (e.g. frontend

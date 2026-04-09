@@ -23,9 +23,8 @@ class ValidationError(ValueError):
 class InputValidator:
     """Validates and sanitizes user inputs."""
 
-    # Ollama model names: alphanumeric, hyphens, underscores, colons
-    # Example: llama3.1:8b, llava-phi, custom-model
-    MODEL_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9:._-]+$')
+    # Ollama model names: library paths, tags, quant suffixes (+Q4_K_M, etc.).
+    MODEL_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9:._/+\-]+$')
 
     @staticmethod
     def validate_model_name(model_name: str) -> Tuple[bool, str]:
@@ -44,7 +43,10 @@ class InputValidator:
             return False, "Model name too long (max 255 characters)"
 
         if not InputValidator.MODEL_NAME_PATTERN.match(model_name):
-            return False, f"Invalid model name: {model_name}. Use alphanumeric, hyphens, underscores, colons, and periods."
+            return False, (
+                f"Invalid model name: {model_name}. "
+                "Use alphanumeric, hyphens, underscores, slashes, plus, colons, and periods."
+            )
 
         return True, ""
 

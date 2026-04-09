@@ -10,7 +10,16 @@
   }
   async function openModelSettingsModal(modelName){
     try {
-      const resp = await fetch(`/api/models/settings/${encodeURIComponent(modelName)}`);
+      const resp = await fetch('/api/models/settings?model=' + encodeURIComponent(modelName));
+      if (!resp.ok) {
+        const text = await resp.text();
+        let msg = `HTTP ${resp.status}`;
+        try {
+          const body = JSON.parse(text);
+          msg = body.message || body.error || msg;
+        } catch (_) { /* not JSON */ }
+        throw new Error(msg);
+      }
       const data = await resp.json();
       const settings = data.settings || {};
       const modalHtml = `
@@ -101,7 +110,7 @@
       document.getElementById('ms-recommend').onclick = ()=>loadRecommendedIntoForm(modelName);
       document.getElementById('ms-apply-recommended').onclick = async ()=>{
         try {
-          const r = await fetch(`/api/models/settings/${encodeURIComponent(modelName)}/reset`,{method:'POST'});
+          const r = await fetch('/api/models/settings/reset?model=' + encodeURIComponent(modelName),{method:'POST'});
           const jr = await r.json();
           if(jr.success){ window.showNotification(jr.message,'success'); modal.hide(); }
           else { window.showNotification(jr.message || 'Failed to apply recommended','error'); }
@@ -157,7 +166,7 @@
 
   async function submitModelSettings(modelName,payload){
     try {
-      const r = await fetch(`/api/models/settings/${encodeURIComponent(modelName)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const r = await fetch('/api/models/settings?model=' + encodeURIComponent(modelName),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
       const data = await r.json();
       if(data.success) {
         window.showNotification(data.message,'success');
@@ -169,7 +178,7 @@
 
   async function deleteModelSettings(modelName){
     try {
-      const r = await fetch(`/api/models/settings/${encodeURIComponent(modelName)}`,{method:'DELETE'});
+      const r = await fetch('/api/models/settings?model=' + encodeURIComponent(modelName),{method:'DELETE'});
       const data = await r.json();
       if(data.success) {
         window.showNotification(data.message,'success');
@@ -181,7 +190,7 @@
 
   async function loadRecommendedIntoForm(modelName){
     try {
-      const r = await fetch(`/api/models/settings/recommended/${encodeURIComponent(modelName)}`);
+      const r = await fetch('/api/models/settings/recommended?model=' + encodeURIComponent(modelName));
       const dataRec = await r.json(); const s = dataRec.settings || {}; const set=(id,val)=>{ const el=document.getElementById(id); if(el) el.value=val; };
       set('ms-temperature', s.temperature ?? 0.75); set('ms-top-k', s.top_k ?? 40); set('ms-top-p', s.top_p ?? 0.9); set('ms-num-ctx', s.num_ctx ?? 4096); set('ms-seed', s.seed ?? 0);
       set('ms-num-predict', s.num_predict ?? 512); set('ms-repeat-last-n', s.repeat_last_n ?? 64); set('ms-repeat-penalty', s.repeat_penalty ?? 1.05);

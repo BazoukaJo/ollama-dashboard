@@ -968,10 +968,22 @@ class OllamaServiceControl:
                         "no updates found",
                         "already installed",
                         "is already installed",
+                        "a newer version was not found",
+                        "successfully installed",
+                        "successfully upgraded",
+                        "no available upgrade",
+                        "up to date",
+                        "install technology not supported",
                     )
                 ):
                     return True, "Ollama is already up to date (winget)."
-                self.logger.warning("winget upgrade failed: %s", combined[-2000:])
+                if proc.returncode in (
+                    -1978335189,  # 0x8A15006B - UPDATE_NOT_APPLICABLE
+                    -1978335135,  # 0x8A1500A1 - REBOOT_REQUIRED_TO_INSTALL
+                    3010,         # ERROR_SUCCESS_REBOOT_REQUIRED
+                ):
+                    return True, "Ollama upgraded via winget (reboot may be recommended)."
+                self.logger.warning("winget upgrade exit %d: %s", proc.returncode, combined[-2000:])
                 winget_err = (combined or f"winget exit {proc.returncode}")[-1500:]
 
         choco_err: Optional[str] = None
@@ -990,9 +1002,12 @@ class OllamaServiceControl:
                 choco_err = "Chocolatey upgrade timed out (over 15 minutes)."
             if cproc is not None:
                 combined = ((cproc.stdout or "") + "\n" + (cproc.stderr or "")).strip()
+                low = combined.lower()
                 if cproc.returncode == 0:
                     return True, combined or "Ollama upgraded via Chocolatey."
-                self.logger.warning("choco upgrade failed: %s", combined[-2000:])
+                if "already installed" in low or "nothing to do" in low or "up to date" in low:
+                    return True, "Ollama is already up to date (Chocolatey)."
+                self.logger.warning("choco upgrade exit %d: %s", cproc.returncode, combined[-2000:])
                 choco_err = f"Chocolatey failed (exit {cproc.returncode}). {combined[-800:]}"
 
         ok_setup, setup_msg = self._windows_install_via_official_setup()
@@ -1092,24 +1107,32 @@ class OllamaServiceControl:
             except Exception:
                 pass
 
+            if start_result.get("success"):
+                api_ok, _ = self._verify_ollama_api(max_retries=5, retry_delay=2)
+                if api_ok:
+                    if not ok:
+                        self.logger.warning(
+                            "Upgrade tool reported failure (%s) but Ollama is running; treating as success.",
+                            upgrade_msg,
+                        )
+                    return {
+                        "success": True,
+                        "message": f"Ollama updated and running.{'' if ok else ' (package manager reported a warning but the service is healthy)'}",
+                    }
+
             if not ok:
                 tag = WINDOWS_UPDATE_FAILURE_TAG if platform.system() == "Windows" else ""
                 msg = f"Update step failed: {upgrade_msg}{tag}"
                 if start_result.get("success"):
-                    return {"success": False, "message": f"{msg} Ollama was started again."}
+                    return {"success": False, "message": f"{msg} Ollama was started again but API is not responding."}
                 return {
                     "success": False,
                     "message": f"{msg} Could not restart Ollama: {start_result.get('message', 'unknown')}.",
                 }
 
-            if start_result.get("success"):
-                return {
-                    "success": True,
-                    "message": f"{upgrade_msg} Ollama started successfully.",
-                }
             return {
                 "success": False,
-                "message": f"Update reported success but start failed: {start_result.get('message')}. {upgrade_msg}",
+                "message": f"Update completed but Ollama failed to start: {start_result.get('message')}. {upgrade_msg}",
             }
         except Exception as e:
             try:
@@ -1166,10 +1189,20 @@ class OllamaServiceControl:
                         "no applicable upgrade",
                         "a newer version was not found",
                         "no newer package",
+                        "successfully installed",
+                        "no available upgrade",
+                        "up to date",
+                        "install technology not supported",
                     )
                 ):
                     return True, "Ollama is already installed (winget)."
-                self.logger.warning("winget install failed: %s", combined[-2000:])
+                if proc.returncode in (
+                    -1978335189,  # 0x8A15006B - UPDATE_NOT_APPLICABLE
+                    -1978335135,  # 0x8A1500A1 - REBOOT_REQUIRED_TO_INSTALL
+                    3010,         # ERROR_SUCCESS_REBOOT_REQUIRED
+                ):
+                    return True, "Ollama installed via winget (reboot may be recommended)."
+                self.logger.warning("winget install exit %d: %s", proc.returncode, combined[-2000:])
                 winget_err = (combined or f"winget exit {proc.returncode}")[-1500:]
 
         choco_err: Optional[str] = None
@@ -1257,24 +1290,32 @@ class OllamaServiceControl:
             except Exception:
                 pass
 
+            if start_result.get("success"):
+                api_ok, _ = self._verify_ollama_api(max_retries=5, retry_delay=2)
+                if api_ok:
+                    if not ok:
+                        self.logger.warning(
+                            "Install tool reported failure (%s) but Ollama is running; treating as success.",
+                            detail,
+                        )
+                    return {
+                        "success": True,
+                        "message": f"Ollama installed and running.{'' if ok else ' (package manager reported a warning but the service is healthy)'}",
+                    }
+
             if not ok:
                 tag = WINDOWS_UPDATE_FAILURE_TAG if platform.system() == "Windows" else ""
                 msg = f"Install step failed: {detail}{tag}"
                 if start_result.get("success"):
-                    return {"success": False, "message": f"{msg} Ollama service was started anyway."}
+                    return {"success": False, "message": f"{msg} Ollama was started but API is not responding."}
                 return {
                     "success": False,
                     "message": f"{msg} {start_result.get('message', 'Could not start Ollama.')}",
                 }
 
-            if start_result.get("success"):
-                return {
-                    "success": True,
-                    "message": f"{detail} Ollama started successfully.",
-                }
             return {
                 "success": False,
-                "message": f"Install reported success but start failed: {start_result.get('message')}. {detail}",
+                "message": f"Install completed but Ollama failed to start: {start_result.get('message')}. {detail}",
             }
         except Exception as e:
             try:

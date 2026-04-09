@@ -1431,6 +1431,11 @@ function updateRunningModelsDisplay(models) {
     .join("");
   runningModelsContainer.innerHTML = cardsHtml;
   afterModelCardsRendered();
+  // Running models must stay visible: capability filters only apply to catalog lists.
+  runningModelsContainer.querySelectorAll(".model-card").forEach((card) => {
+    const column = card.closest(".model-cards-row .col, .col-12");
+    if (column) column.style.display = "";
+  });
 }
 
 window.updateRunningModelsDisplay = updateRunningModelsDisplay;
@@ -1694,9 +1699,15 @@ function initializeCompactMode() {
 
 // updateHealthStatus & updateServiceControlButtons moved to serviceControl.js
 
-// --- System stats polling interval: update every 1s ---
+// System stats: same cadence as model list refresh (data-poll-interval / getPollIntervalSec).
 document.addEventListener("DOMContentLoaded", function () {
-  setInterval(updateSystemStats, 1000);
+  const statsMs =
+    typeof getPollIntervalSec === "function" ? getPollIntervalSec() * 1000 : 10000;
+  if (typeof updateSystemStats === "function") updateSystemStats();
+  setInterval(function () {
+    if (document.visibilityState !== "visible") return;
+    if (typeof updateSystemStats === "function") updateSystemStats();
+  }, statsMs);
 });
 
 const INITIAL_DOWNLOADABLE_VISIBLE = 48;
@@ -2036,11 +2047,17 @@ function toggleCapabilityFilter(capability) {
   });
 
   [
-    "runningModelsContainer",
     "availableModelsContainer",
     "downloadableModelsContainer",
     "extendedModelsContainer",
   ].forEach((id) => applyCapabilityFilters(id));
+  const runC = document.getElementById("runningModelsContainer");
+  if (runC) {
+    runC.querySelectorAll(".model-card").forEach((card) => {
+      const column = card.closest(".model-cards-row .col, .col-12");
+      if (column) column.style.display = "";
+    });
+  }
 }
 
 function applyCapabilityFilters(containerId) {

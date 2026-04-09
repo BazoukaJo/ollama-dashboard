@@ -192,6 +192,14 @@ def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflic
     attach_last_token_usage_to_model(service, model)
     return model
 
+def _running_process_model_id(model):
+    """Ollama /api/ps may populate `name`, `model`, or both; prefer a non-empty id."""
+    if not isinstance(model, dict):
+        return str(model)
+    raw = (model.get('name') or model.get('model') or '').strip()
+    return raw if raw else 'unknown'
+
+
 def format_running_model_entry(service, model, include_has_custom_settings=False, prefer_heuristics_on_conflict=False):
     try:
         if isinstance(model, dict) and 'size' in model and 'formatted_size' not in model:
@@ -199,7 +207,7 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
             if isinstance(size_val, (int, float)):
                 model['formatted_size'] = service.format_size(size_val)
         entry = {
-            'name': model.get('name', 'unknown') if isinstance(model, dict) else str(model),
+            'name': _running_process_model_id(model),
             'size': model.get('size') if isinstance(model, dict) else None,
             'details': model.get('details') if (isinstance(model, dict) and model.get('details') is not None) else {},
             'modified_at': model.get('modified_at') if isinstance(model, dict) else None,

@@ -119,7 +119,7 @@ def _ollama_installed_for_dashboard(svc, update_result):
 def index():
     try:
         svc = _get_ollama_service()
-        running_models = svc.get_running_models()
+        running_models = svc.get_running_models(force_refresh=True)
         available_models = svc.get_available_models()
         svc.refresh_model_settings_cache_from_disk()
         for _m in running_models or []:
@@ -716,7 +716,7 @@ def get_running_models():
         except Exception:
             # Logging should never break the endpoint
             pass
-        return {"models": models}
+        return {"models": list(models) if models is not None else []}
     except Exception as e:
         return {"error": str(e), "models": []}, 500
 
@@ -809,11 +809,23 @@ def get_combined_models():
         return {"error": str(exc), "models": []}, 500
 
 
-@bp.route('/api/models/settings/<model_name>')
-def api_get_model_settings(model_name):
-    err, status = _validate_model_name(model_name)
+def _resolve_model_name(model_name=None):
+    """Get model name from path param or ?model= query param."""
+    name = model_name or request.args.get('model') or request.args.get('name')
+    if not name:
+        return None, ({"success": False, "error": "Missing model name"}, 400)
+    err, status = _validate_model_name(name)
     if err is not None:
-        return err, status
+        return None, (err, status)
+    return name, None
+
+
+@bp.route('/api/models/settings/<model_name>')
+@bp.route('/api/models/settings', endpoint='api_get_model_settings_qp')
+def api_get_model_settings(model_name=None):
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
     try:
         data = _get_ollama_service().get_model_settings_with_fallback(model_name)
         if data is None:
@@ -824,25 +836,26 @@ def api_get_model_settings(model_name):
 
 
 @bp.route('/api/models/settings/recommended/<model_name>')
-def api_get_recommended_settings(model_name):
-    err, status = _validate_model_name(model_name)
-    if err is not None:
-        return err, status
+@bp.route('/api/models/settings/recommended', endpoint='api_get_recommended_settings_qp')
+def api_get_recommended_settings(model_name=None):
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
     try:
         data = _get_ollama_service().get_model_settings_with_fallback(model_name)
         if data is None:
             return {"error": f"Settings not available for model {model_name}"}, 404
-        # Return only recommended (no save)
         return {"model": model_name, "settings": data.get('settings'), "source": data.get('source', 'recommended')}
     except Exception as e:
         return {"error": str(e)}, 500
 
 
 @bp.route('/api/models/settings/<model_name>', methods=['POST'])
-def api_save_model_settings(model_name):
-    err, status = _validate_model_name(model_name)
-    if err is not None:
-        return err, status
+@bp.route('/api/models/settings', methods=['POST'], endpoint='api_save_model_settings_qp')
+def api_save_model_settings(model_name=None):
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
     try:
         payload = request.get_json() or {}
         success = _get_ollama_service().save_model_settings(model_name, payload, source='user')
@@ -854,10 +867,11 @@ def api_save_model_settings(model_name):
 
 
 @bp.route('/api/models/settings/<model_name>', methods=['DELETE'])
-def api_delete_model_settings(model_name):
-    err, status = _validate_model_name(model_name)
-    if err is not None:
-        return err, status
+@bp.route('/api/models/settings', methods=['DELETE'], endpoint='api_delete_model_settings_qp')
+def api_delete_model_settings(model_name=None):
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
     try:
         success = _get_ollama_service().delete_model_settings(model_name)
         if success:
@@ -921,10 +935,11 @@ def api_copy_model_settings_between():
 
 
 @bp.route('/api/models/settings/<model_name>/reset', methods=['POST'])
-def api_reset_model_settings(model_name):
-    err, status = _validate_model_name(model_name)
-    if err is not None:
-        return err, status
+@bp.route('/api/models/settings/reset', methods=['POST'], endpoint='api_reset_model_settings_qp')
+def api_reset_model_settings(model_name=None):
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
     try:
         # Get recommended settings via fallback
         settings_data = _get_ollama_service().get_model_settings_with_fallback(model_name)

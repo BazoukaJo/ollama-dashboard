@@ -6,12 +6,13 @@ Single initialization point - ensures no duplicate service creation.
 
 __version__ = "1.0003"
 
+import html
 import os
 import sys
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from flask import Flask
+from flask import Flask, jsonify
 from flask_cors import CORS
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,33 @@ def create_app(config_name='development'):
             return None
 
         logger.info("🔐 Auth enabled (admin/operator routes protected)")
+
+    # ===== ERROR HANDLERS =====
+    # Return JSON (not HTML) for API routes so the frontend can parse errors.
+
+    @app.errorhandler(404)
+    def not_found(e):
+        from flask import request as _req  # pylint: disable=import-outside-toplevel
+        if _req.path.startswith('/api/'):
+            return jsonify({"success": False, "error": "Not found", "message": str(e)}), 404
+        desc = getattr(e, 'description', None) or str(e) or 'Not Found'
+        body = (
+            '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Not Found</title></head>'
+            f'<body><h1>Not Found</h1><p>{html.escape(str(desc))}</p></body></html>'
+        )
+        return body, 404, {'Content-Type': 'text/html; charset=utf-8'}
+
+    @app.errorhandler(500)
+    def internal_error(e):
+        from flask import request as _req  # pylint: disable=import-outside-toplevel
+        if _req.path.startswith('/api/'):
+            return jsonify({"success": False, "error": "Internal server error", "message": str(e)}), 500
+        msg = getattr(e, 'description', None) or str(e) or 'Internal Server Error'
+        body = (
+            '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Server Error</title></head>'
+            f'<body><h1>Internal Server Error</h1><p>{html.escape(str(msg))}</p></body></html>'
+        )
+        return body, 500, {'Content-Type': 'text/html; charset=utf-8'}
 
     # ===== MIDDLEWARE & SECURITY =====
 

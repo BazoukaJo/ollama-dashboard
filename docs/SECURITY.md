@@ -7,14 +7,16 @@
 ### Model Name Validation
 
 ```python
-# Allowed: alphanumeric, hyphens, underscores, colons, periods
-# Pattern: ^[a-zA-Z0-9:._-]+$
+# Allowed: alphanumeric, hyphens, underscores, slashes, plus, colons, periods
+# Pattern: ^[a-zA-Z0-9:._/+\-]+$
 
 # Valid model names:
 # llama3.1:8b
 # llava-phi
 # custom_model-v2
 # my-model:latest
+# VladimirGav/gemma4-26b-16GB-VRAM:latest
+# repo/model+quant:latest
 
 # Invalid model names (rejected):
 # llama3.1 <script>alert(1)</script>

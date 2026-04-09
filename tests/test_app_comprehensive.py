@@ -429,6 +429,34 @@ class TestModelSettingsEndpoints:
         response = client.get('/api/models/settings/recommended/llama3.1:8b')
         assert response.status_code == 200
 
+    @patch('app.routes.main.ollama_service.get_model_settings_with_fallback')
+    def test_get_model_settings_query_param_slash_and_plus(self, mock_fallback, client):
+        """GET ?model= supports library IDs with / and + (path routes cannot)."""
+        from urllib.parse import quote
+
+        name = 'ns/gemma+test:latest'
+        payload = {
+            'model': name,
+            'settings': {'temperature': 0.5},
+            'source': 'recommended',
+        }
+        mock_fallback.return_value = payload
+        q_resp = client.get('/api/models/settings?model=' + quote(name, safe=''))
+        assert q_resp.status_code == 200
+        assert q_resp.get_json() == payload
+        mock_fallback.assert_called_once_with(name)
+
+    @patch('app.routes.main.ollama_service.get_model_settings_with_fallback')
+    def test_get_model_settings_path_and_query_same_for_simple_name(self, mock_fallback, client):
+        """Simple names: path and ?model= return the same JSON."""
+        payload = {'model': 'llama3.1:8b', 'settings': {'temperature': 0.5}, 'source': 'x'}
+        mock_fallback.return_value = payload
+        path_resp = client.get('/api/models/settings/llama3.1:8b')
+        q_resp = client.get('/api/models/settings?model=llama3.1%3A8b')
+        assert path_resp.status_code == 200
+        assert q_resp.status_code == 200
+        assert path_resp.get_json() == q_resp.get_json()
+
 
 # ============================================================================
 # ERROR HANDLING
