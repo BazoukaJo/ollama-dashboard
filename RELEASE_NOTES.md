@@ -9,6 +9,10 @@
 - **Settings status** — Running and available cards always show a compact **Saved** or **Default** badge on the Settings control (per-model `model_settings.json` state).
 - **Downloadable cards** — Same action layout class for the single Download control.
 - **Docs** — README screenshot updated (`docs/images/dashboard.png`).
+- **Reliability** — `/api/*` errors return JSON (no stray HTML parse errors in the UI); model settings use `?model=` so names with `/` or `:` route correctly; running-model list avoids trusting a cached empty `/api/ps` result and retries briefly; capability filters no longer hide loaded models.
+- **Windows** — Install/update flows treat a healthy Ollama API as success when winget/choco exit codes are misleading; broader winget “already installed / reboot” handling.
+- **Validation** — Model IDs may include `/` (library paths) and `+` (quant suffixes); admin “model defaults” page uses the same settings URLs as the main dashboard.
+- **Polling** — System stats refresh on the same interval as the model-list countdown (and pause when the tab is hidden).
 
 ## Version 1.0002 (2026)
 
