@@ -362,7 +362,10 @@
                                                 </div>
                                                 <div class="spec-content">
                                                     <div class="spec-label" data-dashboard-tooltip="Approximate parameter size or class (e.g. 7B) from metadata.">Parameters</div>
-                                                    <div class="spec-value">{{ model.details.parameter_size if model.details is defined and model.details.parameter_size is defined else 'Unknown' }}</div>
+                                                    {% set _r_param = model.details.parameter_size if model.details is defined and model.details.parameter_size is defined else 'Unknown' %}
+                                                    {% set _r_quant = model.details.quantization_level if model.details is defined and model.details.quantization_level is defined else (model.details.quantization if model.details is defined and model.details.quantization is defined else 'Unknown') %}
+                                                    <div class="spec-value">{{ _r_param }}</div>
+                                                    <div class="text-muted small">Quant: {{ _r_quant }}</div>
                                                 </div>
                                             </div>
                                         </div>
@@ -512,7 +515,10 @@
                                                 </div>
                                                 <div class="spec-content">
                                                     <div class="spec-label" data-dashboard-tooltip="Parameter class from metadata (e.g. 7B).">Parameters</div>
-                                                    <div class="spec-value">{{ model.details.parameter_size if model.details is defined and model.details.parameter_size is defined else 'Unknown' }}</div>
+                                                    {% set _a_param = model.details.parameter_size if model.details is defined and model.details.parameter_size is defined else 'Unknown' %}
+                                                    {% set _a_quant = model.details.quantization_level if model.details is defined and model.details.quantization_level is defined else (model.details.quantization if model.details is defined and model.details.quantization is defined else 'Unknown') %}
+                                                    <div class="spec-value">{{ _a_param }}</div>
+                                                    <div class="text-muted small">Quant: {{ _a_quant }}</div>
                                                 </div>
                                             </div>
                                         </div>
