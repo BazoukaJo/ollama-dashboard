@@ -457,13 +457,13 @@
                             <div class="d-flex align-items-center gap-2 gap-md-3 flex-wrap models-mgmt-toolbar-secondary justify-content-md-end">
                                 <div class="capability-filters d-flex align-items-center gap-1" id="availableModelsFilters">
                                     <span class="text-muted small me-2" data-dashboard-tooltip="Click an icon to hide models that lack that capability (per Ollama metadata). Active = filter on.">Filters</span>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" data-dashboard-tooltip="Filter by reasoning / thinking support (metadata)." onclick="toggleCapabilityFilter('reasoning')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" data-dashboard-tooltip="Filter by reasoning / thinking support (metadata)." title="Toggle reasoning models" aria-label="Toggle reasoning models" onclick="toggleCapabilityFilter('reasoning')">
                                         <i class="fas fa-brain"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" data-dashboard-tooltip="Filter by image / vision support (metadata)." onclick="toggleCapabilityFilter('vision')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" data-dashboard-tooltip="Filter by image / vision support (metadata)." title="Toggle vision models" aria-label="Toggle vision models" onclick="toggleCapabilityFilter('vision')">
                                         <i class="fas fa-image"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" data-dashboard-tooltip="Filter by tool or function-calling support (metadata)." onclick="toggleCapabilityFilter('tools')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" data-dashboard-tooltip="Filter by tool or function-calling support (metadata)." title="Toggle tool-enabled models" aria-label="Toggle tool-enabled models" onclick="toggleCapabilityFilter('tools')">
                                         <i class="fas fa-tools"></i>
                                     </button>
                                 </div>
@@ -590,13 +590,13 @@
                             <div class="d-flex align-items-center gap-2 gap-md-3 flex-wrap models-mgmt-toolbar-secondary justify-content-md-end">
                                 <div class="capability-filters d-flex align-items-center gap-1" id="bestModelsFilters">
                                     <span class="text-muted small me-2" data-dashboard-tooltip="Same as Available: filter the list by capability flags in model metadata.">Filters</span>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" data-dashboard-tooltip="Filter by reasoning / thinking support (metadata)." onclick="toggleCapabilityFilter('reasoning')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" data-dashboard-tooltip="Filter by reasoning / thinking support (metadata)." title="Toggle reasoning models" aria-label="Toggle reasoning models" onclick="toggleCapabilityFilter('reasoning')">
                                         <i class="fas fa-brain"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" data-dashboard-tooltip="Filter by image / vision support (metadata)." onclick="toggleCapabilityFilter('vision')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" data-dashboard-tooltip="Filter by image / vision support (metadata)." title="Toggle vision models" aria-label="Toggle vision models" onclick="toggleCapabilityFilter('vision')">
                                         <i class="fas fa-image"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" data-dashboard-tooltip="Filter by tool or function-calling support (metadata)." onclick="toggleCapabilityFilter('tools')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" data-dashboard-tooltip="Filter by tool or function-calling support (metadata)." title="Toggle tool-enabled models" aria-label="Toggle tool-enabled models" onclick="toggleCapabilityFilter('tools')">
                                         <i class="fas fa-tools"></i>
                                     </button>
                                 </div>
@@ -639,8 +639,12 @@
         </div>
 
     {% if error %}
-    <div class="alert alert-danger" role="alert">
-        <span class="detail-icon">⚠️</span> {{ error }}
+    <div class="alert alert-danger dashboard-error-popup" role="alert" aria-live="assertive">
+        <div class="dashboard-error-popup-body">
+            <span class="detail-icon" aria-hidden="true">⚠️</span>
+            <span class="dashboard-error-popup-text">{{ error }}</span>
+        </div>
+        <button type="button" class="btn-close btn-close-white dashboard-error-popup-close" aria-label="Dismiss error" onclick="this.closest('.dashboard-error-popup').remove()"></button>
     </div>
     {% endif %}
 
