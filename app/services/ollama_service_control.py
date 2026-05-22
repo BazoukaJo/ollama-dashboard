@@ -748,8 +748,7 @@ class OllamaServiceControl:
                 # Flush caches and restart background thread
                 try:
                     if hasattr(self, "clear_all_caches") and callable(getattr(self, "clear_all_caches", None)):
-                        if hasattr(self, "clear_all_caches") and callable(getattr(self, "clear_all_caches", None)):
-                            self.clear_all_caches()
+                        self.clear_all_caches()
                 except AttributeError:
                     self.logger.warning("clear_all_caches method not found on OllamaServiceControl instance")
                 except Exception:
@@ -1112,14 +1111,12 @@ class OllamaServiceControl:
                 api_ok, _ = self._verify_ollama_api(max_retries=5, retry_delay=2)
                 if api_ok:
                     if not ok:
-                        self.logger.warning(
-                            "Upgrade tool reported failure (%s) but Ollama is running; treating as success.",
-                            upgrade_msg,
-                        )
-                    return {
-                        "success": True,
-                        "message": f"Ollama updated and running.{'' if ok else ' (package manager reported a warning but the service is healthy)'}",
-                    }
+                        tag = WINDOWS_UPDATE_FAILURE_TAG if platform.system() == "Windows" else ""
+                        return {
+                            "success": False,
+                            "message": f"Update step failed: {upgrade_msg}{tag} Ollama was restarted and is healthy, but the upgrade did not complete.",
+                        }
+                    return {"success": True, "message": "Ollama updated and running."}
 
             if not ok:
                 tag = WINDOWS_UPDATE_FAILURE_TAG if platform.system() == "Windows" else ""

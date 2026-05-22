@@ -1,9 +1,17 @@
 // Ensure getCapabilitiesHTML is available globally (uses capState from main.js when loaded)
 if (!window.getCapabilitiesHTML) {
   window.getCapabilitiesHTML = function (model) {
-    const capState = (v) => (v === true ? "enabled" : v === false ? "disabled" : "unknown");
-    const capTitle = (v, l) => (v === true ? `${l}: Available` : v === false ? `${l}: Not available` : `${l}: Unknown`);
-    const r = model?.has_reasoning, v = model?.has_vision, t = model?.has_tools;
+    const capState = (v) =>
+      v === true ? "enabled" : v === false ? "disabled" : "unknown";
+    const capTitle = (v, l) =>
+      v === true
+        ? `${l}: Available`
+        : v === false
+          ? `${l}: Not available`
+          : `${l}: Unknown`;
+    const r = model?.has_reasoning,
+      v = model?.has_vision,
+      t = model?.has_tools;
     return `
             <span class="capability-icon ${capState(r)}" data-dashboard-tooltip="${capTitle(r, "Reasoning")}">
                 <i class="fas fa-brain"></i>
@@ -22,9 +30,11 @@ if (!window.getCapabilitiesHTML) {
   const getCapabilitiesHTML = window.getCapabilitiesHTML;
 
   function familyFromModel(model) {
-    if (model.family != null && model.family !== "") return String(model.family);
+    if (model.family != null && model.family !== "")
+      return String(model.family);
     const details = model.details || {};
-    if (details.family != null && details.family !== "") return String(details.family);
+    if (details.family != null && details.family !== "")
+      return String(details.family);
     const name = model.name;
     if (!name || typeof name !== "string") return "Unknown";
     const colon = name.indexOf(":");
@@ -32,7 +42,8 @@ if (!window.getCapabilitiesHTML) {
   }
 
   function contextFromModel(model) {
-    const val = model.context_length ?? (model.details && model.details.context_length);
+    const val =
+      model.context_length ?? (model.details && model.details.context_length);
     if (val != null && val !== "") return String(val);
     return "—";
   }
@@ -87,6 +98,13 @@ if (!window.getCapabilitiesHTML) {
   function buildDownloadableModelCardHTML(model) {
     const family = familyFromModel(model);
     const contextVal = contextFromModel(model);
+    const details = model.details || {};
+    const quantization =
+      details.quantization_level ||
+      details.quantization ||
+      model.quantization_level ||
+      model.quantization ||
+      "Unknown";
     return `
         <div class="col">
           <div class="model-card h-100" data-model-name="${escapeHtml(model.name)}">
@@ -123,6 +141,7 @@ if (!window.getCapabilitiesHTML) {
                             <div class="spec-content">
                                 <div class="spec-label" data-dashboard-tooltip="Parameter class from metadata (e.g. 7B).">Parameters</div>
                                 <div class="spec-value">${model.parameter_size != null && model.parameter_size !== "" ? escapeHtml(String(model.parameter_size)) : "Unknown"}</div>
+                              <div class="text-muted small">Quant: ${escapeHtml(String(quantization))}</div>
                             </div>
                         </div>
                     </div>
@@ -165,6 +184,7 @@ if (!window.getCapabilitiesHTML) {
   window.modelCards.buildDownloadableModelCardHTML =
     buildDownloadableModelCardHTML;
   window.modelCards.modelTitleMarkup = modelTitleMarkup;
-  window.modelCards.modelActionSettingsButtonInner = modelActionSettingsButtonInner;
+  window.modelCards.modelActionSettingsButtonInner =
+    modelActionSettingsButtonInner;
   window.modelCards.parseModelTitleParts = parseModelTitleParts;
 })();

@@ -1258,6 +1258,17 @@ function buildAvailableContextInnerHtml(model, contextStr) {
   return prefixContextTokensUsedHtml(model, core);
 }
 
+function quantizationFromModel(model) {
+  const details = (model && model.details) || {};
+  const raw =
+    details.quantization_level ??
+    details.quantization ??
+    model?.quantization_level ??
+    model?.quantization;
+  if (raw == null || raw === "") return "Unknown";
+  return String(raw);
+}
+
 function updateRunningModelsDisplay(models) {
   const runningModelsContainer = document.getElementById(
     "runningModelsContainer",
@@ -1296,6 +1307,7 @@ function updateRunningModelsDisplay(models) {
         : model?.parameter_size != null && model.parameter_size !== ""
           ? model.parameter_size
           : "Unknown";
+    const quantization = quantizationFromModel(model);
     const formattedSize =
       model?.formatted_size != null && model.formatted_size !== ""
         ? model.formatted_size
@@ -1395,6 +1407,7 @@ function updateRunningModelsDisplay(models) {
                       ? escapeHtml(String(parameterSize))
                       : String(parameterSize)
                   }</div>
+                  <div class="text-muted small">Quant: ${_escModelCard(quantization)}</div>
                 </div>
               </div>
             </div>
@@ -1499,6 +1512,7 @@ function buildAvailableModelCardHTML(model) {
       : model?.parameter_size != null && model.parameter_size !== ""
         ? String(model.parameter_size)
         : "Unknown";
+  const quantization = quantizationFromModel(model);
   const formattedSize =
     model?.formatted_size != null && model.formatted_size !== ""
       ? String(model.formatted_size)
@@ -1562,6 +1576,7 @@ function buildAvailableModelCardHTML(model) {
                 <div class="spec-content">
                   <div class="spec-label" data-dashboard-tooltip="Parameter class from metadata (e.g. 7B).">Parameters</div>
                   <div class="spec-value">${_escModelCard(parameterSize)}</div>
+                  <div class="text-muted small">Quant: ${_escModelCard(quantization)}</div>
                 </div>
               </div>
             </div>
