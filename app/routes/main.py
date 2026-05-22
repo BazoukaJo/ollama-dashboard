@@ -304,6 +304,9 @@ def start_model(model_name):
                 max_retries: Maximum number of retries (3)
                 timeout: Request timeout in seconds (60s base, increases on retry)
             """
+            # Avoid unbounded timeout growth across retries.
+            timeout = min(int(timeout), 120)
+
             try:
                 # Explicit timeout prevents hanging on unresponsive Ollama
                 response = _get_ollama_service()._session.post(
@@ -339,19 +342,19 @@ def start_model(model_name):
                     wait_time = 2 ** retry_num  # Exponential backoff: 1s, 2s, 4s
                     current_app.logger.debug(f"Retrying in {wait_time}s...")
                     time.sleep(wait_time)
-                    return _attempt_generate(retry_num + 1, max_retries, timeout + 30)  # Increase timeout on retry
+                    return _attempt_generate(retry_num + 1, max_retries, min(timeout + 30, 120))  # Increase timeout on retry
 
                 return {"success": False, "response": response}
 
             except requests.exceptions.Timeout:
                 if retry_num < max_retries:
                     time.sleep(2)
-                    return _attempt_generate(retry_num + 1, max_retries, timeout + 30)
+                    return _attempt_generate(retry_num + 1, max_retries, min(timeout + 30, 120))
                 raise
             except requests.exceptions.ConnectionError as e:
                 if _is_transient_error(str(e)) and retry_num < max_retries:
                     time.sleep(2 ** retry_num)
-                    return _attempt_generate(retry_num + 1, max_retries, timeout + 30)
+                    return _attempt_generate(retry_num + 1, max_retries, min(timeout + 30, 120))
                 raise
 
         # Try to generate with the model to load it
@@ -604,7 +607,7 @@ def restart_model(model_name):
 
                     # Check if this is a transient error worth retrying
                     if start_response.status_code in [500, 502, 503, 504] and attempt < max_retries - 1:
-                        time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                        time.sleep(min(retry_delay * (2 ** attempt), 32))  # Exponential backoff with cap
                         continue
                     else:
                         return {"success": False, "message": f"Failed to restart model: {last_error}"}, start_response.status_code
@@ -612,14 +615,14 @@ def restart_model(model_name):
             except requests.exceptions.Timeout:
                 last_error = "Timeout"
                 if attempt < max_retries - 1:
-                    time.sleep(retry_delay * (2 ** attempt))
+                    time.sleep(min(retry_delay * (2 ** attempt), 32))
                     continue
                 else:
                     return {"success": False, "message": f"Timeout while restarting model {model_name}"}, 504
             except requests.exceptions.RequestException as e:
                 last_error = str(e)
                 if attempt < max_retries - 1:
-                    time.sleep(retry_delay * (2 ** attempt))
+                    time.sleep(min(retry_delay * (2 ** attempt), 32))
                     continue
                 else:
                     return {"success": False, "message": f"Network error while restarting model: {str(e)}"}, 503

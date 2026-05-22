@@ -98,7 +98,7 @@ class OllamaServiceCore:
         self._cache_timestamps = {}
         # Store session in __dict__ directly to avoid property conflicts during init
         session = requests.Session()
-        adapter = HTTPAdapter(pool_connections=1, pool_maxsize=20)
+        adapter = HTTPAdapter(pool_connections=5, pool_maxsize=20)
         session.mount("http://", adapter)
         session.mount("https://", adapter)
         self.__dict__['_session'] = session
@@ -122,6 +122,7 @@ class OllamaServiceCore:
         self._total_retry_attempts = 0
         self._successful_retries = 0
         self._failed_retries = 0
+        self._atexit_registered = False
         if app is not None:
             self.init_app(app)
         else:
@@ -167,7 +168,9 @@ class OllamaServiceCore:
                     self.logger.exception("Error in auto-start thread: %s", e)
             threading.Thread(target=delayed_auto_start, daemon=True, name="AutoStartOllama").start()
 
-        atexit.register(self._cleanup)
+        if not self._atexit_registered:
+            atexit.register(self._cleanup)
+            self._atexit_registered = True
     def _start_background_updates(self):
         """Start the background thread for periodic data collection."""
         if self._background_stats and self._background_stats.is_alive():

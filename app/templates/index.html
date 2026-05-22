@@ -441,8 +441,8 @@
 
                     <!-- Available Models: show when Ollama is installed so JS can fill the grid even if SSR list is empty. -->
                     {% if ollama_installed %}
-                    <div class="mb-4">
-                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 models-mgmt-toolbar">
+                    <div class="mb-4 models-section-shell">
+                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 models-mgmt-toolbar models-section-header">
                             <div class="d-flex align-items-center gap-2 flex-wrap models-mgmt-toolbar-primary">
                                 <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshModelsBtn" data-dashboard-tooltip="Reload installed model list from Ollama without a full page refresh." onclick="refreshDashboardData()" aria-label="Refresh models">
                                     <i class="fas fa-sync-alt"></i>
@@ -466,6 +466,7 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="models-section-body">
                         <div class="row g-3 model-cards-row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5" id="availableModelsContainer">
                             {% for model in available_models %}
                             <div class="col">
@@ -569,12 +570,13 @@
                             </div>
                             {% endfor %}
                         </div>
+                        </div>
                     </div>
                     {% endif %}
 
                     <!-- Downloadable Models -->
-                    <div class="mb-4">
-                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 models-mgmt-toolbar">
+                    <div class="mb-4 models-section-shell downloadable-section-shell" id="downloadableModelsSection">
+                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 models-mgmt-toolbar models-section-header downloadable-section-header" id="downloadableSectionHeader">
                             <div class="d-flex align-items-center gap-2 models-mgmt-toolbar-primary">
                                 <i class="fas fa-star text-warning section-icon"></i>
                                 <span class="fw-semibold text-light section-title-text" data-dashboard-tooltip="Curated suggestions you can pull with Ollama. Use Find Model or CLI for any tag from the full library.">Downloadable Models</span>
@@ -596,8 +598,12 @@
                                 <button type="button" class="btn btn-sm btn-outline-primary" data-dashboard-tooltip="Search by model name and pull it with Ollama (any library tag)." onclick="openFindModelModal()">
                                     <i class="fas fa-search me-1"></i>Find Model
                                 </button>
+                                <button type="button" id="downloadableSectionToggleBtn" class="btn btn-sm btn-outline-secondary" aria-label="Collapse downloadable models section" title="Collapse downloadable models section" aria-expanded="true" aria-controls="downloadableModelsBody" data-dashboard-tooltip="Collapse or expand the downloadable models section." onclick="toggleDownloadableSection()">
+                                    <i class="fas fa-chevron-up" aria-hidden="true"></i>
+                                </button>
                             </div>
                         </div>
+                        <div id="downloadableModelsBody" class="models-section-body downloadable-section-body">
                         <div class="row g-3 model-cards-row model-cards-row--downloadable row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5" id="downloadableModelsContainer">
                             <div class="col-12 text-center py-4">
                                 <div class="spinner-border text-secondary" role="status">
@@ -611,6 +617,7 @@
                             </button>
                         </div>
                         <div id="extendedModelsContainer" class="row g-3 mt-2 extended-models-container model-cards-row model-cards-row--downloadable row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5">
+                        </div>
                         </div>
                     </div>
 

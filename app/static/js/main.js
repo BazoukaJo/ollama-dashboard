@@ -72,7 +72,9 @@ function refreshDashboardData() {
       const icon = btn.querySelector("i");
       if (icon) {
         icon.classList.add("fa-spin");
-        setTimeout(function () { icon.classList.remove("fa-spin"); }, 800);
+        setTimeout(function () {
+          icon.classList.remove("fa-spin");
+        }, 800);
       }
     }
   });
@@ -541,7 +543,10 @@ async function showModelInfo(modelName) {
       if (btnP) {
         btnP.onclick = function () {
           if (window.modelCardActions && modelCardActions.copyText) {
-            modelCardActions.copyText(info.parameters || "", "Parameters copied");
+            modelCardActions.copyText(
+              info.parameters || "",
+              "Parameters copied",
+            );
           }
         };
       }
@@ -589,7 +594,10 @@ function buildModelSummary(info, details, modelName) {
   }
 
   if (details.model_type) {
-    summaryItems.push({ label: "Model type", value: String(details.model_type) });
+    summaryItems.push({
+      label: "Model type",
+      value: String(details.model_type),
+    });
   }
 
   if (details.format) {
@@ -887,13 +895,7 @@ function modelHasCustomSettings(model) {
   if (!model || typeof model !== "object") return false;
   const v = model.has_custom_settings;
   if (v === false || v === "false" || v === 0 || v === "0") return false;
-  return (
-    v === true ||
-    v === "true" ||
-    v === 1 ||
-    v === "1" ||
-    v === "yes"
-  );
+  return v === true || v === "true" || v === 1 || v === "1" || v === "yes";
 }
 
 function getSettingsButtonInnerHtml(hasCustom) {
@@ -918,7 +920,9 @@ function syncSettingsSavedIndicatorOnCard(card, model) {
   btn.innerHTML = getSettingsButtonInnerHtml(hasCustom);
   btn.setAttribute(
     "aria-label",
-    hasCustom ? "Settings (saved custom defaults)" : "Settings (using defaults)",
+    hasCustom
+      ? "Settings (saved custom defaults)"
+      : "Settings (using defaults)",
   );
 }
 
@@ -972,9 +976,7 @@ function buildCapabilityPayloadForModal(src) {
     };
   }
   const explicit =
-    "has_reasoning" in src ||
-    "has_vision" in src ||
-    "has_tools" in src;
+    "has_reasoning" in src || "has_vision" in src || "has_tools" in src;
   if (explicit) {
     return {
       has_reasoning: src.has_reasoning,
@@ -983,9 +985,7 @@ function buildCapabilityPayloadForModal(src) {
     };
   }
   const capsList =
-    src.capabilities ||
-    (src.details && src.details.capabilities) ||
-    null;
+    src.capabilities || (src.details && src.details.capabilities) || null;
   const fromArr = flagsFromOllamaCapabilitiesArray(capsList);
   if (fromArr) return fromArr;
   return {
@@ -1088,7 +1088,8 @@ async function updateSystemStats() {
     }
     const stats = sr.data;
     const cpu =
-      typeof stats.cpu_percent === "number" && Number.isFinite(stats.cpu_percent)
+      typeof stats.cpu_percent === "number" &&
+      Number.isFinite(stats.cpu_percent)
         ? stats.cpu_percent
         : 0;
     const mem =
@@ -1097,8 +1098,7 @@ async function updateSystemStats() {
       typeof mem.percent === "number" && Number.isFinite(mem.percent)
         ? mem.percent
         : 0;
-    const vram =
-      stats.vram && typeof stats.vram === "object" ? stats.vram : {};
+    const vram = stats.vram && typeof stats.vram === "object" ? stats.vram : {};
     const vramTotal =
       typeof vram.total === "number" && Number.isFinite(vram.total)
         ? vram.total
@@ -1127,17 +1127,13 @@ async function updateSystemStats() {
           vramTotal > 0 ? `${vramPct.toFixed(1)}%` : "--%";
       if (gpu3dPercentEl)
         gpu3dPercentEl.textContent =
-          typeof vram.gpu_3d === "number"
-            ? `${gpu3d.toFixed(1)}%`
-            : "--%";
+          typeof vram.gpu_3d === "number" ? `${gpu3d.toFixed(1)}%` : "--%";
 
       // Store historical data
       timelineData.cpu.push(cpu);
       timelineData.memory.push(memPct);
       timelineData.vram.push(vramTotal > 0 ? vramPct : 0);
-      timelineData.gpu3d.push(
-        typeof vram.gpu_3d === "number" ? gpu3d : 0,
-      );
+      timelineData.gpu3d.push(typeof vram.gpu_3d === "number" ? gpu3d : 0);
 
       // Limit data points
       if (timelineData.cpu.length > MAX_TIMELINE_POINTS) {
@@ -1153,10 +1149,12 @@ async function updateSystemStats() {
       const vramCanvas = document.getElementById("vramTimeline");
       const gpu3dCanvas = document.getElementById("gpu3dTimeline");
 
-      if (cpuCanvas) drawTimeline(cpuCanvas, timelineData.cpu, TIMELINE_COLOR_CPU);
+      if (cpuCanvas)
+        drawTimeline(cpuCanvas, timelineData.cpu, TIMELINE_COLOR_CPU);
       if (memoryCanvas)
         drawTimeline(memoryCanvas, timelineData.memory, TIMELINE_COLOR_MEMORY);
-      if (vramCanvas) drawTimeline(vramCanvas, timelineData.vram, TIMELINE_COLOR_VRAM);
+      if (vramCanvas)
+        drawTimeline(vramCanvas, timelineData.vram, TIMELINE_COLOR_VRAM);
       if (gpu3dCanvas)
         drawTimeline(gpu3dCanvas, timelineData.gpu3d, TIMELINE_COLOR_GPU3D);
 
@@ -1313,7 +1311,9 @@ function updateRunningModelsDisplay(models) {
         : "0 B";
 
     const contextMax =
-      (details && details.context_length != null && details.context_length !== ""
+      (details &&
+      details.context_length != null &&
+      details.context_length !== ""
         ? details.context_length
         : null) ??
       model?.context_length ??
@@ -1321,7 +1321,7 @@ function updateRunningModelsDisplay(models) {
     const contextLoaded =
       model?.loaded_context_length != null && model.loaded_context_length !== ""
         ? model.loaded_context_length
-        : model?.context_length ?? "Unknown";
+        : (model?.context_length ?? "Unknown");
 
     const maxCtxHtml = _escModelCard(contextMax);
     const loadedCtxHtml = _escModelCard(contextLoaded);
@@ -1337,7 +1337,8 @@ function updateRunningModelsDisplay(models) {
     const cardIndex = index + 1;
 
     const titleBlock =
-      window.modelCards && typeof window.modelCards.modelTitleMarkup === "function"
+      window.modelCards &&
+      typeof window.modelCards.modelTitleMarkup === "function"
         ? window.modelCards.modelTitleMarkup(name)
         : `<div class="model-title">${safeNameText}</div>`;
 
@@ -1485,9 +1486,7 @@ window.updateRunningModelsDisplay = updateRunningModelsDisplay;
 function buildAvailableModelCardHTML(model) {
   const name = model?.name || "Unknown";
   const safeDataName =
-    typeof escapeHtml === "function"
-      ? escapeHtml(String(name))
-      : String(name);
+    typeof escapeHtml === "function" ? escapeHtml(String(name)) : String(name);
   const hasCustom = modelHasCustomSettings(model);
   const details = model?.details || {};
   const family =
@@ -1516,7 +1515,8 @@ function buildAvailableModelCardHTML(model) {
   const capabilityIcons = getCapabilitiesHTML(model);
 
   const titleBlock =
-    window.modelCards && typeof window.modelCards.modelTitleMarkup === "function"
+    window.modelCards &&
+    typeof window.modelCards.modelTitleMarkup === "function"
       ? window.modelCards.modelTitleMarkup(name)
       : `<div class="model-title">${safeDataName}</div>`;
 
@@ -1744,7 +1744,9 @@ function initializeCompactMode() {
 // System stats: same cadence as model list refresh (data-poll-interval / getPollIntervalSec).
 document.addEventListener("DOMContentLoaded", function () {
   const statsMs =
-    typeof getPollIntervalSec === "function" ? getPollIntervalSec() * 1000 : 10000;
+    typeof getPollIntervalSec === "function"
+      ? getPollIntervalSec() * 1000
+      : 10000;
   if (typeof updateSystemStats === "function") updateSystemStats();
   setInterval(function () {
     if (document.visibilityState !== "visible") return;
@@ -1753,8 +1755,46 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 const INITIAL_DOWNLOADABLE_VISIBLE = 48;
+const DOWNLOADABLE_SECTION_COLLAPSED_KEY = "downloadableModelsSectionCollapsed";
 let cachedDownloadableModels = [];
 let extendedModelsLoaded = false;
+
+function syncDownloadableSectionToggle(collapsed) {
+  const button = document.getElementById("downloadableSectionToggleBtn");
+  if (!button) return;
+
+  const label = collapsed
+    ? "Expand downloadable models section"
+    : "Collapse downloadable models section";
+  button.setAttribute("aria-label", label);
+  button.setAttribute("title", label);
+  button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  button.innerHTML = collapsed
+    ? '<i class="fas fa-chevron-down" aria-hidden="true"></i>'
+    : '<i class="fas fa-chevron-up" aria-hidden="true"></i>';
+}
+
+function toggleDownloadableSection(forceCollapsed) {
+  const body = document.getElementById("downloadableModelsBody");
+  const section = document.getElementById("downloadableModelsSection");
+  if (!body) return;
+
+  const currentlyCollapsed = body.style.display === "none";
+  const nextCollapsed =
+    typeof forceCollapsed === "boolean" ? forceCollapsed : !currentlyCollapsed;
+
+  body.style.display = nextCollapsed ? "none" : "";
+  if (section) {
+    section.classList.toggle("is-collapsed", nextCollapsed);
+  }
+  syncDownloadableSectionToggle(nextCollapsed);
+  localStorage.setItem(
+    DOWNLOADABLE_SECTION_COLLAPSED_KEY,
+    nextCollapsed ? "true" : "false",
+  );
+}
+
+window.toggleDownloadableSection = toggleDownloadableSection;
 
 function renderExtendedModels(models, container) {
   if (!container) return;
@@ -1895,6 +1935,10 @@ document.addEventListener("DOMContentLoaded", function () {
       if (input) input.focus();
     });
   }
+
+  const savedCollapsed =
+    localStorage.getItem(DOWNLOADABLE_SECTION_COLLAPSED_KEY) === "true";
+  toggleDownloadableSection(savedCollapsed);
 });
 
 async function pullModel(modelName) {
@@ -1915,9 +1959,8 @@ async function pullModel(modelName) {
         size: "Unknown",
         context_length: "Unknown",
       };
-      const cardHtml = window.modelCards.buildDownloadableModelCardHTML(
-        placeholder,
-      );
+      const cardHtml =
+        window.modelCards.buildDownloadableModelCardHTML(placeholder);
       const wrapper = document.createElement("div");
       wrapper.innerHTML = cardHtml.trim();
       const col = wrapper.firstElementChild;

@@ -191,3 +191,25 @@ class TestSectionHeaders:
         assert 'System Resources' in html
         assert 'Downloadable Models' in html
         assert 'section-title-text' in html
+
+    @patch('app.routes.main.ollama_service.get_running_models')
+    @patch('app.routes.main.ollama_service.get_available_models')
+    @patch('app.routes.main.ollama_service.get_system_stats')
+    @patch('app.routes.main.ollama_service.get_ollama_version')
+    def test_downloadable_section_has_collapse_controls(
+        self, mock_version, mock_stats, mock_available, mock_running, client
+    ):
+        """Downloadable models section includes collapse toggle and collapsible body."""
+        mock_running.return_value = []
+        mock_available.return_value = []
+        mock_stats.return_value = dict(MOCK_INDEX_SYSTEM_STATS)
+        mock_version.return_value = '0.17.0'
+
+        response = client.get('/')
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+
+        assert 'downloadableSectionToggleBtn' in html
+        assert 'downloadableModelsBody' in html
+        assert 'toggleDownloadableSection()' in html
+        assert 'fa-chevron-up' in html

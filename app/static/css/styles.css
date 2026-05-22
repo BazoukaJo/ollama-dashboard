@@ -632,6 +632,14 @@ html.light .dashboard-header-meta-chip--warn {
   font-weight: 300;
 }
 
+/* Prevent header jitter when countdown switches between 10 and 9 seconds. */
+#nextRefresh {
+  display: inline-block;
+  min-width: 2ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Phones: slightly larger meta copy; tighter vertical rhythm */
 @media (max-width: 575.98px) {
   .dashboard-header-bar {
@@ -3749,7 +3757,44 @@ body.compact-mode .compact-hide {
   margin: 0;
 }
 
-.dashboard-version-meta .dashboard-meta-row small,
+/* Model section shell: shared spacing/rhythm for Available + Downloadable */
+.models-section-shell {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: 0 1px 3px var(--shadow-light);
+  overflow: hidden;
+}
+
+.models-section-header {
+  margin-bottom: 0 !important;
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.models-section-body {
+  padding: 0.7rem;
+}
+
+/* Downloadable section keeps explicit collapsed/expanded affordance. */
+.downloadable-section-shell {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.downloadable-section-header {
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.downloadable-section-shell.is-collapsed .downloadable-section-header {
+  border-bottom-color: transparent;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.downloadable-section-shell.is-collapsed {
+  box-shadow: none;
+}
+
 .dashboard-version-meta .dashboard-meta-row .dashboard-meta-host {
   font-size: 0.6875rem;
   line-height: 1.25;

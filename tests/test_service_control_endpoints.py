@@ -36,6 +36,42 @@ class TestServiceControls(unittest.TestCase):
         self.assertIn('success', data)
         self.assertTrue(data['success'])
 
+    @patch('app.routes.main.ollama_service.start_service')
+    def test_start_service_endpoint_failure(self, mock_start):
+        mock_start.return_value = {"success": False, "message": "failed to start"}
+        response = self.client.post('/api/service/start')
+        self.assertEqual(response.status_code, 500)
+        data = response.json
+        self.assertIn('success', data)
+        self.assertFalse(data['success'])
+
+    @patch('app.routes.main.ollama_service.stop_service')
+    def test_stop_service_endpoint_failure(self, mock_stop):
+        mock_stop.return_value = {"success": False, "message": "failed to stop"}
+        response = self.client.post('/api/service/stop')
+        self.assertEqual(response.status_code, 500)
+        data = response.json
+        self.assertIn('success', data)
+        self.assertFalse(data['success'])
+
+    @patch('app.routes.main.ollama_service.restart_service')
+    def test_restart_service_endpoint_failure(self, mock_restart):
+        mock_restart.return_value = {"success": False, "message": "failed to restart"}
+        response = self.client.post('/api/service/restart')
+        self.assertEqual(response.status_code, 500)
+        data = response.json
+        self.assertIn('success', data)
+        self.assertFalse(data['success'])
+
+    @patch('app.routes.main.ollama_service.restart_service')
+    def test_restart_service_endpoint_exception(self, mock_restart):
+        mock_restart.side_effect = RuntimeError('boom')
+        response = self.client.post('/api/service/restart')
+        self.assertEqual(response.status_code, 500)
+        data = response.json
+        self.assertIn('success', data)
+        self.assertFalse(data['success'])
+
     @patch('app.routes.main.ollama_service.update_ollama')
     def test_update_ollama_endpoint(self, mock_update):
         mock_update.return_value = {"success": True, "message": "Ollama is already up to date (winget). Ollama started successfully."}

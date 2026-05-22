@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 from app import create_app
 from app.services.ollama import OllamaService
@@ -171,6 +172,48 @@ def test_recommendations_for_vision_and_reasoning_and_tools(tmp_path):
     assert entry_tool['top_k'] <= 20
 
 
+def test_recommendations_for_coding_models_are_more_deterministic(tmp_path):
+    app = create_app()
+    svc = OllamaService()
+    svc.init_app(app)
+    model_file = tmp_path / "model_settings.json"
+    app.config['MODEL_SETTINGS_FILE'] = str(model_file)
+
+    entry_code = svc._recommend_settings_for_model(
+        {
+            'name': 'qwen2.5-coder:7b',
+            'details': {'parameter_size': '7B', 'families': ['qwen']},
+            'has_tools': True,
+        }
+    )
+    assert entry_code['temperature'] <= 0.32
+    assert entry_code['num_predict'] >= 1024
+    assert entry_code['num_ctx'] >= 8192
+
+
+def test_recommendation_limits_context_by_local_rig_capacity(tmp_path):
+    app = create_app()
+    svc = OllamaService()
+    svc.init_app(app)
+    model_file = tmp_path / "model_settings.json"
+    app.config['MODEL_SETTINGS_FILE'] = str(model_file)
+
+    # Simulate a modest rig: 16 GB RAM, no detected dedicated VRAM.
+    svc.get_system_stats = lambda: {
+        'memory': {'total': 16 * 1024 * 1024 * 1024, 'available': 8 * 1024 * 1024 * 1024, 'percent': 50},
+        'vram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0},
+    }
+
+    entry_code = svc._recommend_settings_for_model(
+        {
+            'name': 'qwen3-coder:30b',
+            'details': {'parameter_size': '30B'},
+            'context_length': '128K',
+        }
+    )
+    assert entry_code['num_ctx'] <= 12288
+
+
 def test_delete_model_settings(tmp_path):
     app = create_app()
     svc = OllamaService()
@@ -183,3 +226,19 @@ def test_delete_model_settings(tmp_path):
     rv = svc.delete_model_settings('to-delete')
     assert rv
     assert 'to-delete' not in svc.load_model_settings()
+
+
+def test_refresh_model_settings_cache_skips_unchanged_file(tmp_path):
+    app = create_app()
+    svc = OllamaService()
+    svc.init_app(app)
+
+    model_file = tmp_path / 'model_settings.json'
+    app.config['MODEL_SETTINGS_FILE'] = str(model_file)
+    model_file.write_text(json.dumps({'m1': {'settings': {'temperature': 0.3}, 'source': 'user'}}), encoding='utf-8')
+
+    svc.refresh_model_settings_cache_from_disk()
+
+    # With unchanged mtime, the cache refresh should return early without reading again.
+    with patch.object(svc, 'load_model_settings', side_effect=AssertionError('unexpected reload')):
+        svc.refresh_model_settings_cache_from_disk()

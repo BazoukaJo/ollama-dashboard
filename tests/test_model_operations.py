@@ -187,6 +187,43 @@ class TestModelRestart:
         assert data['success'] is False
         assert 'service is not running' in data['message'].lower()
 
+    @patch('app.routes.main.ollama_service._session.post')
+    @patch('app.routes.main.ollama_service.get_running_models')
+    @patch('app.routes.main.ollama_service.get_service_status')
+    def test_restart_model_stop_phase_failure(self, mock_status, mock_running, mock_post, client):
+        """Restart should fail if stop step fails for a currently running model."""
+        mock_status.return_value = True
+        mock_running.return_value = [{'name': 'mock-stub-model:latest', 'size': 1000000}]
+
+        stop_fail = Mock()
+        stop_fail.status_code = 500
+        stop_fail.json.return_value = {'error': 'stop failed'}
+        mock_post.return_value = stop_fail
+
+        response = client.post('/api/models/restart/mock-stub-model:latest')
+
+        assert response.status_code == 500
+        data = response.get_json()
+        assert data['success'] is False
+        assert 'failed to stop model during restart' in data['message'].lower()
+
+    @patch('time.sleep')
+    @patch('app.routes.main.ollama_service._session.post')
+    @patch('app.routes.main.ollama_service.get_running_models')
+    @patch('app.routes.main.ollama_service.get_service_status')
+    def test_restart_model_timeout_after_retries(self, mock_status, mock_running, mock_post, mock_sleep, client):
+        """Restart should return timeout when all start retries time out."""
+        mock_status.return_value = True
+        mock_running.return_value = []
+        mock_post.side_effect = requests.exceptions.Timeout()
+
+        response = client.post('/api/models/restart/mock-stub-model:latest')
+
+        assert response.status_code == 504
+        data = response.get_json()
+        assert data['success'] is False
+        assert 'timeout while restarting model' in data['message'].lower()
+
 
 class TestModelDelete:
     """Test suite for model delete endpoint."""
@@ -265,6 +302,39 @@ class TestModelStart:
         data = response.get_json()
         assert data['success'] is True
         assert 'already running' in data['message'].lower()
+
+    @patch('app.routes.main.ollama_service._session.post')
+    @patch('app.routes.main.ollama_service.get_running_models')
+    @patch('app.routes.main.ollama_service.get_service_status')
+    def test_start_model_pull_then_start_success(self, mock_status, mock_running, mock_post, client):
+        """If initial start fails with not found, endpoint should pull and retry start."""
+        mock_status.return_value = True
+        mock_running.return_value = []
+
+        first_start = Mock()
+        first_start.status_code = 404
+        first_start.text = 'model not found'
+        first_start.json.return_value = {'error': 'model not found'}
+
+        pull_ok = Mock()
+        pull_ok.status_code = 200
+        pull_ok.text = 'ok'
+        pull_ok.json.return_value = {}
+
+        second_start = Mock()
+        second_start.status_code = 200
+        second_start.text = 'ok'
+        second_start.json.return_value = {'response': 'test'}
+
+        mock_post.side_effect = [first_start, pull_ok, second_start]
+
+        response = client.post('/api/models/start/mock-stub-model:latest')
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data['success'] is True
+        assert 'downloaded and started successfully' in data['message'].lower()
+        assert mock_post.call_count >= 3
 
 
 if __name__ == '__main__':

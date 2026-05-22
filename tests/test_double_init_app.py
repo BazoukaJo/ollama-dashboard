@@ -3,7 +3,11 @@
 Calling init_app() twice must not start a second background thread or
 register additional atexit handlers (Bug 1 in the audit).
 """
+from collections import deque
+
 import pytest
+from unittest.mock import patch
+
 from app import create_app
 
 
@@ -59,3 +63,25 @@ class TestInitAppIdempotency:
 
         # Thread must still be the original one — no new thread was spawned
         assert svc._background_stats is thread_before
+
+    def test_second_init_does_not_register_atexit_twice(self):
+        """A second init_app() call should not register cleanup again."""
+        app = create_app()
+        svc = app.config['OLLAMA_SERVICE']
+
+        with patch('app.services.ollama_core.atexit.register') as mock_register:
+            with app.app_context():
+                svc.init_app(app)
+        mock_register.assert_not_called()
+
+    def test_update_history_works_with_empty_deque(self, tmp_path):
+        """Empty history deque should still accept updates and persist to disk."""
+        app = create_app()
+        svc = app.config['OLLAMA_SERVICE']
+        app.config['HISTORY_FILE'] = str(tmp_path / 'history.json')
+        svc.history = deque(maxlen=50)
+
+        svc.update_history([{'name': 'qwen2.5-coder:7b'}])
+
+        assert len(svc.history) == 1
+        assert (tmp_path / 'history.json').exists()

@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -44,6 +45,7 @@ class OllamaServiceUtilities:
     history: Optional[deque] = None  # deque imported at module level
     _model_settings_lock: Any = None  # Initialized in OllamaServiceCore.__init__ as threading.Lock()
     _model_settings: dict = {}  # Initialized in OllamaServiceCore.__init__
+    _model_settings_disk_mtime: Optional[float] = None
     _session: Optional[requests.Session] = None  # Initialized in OllamaServiceCore.__init__
 
     def _get_ollama_host_port(self) -> Tuple[str, int]:
@@ -71,7 +73,7 @@ class OllamaServiceUtilities:
 
     def update_history(self, models):
         """Update history with latest model list."""
-        if not self.history:
+        if self.history is None:
             return  # Skip update when no history available
         timestamp = datetime.now().isoformat()
         self.history.appendleft({
@@ -83,18 +85,20 @@ class OllamaServiceUtilities:
         """Save history to file."""
         if not self.app:
             return  # Skip saving when no app context
-        if not self.history:
+        if self.history is None:
             return  # Skip saving when no history available
         try:
             # Validate JSON serialization before write
             json_str = json.dumps(list(self.history))
             history_file = self.app.config['HISTORY_FILE']
+            history_dir = os.path.dirname(os.path.abspath(history_file)) or '.'
+            os.makedirs(history_dir, exist_ok=True)
             # Write with atomic pattern: tmp then rename
             tmp_path = history_file + '.tmp'
             with open(tmp_path, 'w', encoding='utf-8') as f:
                 f.write(json_str)
             os.replace(tmp_path, history_file)
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError, OSError) as e:
             self.logger.warning(f"Failed to serialize history: {e}")
 
     def format_size(self, size_bytes):
@@ -339,19 +343,23 @@ class OllamaServiceUtilities:
         """
         lock = getattr(self, '_model_settings_lock', None)
         path = self._model_settings_file_path()
+        try:
+            disk_mtime = os.path.getmtime(path)
+        except OSError:
+            disk_mtime = None
+
+        # Skip disk I/O when file has not changed.
+        known_mtime = getattr(self, '_model_settings_disk_mtime', None)
+        if known_mtime == disk_mtime and isinstance(getattr(self, '_model_settings', None), dict):
+            return
+
         if lock is not None:
             with lock:
                 self._model_settings = self.load_model_settings() or {}
-                try:
-                    self._model_settings_disk_mtime = os.path.getmtime(path)
-                except OSError:
-                    self._model_settings_disk_mtime = None
+                self._model_settings_disk_mtime = disk_mtime
         else:
             self._model_settings = self.load_model_settings() or {}
-            try:
-                self._model_settings_disk_mtime = os.path.getmtime(path)
-            except OSError:
-                self._model_settings_disk_mtime = None
+            self._model_settings_disk_mtime = disk_mtime
 
     def _write_model_settings_file(self, model_settings_dict):
         """Write per-model settings to file atomically."""
@@ -409,18 +417,81 @@ class OllamaServiceUtilities:
         name = (info.get('name') or '') if isinstance(info, dict) else str(info)
         name_l = name.lower()
 
+        def _safe_float(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        def _bytes_to_gb(v):
+            as_float = _safe_float(v)
+            if as_float is None or as_float <= 0:
+                return 0.0
+            return as_float / (1024 ** 3)
+
         def _param_size_to_float(param_size):
             try:
                 if isinstance(param_size, (int, float)):
                     return float(param_size)
                 if isinstance(param_size, str):
-                    s = param_size.strip().upper().replace('B', '')
-                    return float(s)
+                    # Handles formats like "14B", "1.8B", and MoE style "8x7B".
+                    s = param_size.strip().upper().replace(' ', '')
+                    moe_match = re.match(r'^(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)B$', s)
+                    if moe_match:
+                        experts = float(moe_match.group(1))
+                        per_expert = float(moe_match.group(2))
+                        # Use active expert size approximation to avoid over-allocating defaults.
+                        return max(per_expert, experts)
+                    num_match = re.match(r'^(\d+(?:\.\d+)?)B$', s)
+                    if num_match:
+                        return float(num_match.group(1))
             except Exception:
                 return None
             return None
 
+        def _resource_ctx_cap():
+            """Compute a conservative num_ctx cap from available machine memory.
+
+            This keeps defaults efficient on modest rigs while still allowing larger
+            context windows on stronger systems.
+            """
+            try:
+                stats = self.get_system_stats() if hasattr(self, 'get_system_stats') else {}
+            except Exception:
+                stats = {}
+
+            mem = stats.get('memory', {}) if isinstance(stats, dict) else {}
+            vram = stats.get('vram', {}) if isinstance(stats, dict) else {}
+            ram_gb = _bytes_to_gb(mem.get('total'))
+            vram_gb = _bytes_to_gb(vram.get('total'))
+
+            # Prefer VRAM when detected; otherwise fall back to RAM bands.
+            if vram_gb >= 24:
+                return 24576
+            if vram_gb >= 16:
+                return 20480
+            if vram_gb >= 12:
+                return 16384
+            if vram_gb >= 8:
+                return 12288
+            if vram_gb > 0:
+                return 8192
+
+            if ram_gb >= 64:
+                return 24576
+            if ram_gb >= 32:
+                return 16384
+            if ram_gb >= 16:
+                return 12288
+            return 8192
+
         settings = get_default_settings_template()
+        is_coding_model = any(k in name_l for k in (
+            'coder', 'code', 'codellama', 'starcoder', 'deepseek-coder', 'devstral',
+        ))
+        is_unreal_workflow = any(k in name_l for k in ('unreal', 'ue5', 'blueprint', 'cpp', 'c++'))
+        code_first_profile = is_coding_model or is_unreal_workflow
+        ctx_cap = _resource_ctx_cap()
 
         # Base heuristics by parameter size (billions)
         param_size = _param_size_to_float(details.get('parameter_size'))
@@ -428,12 +499,35 @@ class OllamaServiceUtilities:
             if param_size <= 2:
                 settings['temperature'] = max(settings['temperature'], 0.78)
                 settings['num_predict'] = max(settings['num_predict'], 512)
+                settings['num_ctx'] = max(settings['num_ctx'], 4096)
             elif param_size <= 8:
                 settings['temperature'] = min(max(settings['temperature'], 0.68), 0.78)
-                settings['num_predict'] = max(settings['num_predict'], 640)
-            else:
-                settings['temperature'] = min(settings['temperature'], 0.62)
                 settings['num_predict'] = max(settings['num_predict'], 768)
+                settings['num_ctx'] = max(settings['num_ctx'], 8192)
+            elif param_size <= 14:
+                settings['temperature'] = min(settings['temperature'], 0.62)
+                settings['num_predict'] = max(settings['num_predict'], 896)
+                settings['num_ctx'] = max(settings['num_ctx'], 12288)
+            else:
+                settings['temperature'] = min(settings['temperature'], 0.58)
+                settings['num_predict'] = max(settings['num_predict'], 1024)
+                settings['num_ctx'] = max(settings['num_ctx'], 16384)
+
+        # Coding-heavy defaults (Unreal C++ / Blueprint review benefits from deterministic output).
+        if code_first_profile:
+            settings['temperature'] = min(settings['temperature'], 0.32)
+            settings['top_p'] = min(settings.get('top_p', 0.9), 0.9)
+            settings['top_k'] = min(settings.get('top_k', 40), 30)
+            settings['repeat_penalty'] = max(settings.get('repeat_penalty', 1.05), 1.08)
+            settings['num_predict'] = max(settings.get('num_predict', 512), 1152)
+
+            # Keep larger context for large codebases while respecting rig-aware cap.
+            coding_ctx_target = 12288
+            if param_size is not None and param_size >= 12:
+                coding_ctx_target = 16384
+            if param_size is not None and param_size >= 30:
+                coding_ctx_target = 20480
+            settings['num_ctx'] = max(settings.get('num_ctx', 4096), min(coding_ctx_target, ctx_cap))
 
         # Capabilities heuristics
         if info.get('has_vision') or 'vision' in families or 'llava' in name_l:
@@ -441,7 +535,7 @@ class OllamaServiceUtilities:
             settings['top_p'] = max(settings['top_p'], 0.92)
         if info.get('has_reasoning') or 'deepseek' in name_l:
             settings['num_ctx'] = max(settings['num_ctx'], 8192)
-            settings['temperature'] = min(settings['temperature'], 0.6)
+            settings['temperature'] = min(settings['temperature'], 0.5)
             settings['num_predict'] = max(settings['num_predict'], 1024)
         if info.get('has_tools') or 'tool' in name_l:
             settings['top_k'] = min(settings.get('top_k', 40), 20)
@@ -454,6 +548,8 @@ class OllamaServiceUtilities:
 
         # Respect model context window from Ollama /api/show (first save after download)
         max_ctx = context_length_as_int(info)
+        # Also respect local rig cap to avoid excessive memory pressure.
+        settings['num_ctx'] = min(settings.get('num_ctx', 4096), ctx_cap)
         if max_ctx is not None:
             target = min(max_ctx, max(settings['num_ctx'], min(8192, max_ctx)))
             settings['num_ctx'] = target

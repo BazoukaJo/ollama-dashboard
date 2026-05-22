@@ -44,6 +44,7 @@ class OllamaServiceModels:
     """Mixin supplying model-related helpers used by OllamaService."""
 
     # pylint: disable=no-member
+    _model_settings_disk_mtime: Any = None
 
     def _get_cached(self, key, ttl_seconds=None):
         """Get a cached value by key with optional TTL check."""
@@ -406,7 +407,10 @@ class OllamaServiceModels:
             except Exception:
                 # Logging must never break the main code path
                 pass
-            self._set_cached('running_models', current_models)
+            if current_models:
+                self._set_cached('running_models', current_models)
+            else:
+                self.clear_cache('running_models')
             return current_models
         except requests.exceptions.ConnectionError as exc:
             raise OllamaConnectionError(
