@@ -307,11 +307,30 @@ def start_model(model_name):
             # Avoid unbounded timeout growth across retries.
             timeout = min(int(timeout), 120)
 
+            # Load and merge per-model settings into warm generate request
+            # This ensures custom parameters are applied when the model is first loaded
+            warm_payload = {
+                "model": model_name,
+                "prompt": "Hello",
+                "stream": False,
+                "keep_alive": "24h"
+            }
+            try:
+                # Start with defaults, then apply user/custom settings
+                options = _get_ollama_service().get_default_settings()
+                model_settings_entry = _get_ollama_service().get_model_settings_with_fallback(model_name)
+                if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
+                    for k, v in model_settings_entry['settings'].items():
+                        options[k] = v
+                warm_payload["options"] = options
+            except Exception as e:
+                current_app.logger.debug(f"Failed to apply per-model settings to warm start {model_name}: {e}")
+
             try:
                 # Explicit timeout prevents hanging on unresponsive Ollama
                 response = _get_ollama_service()._session.post(
                     _get_ollama_url("generate"),
-                    json={"model": model_name, "prompt": "Hello", "stream": False, "keep_alive": "24h"},
+                    json=warm_payload,
                     timeout=timeout
                 )
 
@@ -558,15 +577,27 @@ def restart_model(model_name):
 
         for attempt in range(max_retries):
             try:
-                # Warm start with extended keep_alive
+                # Warm start with extended keep_alive - apply per-model custom settings
+                start_payload = {
+                    "model": model_name,
+                    "prompt": "test",
+                    "stream": False,
+                    "keep_alive": "24h"
+                }
+                try:
+                    # Start with defaults, then apply user/custom settings
+                    options = _get_ollama_service().get_default_settings()
+                    model_settings_entry = _get_ollama_service().get_model_settings_with_fallback(model_name)
+                    if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
+                        for k, v in model_settings_entry['settings'].items():
+                            options[k] = v
+                    start_payload["options"] = options
+                except Exception as e:
+                    current_app.logger.debug(f"Failed to apply per-model settings to restart warm start {model_name}: {e}")
+
                 start_response = _get_ollama_service()._session.post(
                     _get_ollama_url("generate"),
-                    json={
-                        "model": model_name,
-                        "prompt": "test",
-                        "stream": False,
-                        "keep_alive": "24h"
-                    },
+                    json=start_payload,
                     timeout=120
                 )
 
@@ -970,9 +1001,26 @@ def bulk_start_models():
                 results.append({"model": model_name, "success": False, "error": msg})
                 continue
             try:
+                # Warm start: apply per-model custom settings
+                bulk_payload = {
+                    "model": model_name,
+                    "prompt": "Hello",
+                    "stream": False,
+                    "keep_alive": "24h"
+                }
+                try:
+                    options = _get_ollama_service().get_default_settings()
+                    model_settings_entry = _get_ollama_service().get_model_settings_with_fallback(model_name)
+                    if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
+                        for k, v in model_settings_entry['settings'].items():
+                            options[k] = v
+                    bulk_payload["options"] = options
+                except Exception as e:
+                    current_app.logger.debug(f"Failed to apply per-model settings to bulk start {model_name}: {e}")
+
                 response = svc._session.post(
                     _get_ollama_url("generate"),
-                    json={"model": model_name, "prompt": "Hello", "stream": False, "keep_alive": "24h"},
+                    json=bulk_payload,
                     timeout=60
                 )
                 results.append({
