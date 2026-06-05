@@ -3,19 +3,62 @@
   let _updateInFlight = false;
   let _installInFlight = false;
 
-  function pollForHealthyAndReload(maxWaitMs, intervalMs) {
+  async function fetchServiceRunning() {
+    try {
+      const resp = await fetch("/api/service/status");
+      const jr = await readApiJson(resp);
+      if (jr.responseOk && jr.data && typeof jr.data.running === "boolean") {
+        return jr.data.running;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  async function isServiceReady() {
+    const running = await fetchServiceRunning();
+    if (running === false) return false;
+    try {
+      const h = await fetch("/api/health");
+      const hj = await readApiJson(h);
+      if (!hj.responseOk || !hj.data) return running === true;
+      const health = hj.data;
+      if (health.ollama_running === false || health.status === "stopped") {
+        return false;
+      }
+      if (health.status === "healthy") return true;
+      if (
+        running === true &&
+        health.background_thread_alive &&
+        (health.status === "degraded" || health.status === "unhealthy")
+      ) {
+        return true;
+      }
+      return health.status === "healthy";
+    } catch (_) {
+      return running === true;
+    }
+  }
+
+  function pollForServiceState(expectedRunning, maxWaitMs, intervalMs, onDone) {
     const startTime = Date.now();
     const poll = async function () {
       if (Date.now() - startTime > maxWaitMs) {
-        location.reload();
+        if (typeof onDone === "function") onDone(false);
         return;
       }
       try {
-        const h = await fetch("/api/health");
-        const hj = await readApiJson(h);
-        if (hj.responseOk && hj.data && hj.data.status === "healthy") {
-          location.reload();
-          return;
+        const running = await fetchServiceRunning();
+        if (running === expectedRunning) {
+          if (expectedRunning) {
+            if (await isServiceReady()) {
+              if (typeof onDone === "function") onDone(true);
+              return;
+            }
+          } else {
+            updateHealthStatus();
+            if (typeof onDone === "function") onDone(true);
+            return;
+          }
         }
       } catch (_) {}
       setTimeout(poll, intervalMs);
@@ -23,17 +66,21 @@
     setTimeout(poll, intervalMs);
   }
 
+  function pollForHealthyAndReload(maxWaitMs, intervalMs) {
+    pollForServiceState(true, maxWaitMs, intervalMs, function (ready) {
+      location.reload();
+    });
+  }
+
   function updateServiceControlButtons(isRunning) {
     const startBtn = document.getElementById("startServiceBtn");
     const stopBtn = document.getElementById("stopServiceBtn");
     const restartBtn = document.getElementById("restartServiceBtn");
-    // Play/start button should be disabled when running
     if (startBtn) {
       startBtn.disabled = !!isRunning;
       startBtn.classList.remove("btn-success", "btn-outline-success");
       startBtn.classList.add(isRunning ? "btn-outline-success" : "btn-success");
     }
-    // Stop/restart buttons enabled only when running
     if (stopBtn) {
       stopBtn.disabled = !isRunning;
       stopBtn.classList.remove("btn-danger", "btn-secondary");
@@ -50,8 +97,11 @@
 
   async function updateHealthStatus() {
     try {
-      const response = await fetch("/api/health");
-      const hr = await readApiJson(response);
+      const [healthResp, serviceRunning] = await Promise.all([
+        fetch("/api/health"),
+        fetchServiceRunning(),
+      ]);
+      const hr = await readApiJson(healthResp);
       const health =
         hr.responseOk && hr.data
           ? hr.data
@@ -59,33 +109,39 @@
       const healthBadge = document.getElementById("healthStatus");
       const healthText = document.getElementById("healthText");
       if (!healthBadge || !healthText) return;
-      const clearInlineSizing = () => {
-        healthBadge.style.padding = "";
-        healthBadge.style.fontSize = "";
-      };
-      if (health.status === "healthy") {
+
+      const ollamaRunning =
+        serviceRunning !== null
+          ? serviceRunning
+          : health.ollama_running !== false && health.status !== "stopped";
+
+      healthBadge.style.padding = "";
+      healthBadge.style.fontSize = "";
+
+      if (ollamaRunning && health.status === "healthy") {
         healthBadge.className =
           "badge bg-success health-status-badge dashboard-header-health";
-        clearInlineSizing();
         const uptimeMin = Math.floor((health.uptime_seconds || 0) / 60);
         const uptimeHr = Math.floor(uptimeMin / 60);
         const uptimeDisplay =
           uptimeHr > 0 ? `${uptimeHr}h ${uptimeMin % 60}m` : `${uptimeMin}m`;
         healthText.textContent = `Healthy • Uptime: ${uptimeDisplay}`;
         updateServiceControlButtons(true);
+      } else if (!ollamaRunning || health.status === "stopped") {
+        healthBadge.className =
+          "badge bg-warning health-status-badge dashboard-header-health";
+        healthText.textContent = "Stopped";
+        updateServiceControlButtons(false);
       } else if (health.status === "degraded") {
         healthBadge.className =
           "badge bg-warning health-status-badge dashboard-header-health";
-        clearInlineSizing();
-        healthText.textContent = "Degraded • Ollama service not running";
-        updateServiceControlButtons(false);
+        healthText.textContent = "Degraded";
+        updateServiceControlButtons(ollamaRunning);
       } else {
         healthBadge.className =
           "badge bg-danger health-status-badge dashboard-header-health";
-        clearInlineSizing();
-        healthText.textContent =
-          "Unhealthy • " + (health.error || "Unknown error");
-        updateServiceControlButtons(false);
+        healthText.textContent = "Unreachable";
+        updateServiceControlButtons(ollamaRunning);
       }
     } catch (err) {
       const healthBadge = document.getElementById("healthStatus");
@@ -101,13 +157,23 @@
     }
   }
 
-  async function startOllamaService() {
-    const btn = document.getElementById("startServiceBtn");
-    const original = btn ? btn.innerHTML : null;
-    if (btn) {
+  function setServiceButtonLoading(btn, loading) {
+    if (!btn) return;
+    if (loading) {
+      if (!btn.dataset.serviceOrigHtml) {
+        btn.dataset.serviceOrigHtml = btn.innerHTML;
+      }
       btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
       btn.disabled = true;
+    } else if (btn.dataset.serviceOrigHtml) {
+      btn.innerHTML = btn.dataset.serviceOrigHtml;
+      delete btn.dataset.serviceOrigHtml;
     }
+  }
+
+  async function startOllamaService() {
+    const btn = document.getElementById("startServiceBtn");
+    setServiceButtonLoading(btn, true);
     try {
       const resp = await fetch("/api/service/start", {
         method: "POST",
@@ -119,22 +185,23 @@
           sr.message || "Failed to start service: HTTP " + resp.status,
           "error",
         );
+        setServiceButtonLoading(btn, false);
         if (btn) btn.disabled = false;
         return;
       }
       const data = sr.data;
       if (data.success) {
         window.showNotification(data.message, "success");
-        // Update health status and reload after delay
-        setTimeout(() => {
-          updateHealthStatus();
-          setTimeout(() => location.reload(), 2000);
-        }, 2000);
+        updateHealthStatus();
+        pollForServiceState(true, 90000, 1500, function () {
+          location.reload();
+        });
       } else {
         window.showNotification(
           data.message || "Failed to start service",
           "error",
         );
+        setServiceButtonLoading(btn, false);
         if (btn) btn.disabled = false;
       }
     } catch (e) {
@@ -142,19 +209,14 @@
         "Failed to start service: " + (e.message || "Network error"),
         "error",
       );
+      setServiceButtonLoading(btn, false);
       if (btn) btn.disabled = false;
-    } finally {
-      if (btn && original !== null) btn.innerHTML = original;
     }
   }
 
   async function stopOllamaService() {
     const btn = document.getElementById("stopServiceBtn");
-    const original = btn ? btn.innerHTML : null;
-    if (btn) {
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-      btn.disabled = true;
-    }
+    setServiceButtonLoading(btn, true);
     try {
       const resp = await fetch("/api/service/stop", {
         method: "POST",
@@ -166,21 +228,23 @@
           sr.message || "Failed to stop service: HTTP " + resp.status,
           "error",
         );
+        setServiceButtonLoading(btn, false);
         if (btn) btn.disabled = false;
         return;
       }
       const data = sr.data;
       if (data.success) {
         window.showNotification(data.message, "success");
-        setTimeout(() => {
-          updateHealthStatus();
-          setTimeout(() => location.reload(), 2000);
-        }, 2000);
+        updateHealthStatus();
+        pollForServiceState(false, 30000, 500, function () {
+          location.reload();
+        });
       } else {
         window.showNotification(
           data.message || "Failed to stop service",
           "error",
         );
+        setServiceButtonLoading(btn, false);
         if (btn) btn.disabled = false;
       }
     } catch (e) {
@@ -188,9 +252,8 @@
         "Failed to stop service: " + (e.message || "Network error"),
         "error",
       );
+      setServiceButtonLoading(btn, false);
       if (btn) btn.disabled = false;
-    } finally {
-      if (btn && original !== null) btn.innerHTML = original;
     }
   }
 
@@ -198,14 +261,9 @@
     if (_restartInFlight) return;
     _restartInFlight = true;
     const btn = document.getElementById("restartServiceBtn");
-    const original = btn ? btn.innerHTML : null;
-    if (btn) {
-      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-      btn.disabled = true;
-    }
+    setServiceButtonLoading(btn, true);
     try {
-      // Only restart Ollama service, not the whole app
-      let resp = await fetch("/api/service/restart", {
+      const resp = await fetch("/api/service/restart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -215,18 +273,20 @@
           rr.message || "Failed to restart service",
           "error",
         );
+        setServiceButtonLoading(btn, false);
         if (btn) btn.disabled = false;
         return;
       }
       const data = rr.data;
       if (data.success) {
         window.showNotification(data.message, "success");
-        // Poll health until healthy or timeout then reload
-        setTimeout(function () {
-          pollForHealthyAndReload(30000, 1000);
-        }, 1500);
+        updateHealthStatus();
+        pollForServiceState(true, 90000, 1500, function () {
+          location.reload();
+        });
       } else {
         window.showNotification(data.message, "error");
+        setServiceButtonLoading(btn, false);
         if (btn) btn.disabled = false;
       }
     } catch (e) {
@@ -234,9 +294,9 @@
         "Failed to restart service: " + e.message,
         "error",
       );
+      setServiceButtonLoading(btn, false);
       if (btn) btn.disabled = false;
     } finally {
-      if (btn && original !== null) btn.innerHTML = original;
       _restartInFlight = false;
     }
   }
@@ -267,7 +327,7 @@
     modal.show();
   }
 
-  const UPDATE_FETCH_MS = 2700000; // 45 minutes for slow package-manager/installer runs
+  const UPDATE_FETCH_MS = 2700000;
 
   async function updateOllamaService() {
     if (_updateInFlight) return;
@@ -290,10 +350,13 @@
       });
       clearTimeout(timer);
       const ur = await readApiJson(resp);
-      const data = ur.responseOk ? ur.data : {};
-      if (data.success) {
+      const data = ur.data || {};
+      if (ur.responseOk && data.success) {
         window.showNotification(data.message || "Ollama updated.", "success");
-        pollForHealthyAndReload(120000, 2000);
+        updateHealthStatus();
+        pollForServiceState(true, 180000, 2000, function () {
+          location.reload();
+        });
       } else {
         window.showNotification(
           data.message ||
@@ -301,6 +364,7 @@
             "Update failed: " + (resp.statusText || "error"),
           "error",
         );
+        if (btn && original !== null) btn.innerHTML = original;
         if (btn) btn.disabled = false;
       }
     } catch (e) {
@@ -310,16 +374,18 @@
           "Update request timed out locally. Update may still be running in the background; checking health…",
           "error",
         );
-        pollForHealthyAndReload(300000, 3000);
+        pollForServiceState(true, 300000, 3000, function () {
+          location.reload();
+        });
       } else {
         window.showNotification(
           "Failed to update Ollama: " + (e.message || "Network error"),
           "error",
         );
+        if (btn && original !== null) btn.innerHTML = original;
+        if (btn) btn.disabled = false;
       }
-      if (btn) btn.disabled = false;
     } finally {
-      if (btn && original !== null) btn.innerHTML = original;
       _updateInFlight = false;
     }
   }
@@ -450,7 +516,6 @@
     showInstallOllamaConfirm,
     init,
   };
-  // Expose legacy globals for existing inline onclick handlers
   window.startOllamaService = startOllamaService;
   window.stopOllamaService = stopOllamaService;
   window.restartOllamaService = restartOllamaService;

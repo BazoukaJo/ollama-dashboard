@@ -197,26 +197,44 @@ def test_install_windows_falls_back_to_official_setup(mock_setup, mock_resolve):
     "_windows_install_via_official_setup",
     return_value=(True, "official ok"),
 )
-@patch("app.services.ollama_service_control.subprocess.run")
-@patch("app.services.ollama_service_control.shutil.which")
-def test_upgrade_windows_winget_failure_still_runs_official_installer(
-    mock_which, mock_run, _mock_setup
-):
-    """Broken or failing winget must not skip the OllamaSetup.exe fallback."""
+def test_upgrade_windows_uses_official_installer_first(mock_setup):
+    """User-initiated update should run OllamaSetup.exe before winget/choco."""
+    ctl = OllamaServiceControl()
+    ctl.logger = MagicMock()
+    ok, msg = ctl._upgrade_ollama_windows()
+    assert ok is True
+    assert msg == "official ok"
+    mock_setup.assert_called_once()
 
-    def which_side_effect(name):
+
+@patch.object(
+    OllamaServiceControl,
+    "_windows_install_via_official_setup",
+    return_value=(False, "setup failed"),
+)
+@patch("app.services.ollama_service_control.subprocess.run")
+@patch("app.services.ollama_service_control._windows_resolve_exe")
+def test_upgrade_windows_winget_no_applicable_upgrade_falls_through(
+    mock_resolve, mock_run, _mock_setup
+):
+    """winget 'no applicable upgrade' must not fake success — try choco / report failure."""
+
+    def resolve_side_effect(name, *extra_paths):
         if name == "winget":
             return r"C:\winget.exe"
         if name == "choco":
             return None
         return None
 
-    mock_which.side_effect = which_side_effect
-    mock_run.return_value = MagicMock(returncode=1, stdout="winget bad", stderr="")
+    mock_resolve.side_effect = resolve_side_effect
+    mock_run.return_value = MagicMock(
+        returncode=1,
+        stdout="No applicable upgrade found.",
+        stderr="",
+    )
 
     ctl = OllamaServiceControl()
     ctl.logger = MagicMock()
     ok, msg = ctl._upgrade_ollama_windows()
-    assert ok is True
-    assert msg == "official ok"
-    _mock_setup.assert_called_once()
+    assert ok is False
+    assert "official installer" in msg.lower() or "setup failed" in msg.lower()

@@ -377,6 +377,7 @@ html.light .dashboard-header-ollama-cta {
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
+  justify-content: flex-start;
 }
 
 /* Logo + health: single row */
@@ -405,6 +406,7 @@ html.light .dashboard-header-ollama-cta {
   align-content: center;
   gap: 0.28rem 0.38rem;
   flex: 0 0 auto;
+  flex-shrink: 0;
   min-width: 0;
   max-width: none;
 }
@@ -778,21 +780,25 @@ html.light .dashboard-header-meta-chip--warn {
 }
 
 
-/* Health pill: compact width; ellipsis when needed — counts removed from label (see section badges) */
+/* Health pill: fixed single-line width so service buttons never shift */
 .dashboard-header-banner .dashboard-header-health.health-status-badge {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: min(100%, 28rem);
+  flex: 0 0 auto;
+  min-width: 9.5rem;
+  max-width: 14rem;
   padding: 0.2rem 0.55rem;
   font-size: 0.78rem;
   line-height: 1.3;
+  height: var(--header-ollama-control-height, 2.125rem);
   min-height: var(--header-ollama-control-height, 2.125rem);
+  max-height: var(--header-ollama-control-height, 2.125rem);
   display: inline-flex;
   align-items: center;
   align-self: center;
   justify-content: flex-start;
   text-align: start;
   box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 @media (min-width: 576px) {
@@ -809,22 +815,12 @@ html.light .dashboard-header-meta-chip--warn {
   }
 }
 
-@media (min-width: 576px) {
-  .dashboard-header-banner .dashboard-header-health.health-status-badge {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-  }
-
-  .dashboard-header-banner .dashboard-header-health.health-status-badge #healthText {
-    flex: 1 1 auto;
-    min-width: 0;
-    overflow: visible;
-    text-overflow: clip;
-    white-space: normal;
-    word-break: break-word;
-    overflow-wrap: anywhere;
-  }
+.dashboard-header-banner .dashboard-header-health.health-status-badge #healthText {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dashboard-header-banner .service-controls {

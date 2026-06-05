@@ -454,16 +454,28 @@ class OllamaServiceCore:
         thread_alive = bool(self._background_stats and self._background_stats.is_alive())
         running_models = self._cache.get('running_models', [])
         available_models = self._cache.get('available_models', [])
-        degraded = not thread_alive or self._consecutive_ps_failures > 0 or stale.get('system_stats', True)
-        unhealthy = self._last_background_error is not None or not thread_alive
-        status = 'healthy'
-        if unhealthy:
-            status = 'unhealthy'
-        elif degraded:
-            status = 'degraded'
 
-        # Sanitize error message for user-friendly display (errors are already sanitized when stored, but double-check)
-        error_message = self._sanitize_error_message(self._last_background_error) if self._last_background_error else None
+        ollama_running = None
+        try:
+            if hasattr(self, 'get_service_status') and callable(getattr(self, 'get_service_status', None)):
+                ollama_running = bool(self.get_service_status())
+        except Exception:
+            ollama_running = None
+
+        if ollama_running is False:
+            status = 'stopped'
+            error_message = 'Ollama service not running'
+        else:
+            degraded = not thread_alive or self._consecutive_ps_failures > 0 or stale.get('system_stats', True)
+            unhealthy = self._last_background_error is not None or not thread_alive
+            status = 'healthy'
+            if unhealthy:
+                status = 'unhealthy'
+            elif degraded:
+                status = 'degraded'
+            error_message = self._sanitize_error_message(self._last_background_error) if self._last_background_error else None
+            if status == 'unhealthy' and error_message:
+                error_message = 'Ollama unreachable'
 
         uptime_seconds = 0
         if self.app:
@@ -479,6 +491,7 @@ class OllamaServiceCore:
 
         return {
             'status': status,
+            'ollama_running': ollama_running,
             'background_thread_alive': thread_alive,
             'consecutive_ps_failures': self._consecutive_ps_failures,
             'last_background_error': self._last_background_error,  # Keep raw for debugging

@@ -709,6 +709,11 @@ class OllamaServiceControl:
             else:
                 result, methods = stop_service_unix(self.get_service_status)
             if result:
+                try:
+                    if hasattr(self, "clear_all_caches") and callable(getattr(self, "clear_all_caches", None)):
+                        self.clear_all_caches()
+                except Exception:
+                    pass
                 return result
             methods_str = ", ".join(methods) if methods else "no methods"
             return {"success": False, "message": f"Failed to stop Ollama service. Tried: {methods_str}."}
@@ -930,61 +935,88 @@ class OllamaServiceControl:
             return self._upgrade_ollama_darwin()
         return self._upgrade_ollama_linux()
 
+    def _winget_upgrade_ollama(self, winget: str) -> Tuple[Optional[bool], str]:
+        """Run winget upgrade. Returns (True/False/None, detail). None = try next method."""
+        proc = None
+        try:
+            proc = subprocess.run(
+                [
+                    winget,
+                    "upgrade",
+                    "-e",
+                    "--id",
+                    "Ollama.Ollama",
+                    "--accept-package-agreements",
+                    "--accept-source-agreements",
+                    "--silent",
+                    "--disable-interactivity",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=900,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return None, "winget upgrade timed out (over 15 minutes)."
+        if proc is None:
+            return None, "winget upgrade did not run."
+        combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        low = combined.lower()
+        if proc.returncode == 0:
+            return True, combined or "Ollama upgraded via winget."
+        if any(
+            phrase in low
+            for phrase in (
+                "successfully installed",
+                "successfully upgraded",
+            )
+        ):
+            return True, combined or "Ollama upgraded via winget."
+        if proc.returncode in (
+            -1978335135,  # 0x8A1500A1 - REBOOT_REQUIRED_TO_INSTALL
+            3010,         # ERROR_SUCCESS_REBOOT_REQUIRED
+        ):
+            return True, "Ollama upgraded via winget (reboot may be recommended)."
+        # Non-zero / no-op — common when Ollama was installed via OllamaSetup.exe, not winget.
+        if any(
+            phrase in low
+            for phrase in (
+                "no applicable upgrade",
+                "install technology not supported",
+                "no newer package",
+                "no updates found",
+                "no available upgrade",
+                "a newer version was not found",
+            )
+        ):
+            self.logger.info("winget could not upgrade Ollama (non-winget install?): %s", combined[-500:])
+            return None, combined[-500:] or f"winget exit {proc.returncode}"
+        if any(
+            phrase in low
+            for phrase in (
+                "already installed",
+                "is already installed",
+                "up to date",
+            )
+        ):
+            return None, combined[-500:] or "winget reports already current"
+        self.logger.warning("winget upgrade exit %d: %s", proc.returncode, combined[-2000:])
+        return None, (combined or f"winget exit {proc.returncode}")[-1500:]
+
     def _upgrade_ollama_windows(self) -> Tuple[bool, str]:
-        winget_err: Optional[str] = None
+        # Official installer first — works for direct (Inno) installs that winget cannot upgrade.
+        ok_setup, setup_msg = self._windows_install_via_official_setup()
+        if ok_setup:
+            return True, setup_msg
+
+        winget_err: Optional[str] = setup_msg
         winget = _windows_resolve_exe("winget", *_WINGET_FALLBACK_PATHS)
         if winget:
-            proc = None
-            try:
-                proc = subprocess.run(
-                    [
-                        winget,
-                        "upgrade",
-                        "-e",
-                        "--id",
-                        "Ollama.Ollama",
-                        "--accept-package-agreements",
-                        "--accept-source-agreements",
-                        "--silent",
-                        "--disable-interactivity",
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=900,
-                    check=False,
-                )
-            except subprocess.TimeoutExpired:
-                winget_err = "winget upgrade timed out (over 15 minutes)."
-            if proc is not None:
-                combined = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
-                low = combined.lower()
-                if proc.returncode == 0:
-                    return True, combined or "Ollama upgraded via winget."
-                if any(
-                    phrase in low
-                    for phrase in (
-                        "no newer package",
-                        "no applicable upgrade",
-                        "no updates found",
-                        "already installed",
-                        "is already installed",
-                        "a newer version was not found",
-                        "successfully installed",
-                        "successfully upgraded",
-                        "no available upgrade",
-                        "up to date",
-                        "install technology not supported",
-                    )
-                ):
-                    return True, "Ollama is already up to date (winget)."
-                if proc.returncode in (
-                    -1978335189,  # 0x8A15006B - UPDATE_NOT_APPLICABLE
-                    -1978335135,  # 0x8A1500A1 - REBOOT_REQUIRED_TO_INSTALL
-                    3010,         # ERROR_SUCCESS_REBOOT_REQUIRED
-                ):
-                    return True, "Ollama upgraded via winget (reboot may be recommended)."
-                self.logger.warning("winget upgrade exit %d: %s", proc.returncode, combined[-2000:])
-                winget_err = (combined or f"winget exit {proc.returncode}")[-1500:]
+            winget_ok, winget_detail = self._winget_upgrade_ollama(winget)
+            if winget_ok is True:
+                return True, winget_detail
+            if winget_detail:
+                winget_err = winget_detail
 
         choco_err: Optional[str] = None
         choco = _windows_resolve_exe("choco", *_CHOCO_FALLBACK_PATHS)
@@ -1005,21 +1037,27 @@ class OllamaServiceControl:
                 low = combined.lower()
                 if cproc.returncode == 0:
                     return True, combined or "Ollama upgraded via Chocolatey."
+                if any(
+                    phrase in low
+                    for phrase in (
+                        "successfully upgraded",
+                        "upgraded",
+                    )
+                ):
+                    return True, combined or "Ollama upgraded via Chocolatey."
                 if "already installed" in low or "nothing to do" in low or "up to date" in low:
-                    return True, "Ollama is already up to date (Chocolatey)."
-                self.logger.warning("choco upgrade exit %d: %s", cproc.returncode, combined[-2000:])
-                choco_err = f"Chocolatey failed (exit {cproc.returncode}). {combined[-800:]}"
+                    choco_err = combined[-500:] or "Chocolatey reports already current"
+                else:
+                    self.logger.warning("choco upgrade exit %d: %s", cproc.returncode, combined[-2000:])
+                    choco_err = f"Chocolatey failed (exit {cproc.returncode}). {combined[-800:]}"
 
-        ok_setup, setup_msg = self._windows_install_via_official_setup()
-        if ok_setup:
-            return True, setup_msg
         ctx: list[str] = []
         if winget_err:
-            ctx.append(f"winget: {winget_err[:400]}")
+            ctx.append(f"official installer: {winget_err[:400]}")
         if choco_err:
             ctx.append(choco_err[:500])
         if ctx:
-            return False, f"{setup_msg} Context: {' | '.join(ctx)}"
+            return False, " | ".join(ctx)
         return False, setup_msg
 
     def _upgrade_ollama_darwin(self) -> Tuple[bool, str]:
@@ -1060,6 +1098,24 @@ class OllamaServiceControl:
         if proc.returncode == 0:
             return True, combined or "Ollama updated via official install script."
         return False, f"Install script failed (exit {proc.returncode}). {combined[-800:]}"
+
+    def _verify_ollama_upgrade_applied(self) -> Tuple[bool, str]:
+        """After upgrade+restart, confirm installed version is at or past latest GitHub release."""
+        try:
+            from app.services.ollama_update_check import _compare_versions, fetch_latest_ollama_tag
+
+            new_version = "Unknown"
+            if hasattr(self, "get_ollama_version") and callable(getattr(self, "get_ollama_version", None)):
+                new_version = self.get_ollama_version(force_refresh=True) or "Unknown"
+            latest = fetch_latest_ollama_tag(self._session)
+            if not latest or not new_version or new_version == "Unknown":
+                return True, new_version
+            if _compare_versions(latest, new_version) <= 0:
+                return True, new_version
+            return False, f"v{new_version} (latest release {latest})"
+        except Exception as exc:
+            self.logger.debug("Could not verify Ollama version after upgrade: %s", exc)
+            return True, ""
 
     def update_ollama(self):
         """Stop Ollama, run platform upgrade, then start the service again."""
@@ -1108,13 +1164,29 @@ class OllamaServiceControl:
                 pass
 
             if start_result.get("success"):
-                api_ok, _ = self._verify_ollama_api(max_retries=5, retry_delay=2)
+                api_ok, _ = self._verify_ollama_api(max_retries=8, retry_delay=3)
                 if api_ok:
                     if not ok:
                         tag = WINDOWS_UPDATE_FAILURE_TAG if platform.system() == "Windows" else ""
                         return {
                             "success": False,
                             "message": f"Update step failed: {upgrade_msg}{tag} Ollama was restarted and is healthy, but the upgrade did not complete.",
+                        }
+                    verified, version_info = self._verify_ollama_upgrade_applied()
+                    if not verified:
+                        tag = WINDOWS_UPDATE_FAILURE_TAG if platform.system() == "Windows" else ""
+                        return {
+                            "success": False,
+                            "message": (
+                                f"Upgrade finished but Ollama is still on {version_info}. "
+                                f"The updater reported: {upgrade_msg}{tag} "
+                                "Try running the installer from https://ollama.com/download/windows as administrator."
+                            ),
+                        }
+                    if version_info and version_info != "Unknown":
+                        return {
+                            "success": True,
+                            "message": f"Ollama updated to v{version_info} and running.",
                         }
                     return {"success": True, "message": "Ollama updated and running."}
 

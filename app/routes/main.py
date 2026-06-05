@@ -447,17 +447,53 @@ def start_model(model_name):
     except Exception as e:
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
 
+def _force_unload_via_ollama_restart(model_name):
+    """Force-kill and restart Ollama to unload all models (escape hatch for stuck loads)."""
+    svc = _get_ollama_service()
+    restart_result = svc.restart_service()
+    if not restart_result.get('success'):
+        return {
+            "success": False,
+            "message": (
+                f"Could not force-unload {model_name}: "
+                f"{restart_result.get('message', 'Ollama restart failed')}"
+            ),
+        }, 500
+    svc.clear_cache('running_models')
+    try:
+        svc.get_running_models(force_refresh=True)
+    except Exception:
+        pass
+    return {
+        "success": True,
+        "message": (
+            f"Model {model_name} force-unloaded — Ollama was restarted and all models were cleared from memory."
+        ),
+    }, 200
+
+
 @bp.route('/api/models/stop/<model_name>', methods=['POST'])
 def stop_model(model_name):
-    """Gracefully unload a model from memory using Ollama API.
+    """Unload a model from memory using Ollama API (keep_alive=0).
 
-    Uses keep_alive=0s to signal Ollama to unload the model.
-    Does NOT kill processes (which would stop the entire Ollama service).
+    Optional JSON body ``{"force": true}`` restarts Ollama to force-clear memory
+    when graceful unload fails or the model is stuck.
     """
     err, status = _validate_model_name(model_name)
     if err is not None:
         return err, status
     try:
+        payload = request.get_json(silent=True) or {}
+        force = bool(payload.get('force'))
+
+        if force:
+            if not _get_ollama_service().get_service_status():
+                return {"success": False, "message": "Ollama service is not running"}, 503
+            running_models = _get_ollama_service().get_running_models(force_refresh=True)
+            if not any(m.get('name') == model_name for m in running_models):
+                return {"success": False, "message": f"Model {model_name} is not currently running"}, 400
+            return _force_unload_via_ollama_restart(model_name)
+
         # Verify Ollama service is running
         if not _get_ollama_service().get_service_status():
             return {"success": False, "message": "Ollama service is not running"}, 503
@@ -488,8 +524,15 @@ def stop_model(model_name):
                         return {"success": False, "message": f"Ollama error: {body['error']}"}, 500
                 except Exception:
                     pass
-                if not _verify_model_unloaded(model_name):
-                    return {"success": False, "message": f"Model {model_name} may still be loaded. Unload was requested but not confirmed."}, 504
+                if not _verify_model_unloaded(model_name, max_attempts=10, delay_seconds=1):
+                    return {
+                        "success": False,
+                        "message": (
+                            f"Model {model_name} may still be loaded. "
+                            "Retry with force=true or restart Ollama to force-unload."
+                        ),
+                        "can_force": True,
+                    }, 504
                 _get_ollama_service().clear_cache('running_models')
                 try:
                     _get_ollama_service().get_running_models(force_refresh=True)
@@ -509,7 +552,11 @@ def stop_model(model_name):
                 return {"success": False, "message": error_msg}, unload_response.status_code
 
         except requests.exceptions.Timeout:
-            return {"success": False, "message": f"Timeout while stopping model {model_name}. The model may still be unloading."}, 504
+            return {
+                "success": False,
+                "message": f"Timeout while stopping model {model_name}. The model may still be unloading.",
+                "can_force": True,
+            }, 504
         except requests.exceptions.RequestException as e:
             return {"success": False, "message": f"Network error while stopping model: {str(e)}"}, 503
 

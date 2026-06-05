@@ -180,7 +180,7 @@ async function startModel(modelName) {
   }
 }
 
-async function stopModel(modelName) {
+async function stopModel(modelName, force) {
   const card = document.querySelector(
     `.model-card[data-model-name="${cssEscape(modelName)}"]`,
   );
@@ -189,13 +189,19 @@ async function stopModel(modelName) {
     : null;
   const originalText = stopButton ? stopButton.innerHTML : null;
   if (stopButton) {
-    stopButton.innerHTML =
-      '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
+    stopButton.innerHTML = force
+      ? '<i class="fas fa-spinner fa-spin me-1"></i>Force stopping...'
+      : '<i class="fas fa-spinner fa-spin me-1"></i>Stopping...';
     stopButton.disabled = true;
   }
 
   try {
-    showNotification(`Attempting to stop model ${modelName}...`, "info");
+    showNotification(
+      force
+        ? `Force-unloading ${modelName} via Ollama restart...`
+        : `Attempting to stop model ${modelName}...`,
+      "info",
+    );
 
     const response = await fetch(
       `/api/models/stop/${encodeURIComponent(modelName)}`,
@@ -204,11 +210,25 @@ async function stopModel(modelName) {
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ force: !!force }),
       },
     );
 
     const sr = await readApiJson(response);
     if (!sr.responseOk) {
+      const canForce = sr.data && sr.data.can_force;
+      if (canForce && !force) {
+        const retry = window.confirm(
+          `Could not stop ${modelName}. Restart Ollama to force-unload all models from memory?`,
+        );
+        if (retry) {
+          if (stopButton && originalText !== null) {
+            stopButton.innerHTML = originalText;
+            stopButton.disabled = false;
+          }
+          return stopModel(modelName, true);
+        }
+      }
       showNotification(
         sr.message || `Failed to stop model (HTTP ${sr.status})`,
         "error",
@@ -226,7 +246,14 @@ async function stopModel(modelName) {
         result.message || `Model ${modelName} stopped successfully`,
         "success",
       );
-      await pollForModelStatus(modelName, false);
+      if (force) {
+        if (typeof window.serviceControl?.updateHealthStatus === "function") {
+          window.serviceControl.updateHealthStatus();
+        }
+        setTimeout(() => location.reload(), 2000);
+      } else {
+        await pollForModelStatus(modelName, false);
+      }
     } else {
       showNotification(
         result.message || `Failed to stop model ${modelName}`,
@@ -1601,8 +1628,14 @@ function buildAvailableModelCardHTML(model) {
               </div>
             </div>
           </div>
+          <div class="download-progress d-none">
+            <div class="progress" style="height: 20px;">
+              <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;"></div>
+            </div>
+            <small class="text-muted d-block text-center mt-1">0%</small>
+          </div>
           <div class="model-actions model-actions--available">
-            <button type="button" class="btn btn-primary" onclick="startModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Load into memory so you can use it via API, CLI, or apps (ollama run)." aria-label="Start model">
+            <button type="button" class="btn btn-primary btn-dashboard-download" onclick="startModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Load into memory so you can use it via API, CLI, or apps (ollama run)." aria-label="Start model">
               <i class="fas fa-play"></i> <span class="model-action-btn-label">Start</span>
             </button>
             <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Modal with full Ollama model JSON." aria-label="View model information">
@@ -1956,39 +1989,58 @@ document.addEventListener("DOMContentLoaded", function () {
   toggleDownloadableSection(savedCollapsed);
 });
 
-async function pullModel(modelName) {
-  let card = document.querySelector(
-    `.model-card[data-model-name="${cssEscape(modelName)}"]`,
-  );
-  if (!card) {
-    const container = document.getElementById("downloadableModelsContainer");
-    if (
-      container &&
-      window.modelCards &&
-      typeof window.modelCards.buildDownloadableModelCardHTML === "function"
-    ) {
-      const placeholder = {
-        name: modelName,
-        family: "Unknown",
-        parameter_size: "Unknown",
-        size: "Unknown",
-        context_length: "Unknown",
-      };
-      const cardHtml =
-        window.modelCards.buildDownloadableModelCardHTML(placeholder);
-      const wrapper = document.createElement("div");
-      wrapper.innerHTML = cardHtml.trim();
-      const col = wrapper.firstElementChild;
-      if (col) {
-        container.insertBefore(col, container.firstChild);
-        card = document.querySelector(
-          `.model-card[data-model-name="${cssEscape(modelName)}"]`,
-        );
-        afterModelCardsRendered();
-      }
-    }
+function ensureAvailableCardForDownload(modelName) {
+  const esc = cssEscape(modelName);
+  const availableContainer = document.getElementById("availableModelsContainer");
+  let card = availableContainer
+    ? availableContainer.querySelector(
+        `.model-card[data-model-name="${esc}"]`,
+      )
+    : null;
+  if (card) return card;
+
+  if (!availableContainer || typeof buildAvailableModelCardHTML !== "function") {
+    return document.querySelector(`.model-card[data-model-name="${esc}"]`);
   }
-  const button = card ? card.querySelector(".btn-dashboard-download") : null;
+
+  const placeholder = {
+    name: modelName,
+    details: { family: "Unknown", parameter_size: "Unknown" },
+    formatted_size: "Downloading…",
+    context_length: "—",
+  };
+  const cardHtml = buildAvailableModelCardHTML(placeholder);
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = cardHtml.trim();
+  const col = wrapper.firstElementChild;
+  if (col) {
+    availableContainer.insertBefore(col, availableContainer.firstChild);
+    card = availableContainer.querySelector(
+      `.model-card[data-model-name="${esc}"]`,
+    );
+    const countEl = document.getElementById("availableModelsCount");
+    if (countEl) {
+      const n = availableContainer.querySelectorAll(
+        ".model-card[data-model-name]",
+      ).length;
+      countEl.textContent = String(n);
+    }
+    afterModelCardsRendered();
+  }
+  return card;
+}
+
+async function pullModel(modelName) {
+  let card = ensureAvailableCardForDownload(modelName);
+  if (!card) {
+    card = document.querySelector(
+      `.model-card[data-model-name="${cssEscape(modelName)}"]`,
+    );
+  }
+  const button = card
+    ? card.querySelector(".btn-dashboard-download") ||
+      card.querySelector(".model-actions--available .btn-primary")
+    : null;
   const progressContainer = card
     ? card.querySelector(".download-progress")
     : null;

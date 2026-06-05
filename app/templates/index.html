@@ -88,7 +88,7 @@
                                 <button id="stopServiceBtn" class="btn btn-sm btn-secondary" type="button" data-dashboard-tooltip="Stop the Ollama service. All loaded models are unloaded and in-flight requests may fail." aria-label="Stop Ollama service" onclick="stopOllamaService()">
                                     <i class="fas fa-stop" aria-hidden="true"></i>
                                 </button>
-                                <button id="restartServiceBtn" class="btn btn-sm btn-warning" type="button" data-dashboard-tooltip="Restart the Ollama service. Brief downtime; running models and requests are interrupted." aria-label="Restart Ollama service" onclick="showRestartConfirm()">
+                                <button id="restartServiceBtn" class="btn btn-sm btn-warning" type="button" data-dashboard-tooltip="Force-restart Ollama. Unloads all models from memory; use when Stop does not clear a stuck model." aria-label="Restart Ollama service" onclick="showRestartConfirm()">
                                     <i class="fas fa-sync-alt" aria-hidden="true"></i>
                                 </button>
                             </div>
@@ -214,7 +214,7 @@
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <p>Restarting the Ollama service will stop and start background processes. This may interrupt running models and ongoing requests. Are you sure you want to proceed?</p>
+                        <p>Restarting Ollama force-kills the service and reloads it. All models are unloaded from memory and ongoing requests are interrupted. Use this if a model is stuck and normal Stop does not work.</p>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
