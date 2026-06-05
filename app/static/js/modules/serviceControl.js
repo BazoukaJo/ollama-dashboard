@@ -66,9 +66,17 @@
     setTimeout(poll, intervalMs);
   }
 
-  function pollForHealthyAndReload(maxWaitMs, intervalMs) {
-    pollForServiceState(true, maxWaitMs, intervalMs, function (ready) {
+  function reloadPage() {
+    if (typeof window.scheduleReloadUnlessDownloading === "function") {
+      window.scheduleReloadUnlessDownloading();
+    } else {
       location.reload();
+    }
+  }
+
+  function pollForHealthyAndReload(maxWaitMs, intervalMs) {
+    pollForServiceState(true, maxWaitMs, intervalMs, function () {
+      reloadPage();
     });
   }
 
@@ -194,7 +202,7 @@
         window.showNotification(data.message, "success");
         updateHealthStatus();
         pollForServiceState(true, 90000, 1500, function () {
-          location.reload();
+          reloadPage();
         });
       } else {
         window.showNotification(
@@ -237,7 +245,7 @@
         window.showNotification(data.message, "success");
         updateHealthStatus();
         pollForServiceState(false, 30000, 500, function () {
-          location.reload();
+          reloadPage();
         });
       } else {
         window.showNotification(
@@ -282,7 +290,7 @@
         window.showNotification(data.message, "success");
         updateHealthStatus();
         pollForServiceState(true, 90000, 1500, function () {
-          location.reload();
+          reloadPage();
         });
       } else {
         window.showNotification(data.message, "error");
@@ -355,7 +363,7 @@
         window.showNotification(data.message || "Ollama updated.", "success");
         updateHealthStatus();
         pollForServiceState(true, 180000, 2000, function () {
-          location.reload();
+          reloadPage();
         });
       } else {
         window.showNotification(
@@ -375,7 +383,7 @@
           "error",
         );
         pollForServiceState(true, 300000, 3000, function () {
-          location.reload();
+          reloadPage();
         });
       } else {
         window.showNotification(

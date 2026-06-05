@@ -130,7 +130,7 @@ class OllamaServiceModels:
 
     def get_system_stats(self):
         """Get system statistics with defensive normalization."""
-        cached = self._get_cached('system_stats', ttl_seconds=5)
+        cached = self._get_cached('system_stats', ttl_seconds=1)
         if cached is not None:
             stats = cached
         else:
@@ -153,9 +153,15 @@ class OllamaServiceModels:
                 if key not in stats['memory'] or stats['memory'][key] is None:
                     stats['memory'][key] = 0
 
-        # Remove disk info if present
-        if 'disk' in stats:
-            stats.pop('disk', None)
+        # Disk activity (busy %), not storage capacity
+        if 'disk' not in stats or not isinstance(stats['disk'], dict):
+            stats['disk'] = {'activity_percent': 0}
+        else:
+            act = stats['disk'].get('activity_percent')
+            if act is None or not isinstance(act, (int, float)):
+                stats['disk']['activity_percent'] = 0
+            else:
+                stats['disk'] = {'activity_percent': float(act)}
 
         return stats
 

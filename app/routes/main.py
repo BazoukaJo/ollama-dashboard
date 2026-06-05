@@ -139,6 +139,7 @@ def index():
             'cpu_percent': 0,
             'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0},
             'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0, 'gpu_3d': 0},
+            'disk': {'activity_percent': 0},
         }
         _upd = {'update_available': False, 'latest_version': None}
         try:

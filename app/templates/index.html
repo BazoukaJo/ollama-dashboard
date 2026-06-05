@@ -133,13 +133,13 @@
 
             <!-- System resources: lives in header so it stays visible while model lists scroll -->
             <div class="dashboard-header-resources-strip w-100">
-                <div class="compact-system-resources mb-0">
+                <div class="compact-system-resources mb-0" data-stats-poll-interval="1">
                     <div class="d-flex justify-content-between align-items-center mb-0 compact-resources-head">
-                        <div class="d-flex align-items-center gap-1" data-dashboard-tooltip="Live usage on this computer: CPU, RAM, GPU memory (if any), and GPU 3D engine. Sparklines show recent history.">
+                        <div class="d-flex align-items-center gap-1" data-dashboard-tooltip="Live usage on this computer: CPU, RAM, GPU memory (if any), GPU 3D engine, and SSD/disk activity. Sparklines show recent history.">
                             <i class="fas fa-server text-primary section-icon"></i>
                             <span class="fw-semibold text-light section-title-text">System Resources</span>
                         </div>
-                        <small class="text-muted last-update-time" id="lastUpdateTime" data-dashboard-tooltip="When system stats were last fetched (updates with the refresh countdown).">Updated just now</small>
+                        <small class="text-muted last-update-time" id="lastUpdateTime" data-dashboard-tooltip="When system stats were last fetched (~every second).">Updated just now</small>
                     </div>
 
                     <div class="compact-metrics-grid">
@@ -189,6 +189,18 @@
                                 <span class="metric-value-compact" id="gpu3dPercent">{{ system_stats.vram.gpu_3d|round(1) }}%</span>
                             </div>
                             <canvas class="timeline-canvas" id="gpu3dTimeline" width="200" height="12"></canvas>
+                        </div>
+
+                        <!-- SSD activity (disk busy %, not storage capacity) -->
+                        <div class="compact-metric" data-dashboard-tooltip="SSD/disk active time — how busy the drive is with read/write I/O. This is not free space or storage capacity.">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-1">
+                                    <i class="fas fa-hdd resource-icon resource-icon-disk"></i>
+                                    <span class="metric-label-compact">SSD</span>
+                                </div>
+                                <span class="metric-value-compact" id="diskActivityPercent">{{ system_stats.disk.activity_percent|default(0)|round(1) }}%</span>
+                            </div>
+                            <canvas class="timeline-canvas" id="diskTimeline" width="200" height="12"></canvas>
                         </div>
                     </div>
                 </div>
@@ -294,8 +306,6 @@
                 </div>
             </div>
         </div>
-
-        <div id="recentErrorsHost" class="d-none"></div>
 
         <!-- Models Management Section -->
         <div class="models-section">
@@ -617,12 +627,10 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="text-center mt-3">
-                            <button id="viewMoreModelsBtn" class="btn btn-outline-secondary" data-dashboard-tooltip="Load additional downloadable entries below (larger catalog than the default list)." onclick="toggleExtendedModels()">
-                                <i class="fas fa-plus-circle me-2"></i>View More Models
+                        <div class="text-center mt-3 downloadable-load-more-wrap">
+                            <button type="button" id="loadMoreDownloadableBtn" class="btn btn-outline-secondary" style="display: none;" data-dashboard-tooltip="Load the next batch of downloadable models into the list above." aria-label="Load more downloadable models" onclick="loadMoreDownloadableModels()">
+                                <i class="fas fa-plus-circle me-2" aria-hidden="true"></i>Load more
                             </button>
-                        </div>
-                        <div id="extendedModelsContainer" class="row g-3 mt-2 extended-models-container model-cards-row model-cards-row--downloadable row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5">
                         </div>
                         </div>
                     </div>

@@ -1489,7 +1489,7 @@ canvas {
 
 @media (min-width: 900px) {
   .compact-metrics-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.22rem;
   }
 }
@@ -3876,9 +3876,11 @@ body.compact-mode .compact-hide {
 .resource-icon-gpu3d {
   color: #f59e0b;
 }
-.resource-icon-gpu,
-.resource-icon-disk {
+.resource-icon-gpu {
   color: #bcbec0;
+}
+.resource-icon-disk {
+  color: #a855f7;
 }
 
 /* ===== Capability Filter Styles ===== */

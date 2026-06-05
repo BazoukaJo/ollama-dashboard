@@ -435,7 +435,7 @@ class OllamaServiceCore:
         age_info = {}
         stale = {}
         ttl_map = {
-            'system_stats': 5,
+            'system_stats': 1,
             # running_models is fetched on-demand (force_refresh) by the route, never by
             # the background thread, so it must not be treated as stale passively.
             'available_models': 60,

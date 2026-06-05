@@ -10,7 +10,204 @@ function getPollIntervalSec() {
   return Number.isFinite(n) && n > 0 ? n : 10;
 }
 
+/** System Resources (CPU/RAM/VRAM/GPU/SSD) refresh — faster than model list poll. */
+function getStatsPollIntervalSec() {
+  const el = document.querySelector(".compact-system-resources");
+  const val = el && el.dataset.statsPollInterval;
+  const n = parseInt(val, 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
 let refreshCountdown = 10;
+
+const DOWNLOAD_STATE_KEY = "ollamaDashboardActiveDownloads";
+const DOWNLOAD_RESUME_POLL_MS = 2500;
+const DOWNLOAD_RESUME_TIMEOUT_MS = 7200000;
+const _downloadResumeTimers = new Map();
+
+function getActiveDownloads() {
+  try {
+    const raw = sessionStorage.getItem(DOWNLOAD_STATE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveActiveDownloads(map) {
+  try {
+    sessionStorage.setItem(DOWNLOAD_STATE_KEY, JSON.stringify(map || {}));
+  } catch (_) {}
+}
+
+function setDownloadState(modelName, state) {
+  const name = String(modelName || "").trim();
+  if (!name) return;
+  const all = getActiveDownloads();
+  if (!state) {
+    delete all[name];
+  } else {
+    all[name] = { ...state, updatedAt: Date.now() };
+  }
+  saveActiveDownloads(all);
+}
+
+function clearDownloadState(modelName) {
+  setDownloadState(modelName, null);
+  const t = _downloadResumeTimers.get(modelName);
+  if (t) {
+    clearInterval(t);
+    _downloadResumeTimers.delete(modelName);
+  }
+}
+
+function hasAnyActiveDownload() {
+  return Object.keys(getActiveDownloads()).length > 0;
+}
+
+function augmentAvailableModelsForDownloads(models) {
+  const list = Array.isArray(models) ? models.slice() : [];
+  const apiNames = new Set(
+    list.map((m) => (m && m.name ? String(m.name).trim() : "")).filter(Boolean),
+  );
+  for (const [name, state] of Object.entries(getActiveDownloads())) {
+    if (!name || apiNames.has(name)) continue;
+    list.unshift({
+      name,
+      details: { family: "Unknown", parameter_size: "Unknown" },
+      formatted_size: state.percent != null ? "Downloading…" : "Downloading…",
+      context_length: "—",
+      _downloadPlaceholder: true,
+    });
+  }
+  return list;
+}
+
+function applyDownloadStateToCard(modelName, state) {
+  const esc = cssEscape(modelName);
+  const card =
+    document.querySelector(
+      `#availableModelsContainer .model-card[data-model-name="${esc}"]`,
+    ) || document.querySelector(`.model-card[data-model-name="${esc}"]`);
+  if (!card || !state) return;
+
+  card.dataset.downloadActive = "true";
+  const button =
+    card.querySelector(".btn-dashboard-download") ||
+    card.querySelector(".model-actions--available .btn-primary");
+  const progressContainer = card.querySelector(".download-progress");
+  const progressBar = progressContainer
+    ? progressContainer.querySelector(".progress-bar")
+    : null;
+  const progressText = progressContainer
+    ? progressContainer.querySelector("small")
+    : null;
+
+  if (progressContainer) {
+    progressContainer.classList.remove("d-none");
+    progressContainer.style.display = "block";
+  }
+  if (button) {
+    button.disabled = true;
+    const msg = state.message || "Downloading...";
+    if (state.status === "complete") {
+      button.innerHTML = '<i class="fas fa-check me-1"></i>Downloaded';
+    } else {
+      button.innerHTML = `<i class="fas fa-download me-1"></i>${typeof escapeHtml === "function" ? escapeHtml(msg) : msg}`;
+    }
+  }
+  const percent =
+    state.percent != null && !Number.isNaN(Number(state.percent))
+      ? Math.max(0, Math.min(100, Number(state.percent)))
+      : null;
+  if (percent != null) {
+    if (progressBar) {
+      progressBar.style.width = `${percent}%`;
+      progressBar.setAttribute("aria-valuenow", String(percent));
+    }
+    if (progressText) {
+      progressText.textContent = `${percent}%`;
+    }
+  } else if (progressText && state.status === "downloading") {
+    progressText.textContent = "…";
+  }
+}
+
+function restoreAllDownloadUi() {
+  for (const [name, state] of Object.entries(getActiveDownloads())) {
+    ensureAvailableCardForDownload(name);
+    applyDownloadStateToCard(name, state);
+  }
+}
+
+function pollForDownloadCompletion(modelName) {
+  const name = String(modelName || "").trim();
+  if (!name || _downloadResumeTimers.has(name)) return;
+
+  const started = Date.now();
+  const timer = setInterval(async function () {
+    if (Date.now() - started > DOWNLOAD_RESUME_TIMEOUT_MS) {
+      clearDownloadState(name);
+      return;
+    }
+    try {
+      const response = await fetch("/api/models/available");
+      const ar = await readApiJson(response);
+      if (!ar.responseOk) return;
+      const models = Array.isArray(ar.data?.models) ? ar.data.models : [];
+      const found = models.some(
+        (m) => m && String(m.name || "").trim() === name,
+      );
+      if (found) {
+        clearDownloadState(name);
+        const card = document.querySelector(
+          `#availableModelsContainer .model-card[data-model-name="${cssEscape(name)}"]`,
+        );
+        if (card) delete card.dataset.downloadActive;
+        if (typeof updateModelData === "function") {
+          void updateModelData();
+        }
+      }
+    } catch (_) {}
+  }, DOWNLOAD_RESUME_POLL_MS);
+
+  _downloadResumeTimers.set(name, timer);
+}
+
+function resumeActiveDownloads() {
+  const active = getActiveDownloads();
+  for (const [name, state] of Object.entries(active)) {
+    ensureAvailableCardForDownload(name);
+    applyDownloadStateToCard(name, state);
+    if (state.status === "downloading") {
+      pollForDownloadCompletion(name);
+    }
+  }
+}
+
+function scheduleReloadUnlessDownloading() {
+  if (typeof hasAnyActiveDownload === "function" && hasAnyActiveDownload()) {
+    const started = Date.now();
+    const wait = setInterval(function () {
+      if (!hasAnyActiveDownload()) {
+        clearInterval(wait);
+        location.reload();
+        return;
+      }
+      if (Date.now() - started > DOWNLOAD_RESUME_TIMEOUT_MS) {
+        clearInterval(wait);
+        location.reload();
+      }
+    }, 2000);
+    return;
+  }
+  location.reload();
+}
+
+window.hasAnyActiveDownload = hasAnyActiveDownload;
+window.scheduleReloadUnlessDownloading = scheduleReloadUnlessDownloading;
+window.resumeActiveDownloads = resumeActiveDownloads;
 
 function resetRefreshCountdown() {
   refreshCountdown = getPollIntervalSec();
@@ -250,7 +447,7 @@ async function stopModel(modelName, force) {
         if (typeof window.serviceControl?.updateHealthStatus === "function") {
           window.serviceControl.updateHealthStatus();
         }
-        setTimeout(() => location.reload(), 2000);
+        setTimeout(() => scheduleReloadUnlessDownloading(), 2000);
       } else {
         await pollForModelStatus(modelName, false);
       }
@@ -378,7 +575,7 @@ async function deleteModel(modelName) {
     } else if (result.success) {
       showNotification(result.message, "success");
       await pollForModelDeleted(modelName);
-      location.reload();
+      scheduleReloadUnlessDownloading();
     } else {
       showNotification(result.message || "Failed to delete model.", "error");
     }
@@ -821,14 +1018,6 @@ function jsonToTable(json, level = 0) {
 // Moved escapeHtml and cssEscape to modules/utils.js; legacy globals preserved there.
 
 function showNotification(message, type) {
-  if (type === "error" || type === "danger") {
-    if (
-      window.modelCardActions &&
-      typeof modelCardActions.recordRecentModelError === "function"
-    ) {
-      modelCardActions.recordRecentModelError(String(message));
-    }
-  }
   const notification = document.createElement("div");
   const isError = type === "error" || type === "danger";
   const alertClass = isError
@@ -1028,6 +1217,7 @@ const timelineData = {
   memory: [],
   vram: [],
   gpu3d: [],
+  disk: [],
 };
 
 const MAX_TIMELINE_POINTS = 60; // 60 seconds of data
@@ -1037,6 +1227,7 @@ const TIMELINE_COLOR_CPU = "#3b82f6";
 const TIMELINE_COLOR_MEMORY = "#22c55e";
 const TIMELINE_COLOR_VRAM = "#06b6d4";
 const TIMELINE_COLOR_GPU3D = "#f59e0b";
+const TIMELINE_COLOR_DISK = "#a855f7";
 
 // Timeline drawing function
 function drawTimeline(canvas, data, color) {
@@ -1138,6 +1329,13 @@ async function updateSystemStats() {
       typeof vram.gpu_3d === "number" && Number.isFinite(vram.gpu_3d)
         ? vram.gpu_3d
         : 0;
+    const disk =
+      stats.disk && typeof stats.disk === "object" ? stats.disk : {};
+    const diskActivity =
+      typeof disk.activity_percent === "number" &&
+      Number.isFinite(disk.activity_percent)
+        ? disk.activity_percent
+        : 0;
 
     {
       // Update percentages
@@ -1145,6 +1343,9 @@ async function updateSystemStats() {
       const memoryPercentEl = document.getElementById("memoryPercent");
       const vramPercentEl = document.getElementById("vramPercent");
       const gpu3dPercentEl = document.getElementById("gpu3dPercent");
+      const diskActivityPercentEl = document.getElementById(
+        "diskActivityPercent",
+      );
 
       if (cpuPercentEl) cpuPercentEl.textContent = `${cpu.toFixed(1)}%`;
       if (memoryPercentEl)
@@ -1155,12 +1356,15 @@ async function updateSystemStats() {
       if (gpu3dPercentEl)
         gpu3dPercentEl.textContent =
           typeof vram.gpu_3d === "number" ? `${gpu3d.toFixed(1)}%` : "--%";
+      if (diskActivityPercentEl)
+        diskActivityPercentEl.textContent = `${diskActivity.toFixed(1)}%`;
 
       // Store historical data
       timelineData.cpu.push(cpu);
       timelineData.memory.push(memPct);
       timelineData.vram.push(vramTotal > 0 ? vramPct : 0);
       timelineData.gpu3d.push(typeof vram.gpu_3d === "number" ? gpu3d : 0);
+      timelineData.disk.push(diskActivity);
 
       // Limit data points
       if (timelineData.cpu.length > MAX_TIMELINE_POINTS) {
@@ -1168,6 +1372,7 @@ async function updateSystemStats() {
         timelineData.memory.shift();
         timelineData.vram.shift();
         timelineData.gpu3d.shift();
+        timelineData.disk.shift();
       }
 
       // Update timelines
@@ -1175,6 +1380,7 @@ async function updateSystemStats() {
       const memoryCanvas = document.getElementById("memoryTimeline");
       const vramCanvas = document.getElementById("vramTimeline");
       const gpu3dCanvas = document.getElementById("gpu3dTimeline");
+      const diskCanvas = document.getElementById("diskTimeline");
 
       if (cpuCanvas)
         drawTimeline(cpuCanvas, timelineData.cpu, TIMELINE_COLOR_CPU);
@@ -1184,6 +1390,8 @@ async function updateSystemStats() {
         drawTimeline(vramCanvas, timelineData.vram, TIMELINE_COLOR_VRAM);
       if (gpu3dCanvas)
         drawTimeline(gpu3dCanvas, timelineData.gpu3d, TIMELINE_COLOR_GPU3D);
+      if (diskCanvas)
+        drawTimeline(diskCanvas, timelineData.disk, TIMELINE_COLOR_DISK);
 
       // Update last update time
       const lastUpdateTimeEl = document.getElementById("lastUpdateTime");
@@ -1231,6 +1439,8 @@ async function updateModelData() {
   } catch (error) {
     console.log("Failed to update models:", error);
   }
+
+  restoreAllDownloadUi();
 
   _versionPollCounter++;
   if (_versionPollCounter >= VERSION_POLL_EVERY_N) {
@@ -1659,13 +1869,15 @@ function updateAvailableModelsDisplay(models) {
   );
   if (!availableModelsContainer) return;
 
+  const displayModels = augmentAvailableModelsForDownloads(models);
+
   const countEl = document.getElementById("availableModelsCount");
   if (countEl) {
-    countEl.textContent = (models && models.length) || 0;
+    countEl.textContent = String(displayModels.length);
   }
 
   const newNames = new Set(
-    (models || []).map((m) => (m.name || "").trim()).filter(Boolean),
+    displayModels.map((m) => (m.name || "").trim()).filter(Boolean),
   );
   const currentCards = availableModelsContainer.querySelectorAll(
     ".model-card[data-model-name]",
@@ -1679,15 +1891,16 @@ function updateAvailableModelsDisplay(models) {
     [...newNames].some((n) => !currentNames.has(n));
 
   if (namesChanged) {
-    if (!models || models.length === 0) {
+    if (displayModels.length === 0) {
       availableModelsContainer.innerHTML = "";
     } else {
-      availableModelsContainer.innerHTML = models
+      availableModelsContainer.innerHTML = displayModels
         .map((m) => buildAvailableModelCardHTML(m))
         .join("");
     }
     applyCapabilityFilters("availableModelsContainer");
     afterModelCardsRendered();
+    restoreAllDownloadUi();
     return;
   }
 
@@ -1730,6 +1943,7 @@ function updateAvailableModelsDisplay(models) {
     });
     applyCapabilityFilters("availableModelsContainer");
     afterModelCardsRendered();
+    restoreAllDownloadUi();
   } catch (err) {
     console.log("Failed to update capability icons for available models", err);
   }
@@ -1789,12 +2003,12 @@ function initializeCompactMode() {
 
 // updateHealthStatus & updateServiceControlButtons moved to serviceControl.js
 
-// System stats: same cadence as model list refresh (data-poll-interval / getPollIntervalSec).
+// System stats: dedicated fast poll (data-stats-poll-interval on .compact-system-resources).
 document.addEventListener("DOMContentLoaded", function () {
   const statsMs =
-    typeof getPollIntervalSec === "function"
-      ? getPollIntervalSec() * 1000
-      : 10000;
+    typeof getStatsPollIntervalSec === "function"
+      ? getStatsPollIntervalSec() * 1000
+      : 1000;
   if (typeof updateSystemStats === "function") updateSystemStats();
   setInterval(function () {
     if (document.visibilityState !== "visible") return;
@@ -1802,10 +2016,11 @@ document.addEventListener("DOMContentLoaded", function () {
   }, statsMs);
 });
 
-const INITIAL_DOWNLOADABLE_VISIBLE = 48;
+const INITIAL_DOWNLOADABLE_VISIBLE = 24;
+const DOWNLOADABLE_LOAD_MORE_BATCH = 24;
 const DOWNLOADABLE_SECTION_COLLAPSED_KEY = "downloadableModelsSectionCollapsed";
 let cachedDownloadableModels = [];
-let extendedModelsLoaded = false;
+let downloadableVisibleCount = 0;
 
 function syncDownloadableSectionToggle(collapsed) {
   const button = document.getElementById("downloadableSectionToggleBtn");
@@ -1844,55 +2059,55 @@ function toggleDownloadableSection(forceCollapsed) {
 
 window.toggleDownloadableSection = toggleDownloadableSection;
 
-function renderExtendedModels(models, container) {
-  if (!container) return;
-  if (!models || models.length === 0) {
-    container.innerHTML =
-      '<div class="col-12 text-center text-muted">No more models</div>';
-    return;
-  }
-  container.innerHTML = models
+function buildDownloadableModelsHtml(models) {
+  if (!models || models.length === 0) return "";
+  return models
     .map((m) =>
       window.modelCards && window.modelCards.buildDownloadableModelCardHTML
         ? window.modelCards.buildDownloadableModelCardHTML(m)
         : "",
     )
     .join("");
-  applyCapabilityFilters("extendedModelsContainer");
-  afterModelCardsRendered();
 }
 
-function updateViewMoreButtonVisibility() {
-  const button = document.getElementById("viewMoreModelsBtn");
+function updateLoadMoreDownloadableButton() {
+  const button = document.getElementById("loadMoreDownloadableBtn");
   if (!button) return;
-  if (cachedDownloadableModels.length <= INITIAL_DOWNLOADABLE_VISIBLE) {
+  const remaining = cachedDownloadableModels.length - downloadableVisibleCount;
+  if (remaining <= 0) {
     button.style.display = "none";
-  } else {
-    button.style.display = "";
+    return;
   }
+  button.style.display = "";
+  const nextCount = Math.min(remaining, DOWNLOADABLE_LOAD_MORE_BATCH);
+  button.innerHTML = `<i class="fas fa-plus-circle me-2" aria-hidden="true"></i>Load more (${nextCount})`;
+  button.setAttribute(
+    "aria-label",
+    `Load ${nextCount} more downloadable models`,
+  );
 }
 
-function toggleExtendedModels() {
-  const container = document.getElementById("extendedModelsContainer");
-  const button = document.getElementById("viewMoreModelsBtn");
-  if (!container || !button) return;
-
-  if (container.style.display === "none" || container.style.display === "") {
-    if (!extendedModelsLoaded) {
-      const rest = cachedDownloadableModels.slice(INITIAL_DOWNLOADABLE_VISIBLE);
-      renderExtendedModels(rest, container);
-      extendedModelsLoaded = true;
-    }
-    container.style.display = "flex";
-    button.innerHTML = '<i class="fas fa-minus-circle me-2"></i>Show Less';
-  } else {
-    container.style.display = "none";
-    button.innerHTML =
-      '<i class="fas fa-plus-circle me-2"></i>View More Models';
+function loadMoreDownloadableModels() {
+  const container = document.getElementById("downloadableModelsContainer");
+  if (!container || downloadableVisibleCount >= cachedDownloadableModels.length) {
+    updateLoadMoreDownloadableButton();
+    return;
   }
+  const next = cachedDownloadableModels.slice(
+    downloadableVisibleCount,
+    downloadableVisibleCount + DOWNLOADABLE_LOAD_MORE_BATCH,
+  );
+  const html = buildDownloadableModelsHtml(next);
+  if (html) {
+    container.insertAdjacentHTML("beforeend", html);
+    downloadableVisibleCount += next.length;
+    applyCapabilityFilters("downloadableModelsContainer");
+    afterModelCardsRendered();
+  }
+  updateLoadMoreDownloadableButton();
 }
 
-window.toggleExtendedModels = toggleExtendedModels;
+window.loadMoreDownloadableModels = loadMoreDownloadableModels;
 
 async function loadDownloadableModels() {
   const container = document.getElementById("downloadableModelsContainer");
@@ -1905,20 +2120,10 @@ async function loadDownloadableModels() {
       const data = dr.data;
       const list = Array.isArray(data.models) ? data.models : [];
       cachedDownloadableModels = list;
-      extendedModelsLoaded = false;
-      const extended = document.getElementById("extendedModelsContainer");
-      if (extended) {
-        extended.innerHTML = "";
-        extended.style.display = "none";
-      }
-      const viewMore = document.getElementById("viewMoreModelsBtn");
-      if (viewMore) {
-        viewMore.innerHTML =
-          '<i class="fas fa-plus-circle me-2"></i>View More Models';
-      }
       const initial = list.slice(0, INITIAL_DOWNLOADABLE_VISIBLE);
+      downloadableVisibleCount = initial.length;
       renderDownloadableModels(initial);
-      updateViewMoreButtonVisibility();
+      updateLoadMoreDownloadableButton();
     } else {
       container.innerHTML =
         '<div class="col-12 text-center text-danger">Failed to load models</div>';
@@ -1939,13 +2144,7 @@ function renderDownloadableModels(models) {
       '<div class="col-12 text-center text-muted">No models available</div>';
     return;
   }
-  container.innerHTML = models
-    .map((m) =>
-      window.modelCards && window.modelCards.buildDownloadableModelCardHTML
-        ? window.modelCards.buildDownloadableModelCardHTML(m)
-        : "",
-    )
-    .join("");
+  container.innerHTML = buildDownloadableModelsHtml(models);
   applyCapabilityFilters("downloadableModelsContainer");
   afterModelCardsRendered();
 }
@@ -2052,6 +2251,12 @@ async function pullModel(modelName) {
     : null;
   const originalText = button ? button.innerHTML : null;
 
+  setDownloadState(modelName, {
+    status: "downloading",
+    percent: 0,
+    message: "Starting download...",
+  });
+
   if (button) {
     button.innerHTML =
       '<i class="fas fa-spinner fa-spin me-1"></i>Downloading...';
@@ -2062,6 +2267,7 @@ async function pullModel(modelName) {
     progressContainer.classList.remove("d-none");
     progressContainer.style.display = "block";
   }
+  if (card) card.dataset.downloadActive = "true";
 
   showNotification(
     `Starting download for ${modelName}. This may take a while...`,
@@ -2104,15 +2310,20 @@ async function pullModel(modelName) {
 
           if (payload.event === "status") {
             const msg = payload.message || "Downloading...";
+            let percent = null;
+            if (payload.total && payload.completed !== undefined) {
+              percent = Math.round((payload.completed / payload.total) * 100);
+            }
+            setDownloadState(modelName, {
+              status: "downloading",
+              percent,
+              message: msg,
+            });
             if (button) {
               button.innerHTML = `<i class="fas fa-download me-1"></i>${msg}`;
             }
 
-            // Update progress bar if total and completed are available
-            if (payload.total && payload.completed !== undefined) {
-              const percent = Math.round(
-                (payload.completed / payload.total) * 100,
-              );
+            if (percent != null) {
               if (progressBar) {
                 progressBar.style.width = `${percent}%`;
                 progressBar.setAttribute("aria-valuenow", percent);
@@ -2126,7 +2337,11 @@ async function pullModel(modelName) {
           } else if (payload.event === "done") {
             pullSucceeded = payload.success !== false;
             pullMessage = payload.message || pullMessage;
-            // Set progress to 100% on completion
+            setDownloadState(modelName, {
+              status: "complete",
+              percent: 100,
+              message: pullMessage,
+            });
             if (progressBar) {
               progressBar.style.width = "100%";
               progressBar.setAttribute("aria-valuenow", 100);
@@ -2169,20 +2384,26 @@ async function pullModel(modelName) {
 
     showNotification(pullMessage, "success");
 
-    // Download complete - update UI and refresh models list
-    if (button)
+    if (button) {
       button.innerHTML = '<i class="fas fa-check me-1"></i>Downloaded';
+    }
+    clearDownloadState(modelName);
+    if (card) delete card.dataset.downloadActive;
     setTimeout(() => {
-      updateModelData();
-      location.reload();
-    }, 1500);
+      if (typeof updateModelData === "function") {
+        void updateModelData();
+      }
+    }, 800);
   } catch (err) {
+    clearDownloadState(modelName);
+    if (card) delete card.dataset.downloadActive;
     showNotification(`Download failed: ${err.message}`, "error");
     if (button && originalText !== null) {
       button.innerHTML = originalText;
       button.disabled = false;
     }
     if (progressContainer) {
+      progressContainer.classList.add("d-none");
       progressContainer.style.display = "none";
     }
     if (progressBar) {
@@ -2203,11 +2424,9 @@ function toggleCapabilityFilter(capability) {
     btn.classList.toggle("active");
   });
 
-  [
-    "availableModelsContainer",
-    "downloadableModelsContainer",
-    "extendedModelsContainer",
-  ].forEach((id) => applyCapabilityFilters(id));
+  ["availableModelsContainer", "downloadableModelsContainer"].forEach((id) =>
+    applyCapabilityFilters(id),
+  );
   const runC = document.getElementById("runningModelsContainer");
   if (runC) {
     runC.querySelectorAll(".model-card").forEach((card) => {

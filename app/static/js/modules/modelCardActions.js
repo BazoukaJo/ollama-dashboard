@@ -2,8 +2,6 @@
  * Model card "More" menu: clipboard helpers, library link, quick chat, copy settings.
  */
 (function () {
-  const RECENT_KEY = "ollamaDashRecentErrors";
-
   function safeDomId(modelName) {
     return String(modelName || "m")
       .replace(/[^a-zA-Z0-9_-]/g, "_")
@@ -217,9 +215,12 @@
         const cr = await readApiJson(r);
         if (!cr.responseOk) {
           const data = cr.data || {};
-          out.textContent =
+          const errText =
             cr.message || data.error || data.message || "Request failed";
-          recordRecentModelError(String(out.textContent));
+          out.textContent = errText;
+          if (typeof showNotification === "function") {
+            showNotification(errText, "error");
+          }
           return;
         }
         const data = cr.data;
@@ -232,8 +233,11 @@
           void updateModelData();
         }
       } catch (err) {
-        out.textContent = err.message || String(err);
-        recordRecentModelError(String(out.textContent));
+        const errText = err.message || String(err);
+        out.textContent = errText;
+        if (typeof showNotification === "function") {
+          showNotification(errText, "error");
+        }
       }
     };
     el.addEventListener("hidden.bs.modal", function () {
@@ -338,75 +342,6 @@
     });
   }
 
-  function recordRecentModelError(message) {
-    try {
-      const prev = JSON.parse(sessionStorage.getItem(RECENT_KEY) || "[]");
-      prev.unshift({
-        t: Date.now(),
-        msg: String(message || "").slice(0, 800),
-      });
-      sessionStorage.setItem(RECENT_KEY, JSON.stringify(prev.slice(0, 6)));
-      renderRecentErrorsBar();
-    } catch (e) {
-      /* ignore */
-    }
-  }
-
-  function renderRecentErrorsBar() {
-    const host = document.getElementById("recentErrorsHost");
-    if (!host) return;
-    let items;
-    try {
-      items = JSON.parse(sessionStorage.getItem(RECENT_KEY) || "[]");
-    } catch (e) {
-      items = [];
-    }
-    if (!items.length) {
-      host.classList.add("d-none");
-      host.innerHTML = "";
-      return;
-    }
-    host.classList.remove("d-none");
-    const lines = items
-      .map(function (x) {
-        const time = new Date(x.t).toLocaleTimeString();
-        const msg =
-          typeof escapeHtml === "function" ? escapeHtml(x.msg) : String(x.msg);
-        return (
-          '<div class="d-flex align-items-start gap-2 border-bottom border-secondary py-1">' +
-          '<small class="text-muted text-nowrap">' +
-          time +
-          "</small>" +
-          '<span class="flex-grow-1 small text-warning text-break">' +
-          msg +
-          "</span>" +
-          '<button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0" ' +
-          'onclick="modelCardActions.copyText(' +
-          JSON.stringify(String(x.msg)) +
-          ', \'Copied\')">Copy</button></div>'
-        );
-      })
-      .join("");
-    host.innerHTML =
-      '<div class="card bg-dark border-secondary mb-2">' +
-      '<div class="card-header py-1 d-flex justify-content-between align-items-center">' +
-      '<span class="small text-muted"><i class="fas fa-exclamation-triangle me-1"></i>Recent issues (this tab)</span>' +
-      '<button type="button" class="btn btn-sm btn-outline-secondary" onclick="modelCardActions.clearRecentErrors()">Clear</button>' +
-      "</div>" +
-      '<div class="card-body py-1">' +
-      lines +
-      "</div></div>";
-  }
-
-  function clearRecentErrors() {
-    try {
-      sessionStorage.removeItem(RECENT_KEY);
-    } catch (e) {
-      /* ignore */
-    }
-    renderRecentErrorsBar();
-  }
-
   document.addEventListener("click", function (ev) {
     const btn = ev.target.closest("[data-mc-act]");
     if (!btn) return;
@@ -438,9 +373,6 @@
     moreMenuHtml,
     appendMoreMenuToCard,
     enhanceAllModelCards,
-    recordRecentModelError,
-    renderRecentErrorsBar,
-    clearRecentErrors,
     showQuickChatModal,
     showCopySettingsModal,
   };

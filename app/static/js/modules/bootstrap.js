@@ -28,10 +28,8 @@
     if (typeof initializeCompactMode === "function") initializeCompactMode();
     if (typeof loadDownloadableModels === "function") loadDownloadableModels();
     if (typeof updateModelData === "function") updateModelData();
+    if (typeof resumeActiveDownloads === "function") resumeActiveDownloads();
     if (window.modelCardActions) {
-      if (typeof modelCardActions.renderRecentErrorsBar === "function") {
-        modelCardActions.renderRecentErrorsBar();
-      }
       setTimeout(function () {
         if (typeof modelCardActions.enhanceAllModelCards === "function") {
           modelCardActions.enhanceAllModelCards();

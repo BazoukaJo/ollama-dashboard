@@ -1,6 +1,8 @@
 import atexit
 import os
 import platform
+import threading
+import time
 from datetime import datetime
 
 import psutil
@@ -100,6 +102,50 @@ def get_vram_info():
     return {'total': 0, 'used': 0, 'free': 0, 'percent': 0, 'gpu_3d': 0}
 
 
+_disk_io_lock = threading.Lock()
+_disk_io_prev = None
+_disk_io_prev_time = None
+
+
+def get_disk_activity_percent():
+    """Estimate SSD/disk busy % from I/O time deltas (not storage capacity)."""
+    global _disk_io_prev, _disk_io_prev_time
+    now = time.time()
+    try:
+        counters = psutil.disk_io_counters()
+    except (OSError, AttributeError):
+        return 0.0
+    if counters is None:
+        return 0.0
+
+    with _disk_io_lock:
+        if _disk_io_prev is None:
+            _disk_io_prev = counters
+            _disk_io_prev_time = now
+            return 0.0
+
+        elapsed_ms = (now - _disk_io_prev_time) * 1000.0
+        if elapsed_ms < 50:
+            return 0.0
+
+        prev = _disk_io_prev
+        busy_delta_ms = 0.0
+        prev_busy = getattr(prev, 'busy_time', None)
+        cur_busy = getattr(counters, 'busy_time', None)
+        if cur_busy is not None and prev_busy is not None:
+            busy_delta_ms = max(0.0, float(cur_busy) - float(prev_busy))
+        else:
+            read_delta = max(0.0, float(counters.read_time) - float(prev.read_time))
+            write_delta = max(0.0, float(counters.write_time) - float(prev.write_time))
+            busy_delta_ms = read_delta + write_delta
+
+        _disk_io_prev = counters
+        _disk_io_prev_time = now
+
+        pct = (busy_delta_ms / elapsed_ms) * 100.0
+        return round(min(100.0, max(0.0, pct)), 1)
+
+
 def get_disk_info():
     try:
         if platform.system() == 'Windows':
@@ -142,13 +188,17 @@ def collect_system_stats():
                 'available': mem.available,
                 'percent': mem.percent
             },
-            'vram': vram_info
+            'vram': vram_info,
+            'disk': {
+                'activity_percent': get_disk_activity_percent(),
+            },
         }
     except (OSError, ValueError):
         return {
             'cpu_percent': 0,
             'memory': {'total': 0, 'available': 0, 'percent': 0},
-            'vram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0, 'gpu_3d': 0}
+            'vram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0, 'gpu_3d': 0},
+            'disk': {'activity_percent': 0},
         }
 
 
