@@ -4,6 +4,11 @@ import re
 from unittest.mock import patch
 
 import pytest
+from app import create_app
+from app.routes import main
+
+# pytest fixture injection reuses names as test parameters (W0621).
+# pylint: disable=redefined-outer-name
 
 # index.html uses system_stats.vram.gpu_3d|round(1); missing keys raise in Jinja and index()
 # falls back to error render with empty models — assertions on running/available cards then fail.
@@ -11,17 +16,16 @@ MOCK_INDEX_SYSTEM_STATS = {
     'cpu_percent': 0,
     'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0},
     'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0, 'gpu_3d': 0},
-    'disk': {'percent': 0},
+    'disk': {'activity_percent': 0},
 }
 
 
 @pytest.fixture
 def app():
     """Create app for tests."""
-    from app import create_app
-    app = create_app()
-    app.config['TESTING'] = True
-    return app
+    flask_app = create_app()
+    flask_app.config['TESTING'] = True
+    return flask_app
 
 
 @pytest.fixture
@@ -31,9 +35,9 @@ def client(app):
 
 
 @pytest.fixture(autouse=True)
-def _mock_ollama_installed_for_dashboard(app):  # pylint: disable=unused-argument
+def _mock_ollama_installed_for_dashboard(request):
     """Stable index(): installed Ollama + no GitHub call (avoids flaky CI / sandbox)."""
-    from app.routes import main
+    request.getfixturevalue('app')
     fake_upd = {
         'update_available': False,
         'current_version': '0.17.0',
@@ -213,3 +217,24 @@ class TestSectionHeaders:
         assert 'downloadableModelsBody' in html
         assert 'toggleDownloadableSection()' in html
         assert 'fa-chevron-up' in html
+
+    @patch('app.routes.main.ollama_service.get_running_models')
+    @patch('app.routes.main.ollama_service.get_available_models')
+    @patch('app.routes.main.ollama_service.get_system_stats')
+    @patch('app.routes.main.ollama_service.get_ollama_version')
+    def test_available_section_has_collapse_controls(
+        self, mock_version, mock_stats, mock_available, mock_running, client
+    ):
+        """Available models section includes collapse toggle and collapsible body."""
+        mock_running.return_value = []
+        mock_available.return_value = []
+        mock_stats.return_value = dict(MOCK_INDEX_SYSTEM_STATS)
+        mock_version.return_value = '0.17.0'
+
+        response = client.get('/')
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+
+        assert 'availableSectionToggleBtn' in html
+        assert 'availableModelsBody' in html
+        assert 'toggleAvailableSection()' in html

@@ -2016,6 +2016,45 @@ document.addEventListener("DOMContentLoaded", function () {
   }, statsMs);
 });
 
+const AVAILABLE_SECTION_COLLAPSED_KEY = "availableModelsSectionCollapsed";
+
+function syncAvailableSectionToggle(collapsed) {
+  const button = document.getElementById("availableSectionToggleBtn");
+  if (!button) return;
+
+  const label = collapsed
+    ? "Expand available models section"
+    : "Collapse available models section";
+  button.setAttribute("aria-label", label);
+  button.setAttribute("title", label);
+  button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  button.innerHTML = collapsed
+    ? '<i class="fas fa-chevron-down" aria-hidden="true"></i>'
+    : '<i class="fas fa-chevron-up" aria-hidden="true"></i>';
+}
+
+function toggleAvailableSection(forceCollapsed) {
+  const body = document.getElementById("availableModelsBody");
+  const section = document.getElementById("availableModelsSection");
+  if (!body) return;
+
+  const currentlyCollapsed = body.style.display === "none";
+  const nextCollapsed =
+    typeof forceCollapsed === "boolean" ? forceCollapsed : !currentlyCollapsed;
+
+  body.style.display = nextCollapsed ? "none" : "";
+  if (section) {
+    section.classList.toggle("is-collapsed", nextCollapsed);
+  }
+  syncAvailableSectionToggle(nextCollapsed);
+  localStorage.setItem(
+    AVAILABLE_SECTION_COLLAPSED_KEY,
+    nextCollapsed ? "true" : "false",
+  );
+}
+
+window.toggleAvailableSection = toggleAvailableSection;
+
 const INITIAL_DOWNLOADABLE_VISIBLE = 24;
 const DOWNLOADABLE_LOAD_MORE_BATCH = 24;
 const DOWNLOADABLE_SECTION_COLLAPSED_KEY = "downloadableModelsSectionCollapsed";
@@ -2183,9 +2222,13 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  const savedCollapsed =
+  const savedAvailableCollapsed =
+    localStorage.getItem(AVAILABLE_SECTION_COLLAPSED_KEY) === "true";
+  toggleAvailableSection(savedAvailableCollapsed);
+
+  const savedDownloadableCollapsed =
     localStorage.getItem(DOWNLOADABLE_SECTION_COLLAPSED_KEY) === "true";
-  toggleDownloadableSection(savedCollapsed);
+  toggleDownloadableSection(savedDownloadableCollapsed);
 });
 
 function ensureAvailableCardForDownload(modelName) {

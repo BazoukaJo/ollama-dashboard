@@ -3778,20 +3778,24 @@ body.compact-mode .compact-hide {
   padding: 0.7rem;
 }
 
-/* Downloadable section keeps explicit collapsed/expanded affordance. */
+/* Collapsible model sections (available + downloadable). */
+.available-section-shell,
 .downloadable-section-shell {
   transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
+.available-section-header,
 .downloadable-section-header {
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
+.available-section-shell.is-collapsed .available-section-header,
 .downloadable-section-shell.is-collapsed .downloadable-section-header {
   border-bottom-color: transparent;
   background: rgba(255, 255, 255, 0.015);
 }
 
+.available-section-shell.is-collapsed,
 .downloadable-section-shell.is-collapsed {
   box-shadow: none;
 }
