@@ -106,7 +106,7 @@ def stop_service_windows(get_status):
         pass
     try:
         methods_tried.append('process termination')
-        subprocess.run(['taskkill', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10)
+        subprocess.run(['taskkill', '/T', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10)
         time.sleep(5)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via graceful termination"}, methods_tried
@@ -114,7 +114,7 @@ def stop_service_windows(get_status):
         pass
     try:
         methods_tried.append('force kill')
-        subprocess.run(['taskkill', '/F', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10)
+        subprocess.run(['taskkill', '/F', '/T', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10)
         time.sleep(5)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via force kill"}, methods_tried

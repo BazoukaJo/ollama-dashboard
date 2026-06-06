@@ -120,6 +120,84 @@ def test_stop_model_invalid_name(client):
 
 
 # ---------------------------------------------------------------------------
+# Force unload (Ollama restart escape hatch)
+# ---------------------------------------------------------------------------
+
+@patch('app.routes.main.ollama_service.start_service')
+@patch('app.routes.main.ollama_service.restart_service')
+@patch('app.routes.main.ollama_service.get_running_models')
+@patch('app.routes.main.ollama_service.get_service_status')
+def test_force_stop_success(mock_status, mock_running, mock_restart, mock_start, client):
+    """Force stop returns 200 when Ollama restart succeeds."""
+    mock_status.return_value = True
+    mock_running.return_value = [{'name': 'mock-stub-model:latest'}]
+    mock_restart.return_value = {'success': True, 'memory_cleared': True}
+
+    resp = client.post(
+        '/api/models/stop/mock-stub-model:latest',
+        json={'force': True},
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['success'] is True
+    assert 'force-unloaded' in data['message'].lower()
+    mock_start.assert_not_called()
+
+
+@patch('app.routes.main.ollama_service.start_service')
+@patch('app.routes.main.ollama_service.restart_service')
+@patch('app.routes.main.ollama_service.get_running_models')
+@patch('app.routes.main.ollama_service.get_service_status')
+def test_force_stop_memory_cleared_when_restart_fails(
+    mock_status, mock_running, mock_restart, mock_start, client,
+):
+    """Force stop succeeds when Ollama was killed (memory cleared) even if restart fails."""
+    mock_status.side_effect = [True, False, False]
+    mock_running.return_value = [{'name': 'mock-stub-model:latest'}]
+    mock_restart.return_value = {
+        'success': False,
+        'memory_cleared': True,
+        'message': 'Ollama stopped and memory cleared, but restart failed: port in use',
+    }
+    mock_start.return_value = {'success': False, 'message': 'still down'}
+
+    resp = client.post(
+        '/api/models/stop/mock-stub-model:latest',
+        json={'force': True},
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['success'] is True
+    assert data.get('memory_cleared') is True
+    assert data.get('restart_required') is True
+    assert 'cleared from memory' in data['message'].lower()
+
+
+@patch('app.routes.main.ollama_service.restart_service')
+@patch('app.routes.main.ollama_service.get_running_models')
+@patch('app.routes.main.ollama_service.get_service_status')
+def test_force_stop_fails_when_ollama_cannot_be_stopped(
+    mock_status, mock_running, mock_restart, client,
+):
+    """Force stop returns 500 when Ollama could not be killed."""
+    mock_status.return_value = True
+    mock_running.return_value = [{'name': 'mock-stub-model:latest'}]
+    mock_restart.return_value = {
+        'success': False,
+        'memory_cleared': False,
+        'message': 'Ollama service could not be stopped',
+    }
+
+    resp = client.post(
+        '/api/models/stop/mock-stub-model:latest',
+        json={'force': True},
+    )
+    assert resp.status_code == 500
+    data = resp.get_json()
+    assert data['success'] is False
+
+
+# ---------------------------------------------------------------------------
 # Backward-compat stub for external references
 # ---------------------------------------------------------------------------
 

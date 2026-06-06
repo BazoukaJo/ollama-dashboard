@@ -307,19 +307,59 @@ class OllamaServiceControl:
         return None, methods_tried
 
     def _force_kill_ollama_process(self):
-        """Force-kill any Ollama process (Windows: taskkill /F, Unix: pkill -9). No graceful stop."""
+        """Force-kill Ollama and child processes (Windows: sc stop + taskkill /T, Unix: pkill -9)."""
         try:
             if platform.system() == 'Windows':
+                try:
+                    subprocess.run(
+                        ['sc', 'stop', 'Ollama'],
+                        capture_output=True, text=True, timeout=15, check=False,
+                    )
+                    time.sleep(2)
+                except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
+                    pass
                 subprocess.run(
-                    ['taskkill', '/F', '/IM', 'ollama.exe'],
-                    capture_output=True, text=True, timeout=10, check=False
+                    ['taskkill', '/F', '/T', '/IM', 'ollama.exe'],
+                    capture_output=True, text=True, timeout=10, check=False,
                 )
             else:
                 subprocess.run(
                     ['pkill', '-9', '-f', 'ollama'],
-                    capture_output=True, text=True, timeout=10, check=False
+                    capture_output=True, text=True, timeout=10, check=False,
                 )
         except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
+            pass
+
+    def _ensure_ollama_stopped(self):
+        """Force-stop Ollama and wait until no ollama process remains."""
+        self._force_kill_ollama_process()
+        time.sleep(2)
+        for _ in range(15):
+            if not self.get_service_status():
+                break
+            time.sleep(1)
+        if self.get_service_status():
+            self.stop_service()
+            for _ in range(10):
+                if not self.get_service_status():
+                    break
+                time.sleep(1)
+        return not self.get_service_status()
+
+    def _flush_service_caches(self):
+        """Clear cached model/service data after Ollama stops."""
+        try:
+            if hasattr(self, "clear_all_caches") and callable(getattr(self, "clear_all_caches", None)):
+                self.clear_all_caches()
+        except Exception:
+            pass
+
+    def _resume_background_updates(self):
+        """Restart background stats thread after service control operations."""
+        try:
+            self._stop_background.clear()
+            self._start_background_updates()
+        except Exception:
             pass
 
     def _verify_ollama_api(self, max_retries=5, retry_delay=2):
@@ -730,51 +770,68 @@ class OllamaServiceControl:
                     self._background_stats.join(timeout=5)
             except Exception:
                 pass
-            # Force-kill first so the process is completely gone before starting
-            self._force_kill_ollama_process()
-            time.sleep(2)
-            for _ in range(15):
-                if not self.get_service_status():
-                    break
-                time.sleep(1)
-            # If still running, try full stop (sc stop + taskkill / pkill)
-            if self.get_service_status():
-                self.stop_service()
-                for _ in range(10):
-                    if not self.get_service_status():
-                        break
-                    time.sleep(1)
-            if self.get_service_status():
-                return {"success": False, "message": "Ollama service could not be stopped (still running after force kill)."}
-            time.sleep(10)  # Allow port 11434 to be released before starting
 
-            start_result = self.start_service()
-            if start_result["success"]:
-                # Flush caches and restart background thread
-                try:
-                    if hasattr(self, "clear_all_caches") and callable(getattr(self, "clear_all_caches", None)):
-                        self.clear_all_caches()
-                except AttributeError:
-                    self.logger.warning("clear_all_caches method not found on OllamaServiceControl instance")
-                except Exception:
-                    pass
-                try:
-                    self._stop_background.clear()
-                    self._start_background_updates()
-                except Exception:
-                    pass
-                return {"success": True, "message": "Ollama service restarted successfully (caches & background refreshed)"}
-            else:
-                # Attempt to restart background updates even on failure to avoid stale thread state
-                try:
-                    self._stop_background.clear()
-                    self._start_background_updates()
-                except Exception:
-                    pass
-                return start_result
+            if not self._ensure_ollama_stopped():
+                return {
+                    "success": False,
+                    "memory_cleared": False,
+                    "message": "Ollama service could not be stopped (still running after force kill).",
+                }
+
+            self._flush_service_caches()
+            time.sleep(5)  # Allow port 11434 to be released before starting
+
+            start_result = None
+            for attempt in range(2):
+                if attempt > 0:
+                    if not self._ensure_ollama_stopped():
+                        break
+                    time.sleep(5)
+                start_result = self.start_service()
+                if start_result.get("success"):
+                    break
+                if self.get_service_status():
+                    self.logger.info(
+                        "Ollama restart attempt %d failed with process still running; retrying after force stop",
+                        attempt + 1,
+                    )
+                    continue
+                break
+
+            if start_result and start_result.get("success"):
+                self._flush_service_caches()
+                self._resume_background_updates()
+                return {
+                    "success": True,
+                    "memory_cleared": True,
+                    "message": "Ollama service restarted successfully (caches & background refreshed)",
+                }
+
+            memory_cleared = not self.get_service_status()
+            if memory_cleared:
+                self._flush_service_caches()
+            self._resume_background_updates()
+            start_msg = (start_result or {}).get("message", "Ollama restart failed")
+            return {
+                "success": False,
+                "memory_cleared": memory_cleared,
+                "message": (
+                    f"Ollama stopped and memory cleared, but restart failed: {start_msg}"
+                    if memory_cleared
+                    else start_msg
+                ),
+            }
 
         except Exception as e:
-            return {"success": False, "message": f"Unexpected error restarting service: {str(e)}"}
+            memory_cleared = not self.get_service_status()
+            if memory_cleared:
+                self._flush_service_caches()
+            self._resume_background_updates()
+            return {
+                "success": False,
+                "memory_cleared": memory_cleared,
+                "message": f"Unexpected error restarting service: {str(e)}",
+            }
 
     def _download_ollama_setup_exe(self, path: str) -> Tuple[bool, str]:
         """Download latest OllamaSetup.exe: requests, urllib, curl.exe, then PowerShell."""

@@ -452,25 +452,56 @@ def _force_unload_via_ollama_restart(model_name):
     """Force-kill and restart Ollama to unload all models (escape hatch for stuck loads)."""
     svc = _get_ollama_service()
     restart_result = svc.restart_service()
-    if not restart_result.get('success'):
+    memory_cleared = bool(restart_result.get('memory_cleared')) or not svc.get_service_status()
+
+    def _refresh_running_cache():
+        svc.clear_cache('running_models')
+        try:
+            svc.get_running_models(force_refresh=True)
+        except Exception:
+            pass
+
+    if restart_result.get('success'):
+        _refresh_running_cache()
         return {
-            "success": False,
+            "success": True,
             "message": (
-                f"Could not force-unload {model_name}: "
-                f"{restart_result.get('message', 'Ollama restart failed')}"
+                f"Model {model_name} force-unloaded — Ollama was restarted and all models were cleared from memory."
             ),
-        }, 500
-    svc.clear_cache('running_models')
-    try:
-        svc.get_running_models(force_refresh=True)
-    except Exception:
-        pass
+        }, 200
+
+    if memory_cleared:
+        _refresh_running_cache()
+        retry = svc.start_service()
+        if retry.get('success'):
+            try:
+                svc.get_running_models(force_refresh=True)
+            except Exception:
+                pass
+            return {
+                "success": True,
+                "message": (
+                    f"Model {model_name} force-unloaded — Ollama was restarted and all models were cleared from memory."
+                ),
+            }, 200
+        return {
+            "success": True,
+            "memory_cleared": True,
+            "restart_required": True,
+            "message": (
+                f"Model {model_name} was cleared from memory (Ollama stopped). "
+                f"Automatic restart failed: {restart_result.get('message', 'unknown error')}. "
+                "Use Start Service in the dashboard to bring Ollama back."
+            ),
+        }, 200
+
     return {
-        "success": True,
+        "success": False,
         "message": (
-            f"Model {model_name} force-unloaded — Ollama was restarted and all models were cleared from memory."
+            f"Could not force-unload {model_name}: "
+            f"{restart_result.get('message', 'Ollama restart failed')}"
         ),
-    }, 200
+    }, 500
 
 
 @bp.route('/api/models/stop/<model_name>', methods=['POST'])
@@ -522,7 +553,11 @@ def stop_model(model_name):
                 try:
                     body = unload_response.json()
                     if body.get("error"):
-                        return {"success": False, "message": f"Ollama error: {body['error']}"}, 500
+                        return {
+                            "success": False,
+                            "message": f"Ollama error: {body['error']}",
+                            "can_force": True,
+                        }, 500
                 except Exception:
                     pass
                 if not _verify_model_unloaded(model_name, max_attempts=10, delay_seconds=1):
@@ -550,7 +585,11 @@ def stop_model(model_name):
                         error_msg += f" - {error_detail}"
                 except Exception:
                     pass
-                return {"success": False, "message": error_msg}, unload_response.status_code
+                return {
+                    "success": False,
+                    "message": error_msg,
+                    "can_force": True,
+                }, unload_response.status_code
 
         except requests.exceptions.Timeout:
             return {

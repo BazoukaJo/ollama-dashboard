@@ -439,11 +439,12 @@ async function stopModel(modelName, force) {
 
     const result = sr.data;
     if (result.success) {
+      const level = result.restart_required ? "warning" : "success";
       showNotification(
         result.message || `Model ${modelName} stopped successfully`,
-        "success",
+        level,
       );
-      if (force) {
+      if (force || result.memory_cleared) {
         if (typeof window.serviceControl?.updateHealthStatus === "function") {
           window.serviceControl.updateHealthStatus();
         }
