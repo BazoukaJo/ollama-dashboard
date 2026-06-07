@@ -63,3 +63,4 @@ history.json
 chat_history.json
 model_settings.json
 system_stats_history.json
+node_modules

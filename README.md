@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/BazoukaJo/ollama-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/BazoukaJo/ollama-dashboard/actions/workflows/ci.yml)
 
-![Ollama Dashboard — system metrics, running/available/downloadable models, and Settings status (Saved / Default) on each card](docs/images/dashboard.png)
+![Ollama Dashboard — system metrics, running/available/downloadable models, and Settings status (Saved / Default) on each card](image.png)
 
 A web dashboard for monitoring, controlling, and managing Ollama language models: real-time system metrics, per-model settings with JSON persistence, and model discovery.
 
