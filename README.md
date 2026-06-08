@@ -2,7 +2,7 @@
 
 ## Version 1.1.0
 
-![Ollama Dashboard — system metrics, running/available/downloadable models, and Settings status (Saved / Default) on each card](image.png)
+![Ollama Dashboard — system metrics, running/available models with Start, Ask?, Info, Settings and Delete actions, per-model settings with Saved/Default badge](image.png)
 
 A web dashboard for monitoring, controlling, and managing Ollama language models: real-time system metrics, per-model settings with JSON persistence, and model discovery.
 
