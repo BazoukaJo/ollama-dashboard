@@ -2,8 +2,6 @@
 
 ## Version 1.1.0
 
-[![CI](https://github.com/BazoukaJo/ollama-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/BazoukaJo/ollama-dashboard/actions/workflows/ci.yml)
-
 ![Ollama Dashboard — system metrics, running/available/downloadable models, and Settings status (Saved / Default) on each card](image.png)
 
 A web dashboard for monitoring, controlling, and managing Ollama language models: real-time system metrics, per-model settings with JSON persistence, and model discovery.
@@ -27,7 +25,6 @@ A web dashboard for monitoring, controlling, and managing Ollama language models
 - **Real-time metrics**: System stats and health; model lists refresh from the UI (no background model-list polling)
 - **Capability icons**: Reasoning, vision, and tools on each card when known
 - **Settings status**: Each **Settings** control shows a small **Saved** (custom JSON) or **Default** (recommended / built-in) badge
-- **Compact mode**: Optional; the floating toggle is not in `index.html` by default. See **[docs/UI.md](docs/UI.md)** to add it or change downloadable-model pagination
 
 ---
 
@@ -82,14 +79,6 @@ python -m build
 # dist/ollama_dashboard-<version>-py3-none-any.whl
 pip install dist/ollama_dashboard-*-py3-none-any.whl
 ollama-dashboard
-```
-
-Publish to PyPI (maintainers only; requires [PyPI API token](https://pypi.org/manage/account/token/)):
-
-```bash
-pip install build twine
-python -m build
-python -m twine upload dist/*
 ```
 
 ### Docker
