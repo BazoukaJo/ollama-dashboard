@@ -97,7 +97,17 @@ class OllamaServiceUtilities:
             tmp_path = history_file + '.tmp'
             with open(tmp_path, 'w', encoding='utf-8') as f:
                 f.write(json_str)
-            os.replace(tmp_path, history_file)
+            try:
+                os.replace(tmp_path, history_file)
+            except PermissionError:
+                time.sleep(0.02)
+                try:
+                    os.replace(tmp_path, history_file)
+                except OSError:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
         except (ValueError, TypeError, OSError) as e:
             self.logger.warning(f"Failed to serialize history: {e}")
 

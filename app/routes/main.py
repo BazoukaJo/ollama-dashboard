@@ -1193,7 +1193,7 @@ def chat():
                 for k, v in model_settings_entry['settings'].items():
                     options[k] = v
         except Exception as e:
-            logger.error("Failed to merge per-model settings for %s: %s", model_name, e)
+            current_app.logger.error("Failed to merge per-model settings for %s: %s", model_name, e)
         chat_data["options"] = options
 
         try:
@@ -1215,14 +1215,18 @@ def chat():
                 _get_ollama_service().record_model_activity(model_name)
             except Exception:
                 pass
-            if not stream:
-                try:
-                    _get_ollama_service().record_model_token_usage_from_response(
-                        model_name, response
-                    )
-                except Exception:
-                    pass
-            return (response.content, 200, {'Content-Type': 'text/plain'}) if stream else response.json()
+            if stream:
+                def _generate_stream(r=response):
+                    for chunk in r.iter_content(chunk_size=None):
+                        yield chunk
+                return Response(stream_with_context(_generate_stream()), content_type='text/plain')
+            try:
+                _get_ollama_service().record_model_token_usage_from_response(
+                    model_name, response
+                )
+            except Exception:
+                pass
+            return response.json()
 
         # Handle error responses
         error_result, status_code = _handle_model_error(response, model_name, "chat with")

@@ -26,7 +26,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v={{ timestamp }}">
 </head>
 <body id="dashboard-body" data-ollama-api-base="{{ ollama_api_base }}" data-ollama-host="{{ ollama_public_host }}" data-ollama-port="{{ ollama_public_port }}">
-    {# Compact mode toggle removed from DOM by default; styles remain in styles.css. See docs/UI.md to re-enable. #}
     {% macro model_title_block(model) -%}
     {# Match JS modelCards.parseModelTitleParts: tag = after last ":"; scope = stem before last "/" #}
     {%- set name = model.name or '' -%}

@@ -4,10 +4,9 @@ Calling init_app() twice must not start a second background thread or
 register additional atexit handlers (Bug 1 in the audit).
 """
 from collections import deque
-
-import pytest
 from unittest.mock import patch
 
+import pytest
 from app import create_app
 
 

@@ -38,7 +38,7 @@
 - UI: streamlined header (versions row + Ollama mark), more downloadable models before “View More”.
 - Models: card “More” menu (copy CLI/curl, library link, quick chat, copy settings), settings copy API, recent error strip, quantization row when available.
 - Polling: model list refresh on the countdown; Ollama install detection vs API version; `OLLAMA_HOST` with embedded port normalized for display and URLs.
-- Docs: [docs/UI.md](docs/UI.md) for UI toggles and layout constants.
+- Docs: [docs/UI.md](docs/UI.md) for layout constants.
 
 ## Version 1.0001 (2025)
 
@@ -52,7 +52,7 @@ First stable release of Ollama Dashboard: a web UI to monitor, control, and mana
 - **Capabilities** — Vision, tools, and reasoning indicators on model cards, using Ollama `/api/show` when available and per-model caching to limit repeated calls.
 - **Per-model settings** — Temperature, top-k, and related parameters with JSON-backed persistence, applied to requests made through the dashboard (chat, warm-load, restart) *and*, for external clients (VS Code, `ollama run`, etc.), via the dashboard's built-in settings-injecting proxy at `/ollama/api/...` (point a client's base URL at `http://<dashboard-host>:<port>/ollama`), **Bake into Model** (derived `<model>-dashboard` with `PARAMETER` directives), or the standalone `server_with_proxy.js` — see [README: Per-Model Settings scope and limitations](README.md#per-model-settings-scope-and-limitations).
 - **Model discovery** — Browse and download from a curated list; “Find Model” search with input focused when the modal opens.
-- **UI** — Dark theme, compact mode toggle, capability filters for available and downloadable models, and reduced vertical spacing in the uncollapsed layout.
+- **UI** — Dark theme, capability filters for available and downloadable models, and reduced vertical spacing in the uncollapsed layout.
 
 ### Requirements
 

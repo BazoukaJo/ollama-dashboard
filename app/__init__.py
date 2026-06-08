@@ -165,7 +165,7 @@ def create_app(config_name='development'):
     from app.routes import init_app  # pylint: disable=import-outside-toplevel
 
     init_app(app)
-    logger.info("✅ Routes registered (47 endpoints)")
+    logger.info("✅ Routes registered")
 
     logger.info("✅ Application initialized successfully")
     return app
