@@ -1596,15 +1596,14 @@ canvas {
   justify-content: flex-start;
 }
 
-/* Title on the left; status + capabilities on the right when width allows — wrap only when needed. */
+/* Title on the left; capabilities on the right — always same row, title shrinks/ellipsizes. */
 .model-card-head-name-row {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-start;
   column-gap: 0.45rem;
-  row-gap: 0.35rem;
   width: 100%;
   min-width: 0;
 }
