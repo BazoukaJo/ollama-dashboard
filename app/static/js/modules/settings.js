@@ -75,7 +75,21 @@
                   <div class="form-text text-muted mt-2">Advanced parameters fine-tune sampling and penalties. Leave defaults if unsure.</div>
                 </div>
                 <div class="form-text text-muted">Recommended values are shown when not overridden; saving persists this model's defaults.</div>
-                <div class="form-text text-warning">Note: these settings apply directly only to requests made through this dashboard (chat, warm-load, restart). For external clients (VS Code, <code>ollama run</code>, etc.) hitting Ollama directly, either point their base URL at <code>http://&lt;this-host&gt;/ollama</code> (the dashboard's built-in settings-injecting proxy — keeps the original model name, applies every option), or click "Bake into model" below to create a derived model with these values built into its Modelfile (works without the dashboard running, but a few advanced fields can't be expressed in a Modelfile).</div>
+                <div class="mt-2 p-2 rounded small" style="border:1px solid #495057;background:rgba(255,255,255,0.04)">
+                  <div class="fw-semibold text-secondary mb-2" style="font-size:0.78em;letter-spacing:.03em;text-transform:uppercase">Where these settings apply</div>
+                  <div class="d-flex align-items-start gap-2 mb-1">
+                    <span class="badge bg-success flex-shrink-0" style="min-width:5em;text-align:center">Dashboard</span>
+                    <span class="text-muted">Chat, warm-load, and restart from this UI — applied automatically on every request.</span>
+                  </div>
+                  <div class="d-flex align-items-start gap-2 mb-1">
+                    <span class="badge bg-info text-dark flex-shrink-0" style="min-width:5em;text-align:center">Proxy</span>
+                    <span class="text-muted">VS Code / any client pointed at <code>:5000/ollama</code> — injected per request, full option set, original model name kept.</span>
+                  </div>
+                  <div class="d-flex align-items-start gap-2">
+                    <span class="badge bg-warning text-dark flex-shrink-0" style="min-width:5em;text-align:center">Baked</span>
+                    <span class="text-muted">Any client, no proxy needed — click <strong>Bake into Model</strong> to create <code>${modelName}-dashboard</code> with these values in its Modelfile. Works without the dashboard running.</span>
+                  </div>
+                </div>
               </form>
             </div>
             <div class="modal-footer">

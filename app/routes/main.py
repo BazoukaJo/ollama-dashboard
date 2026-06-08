@@ -804,6 +804,17 @@ def get_available_models():
         return {"error": str(e), "models": []}, 500
 
 
+@bp.route('/api/models/derived')
+def get_derived_models():
+    """Return available models created by 'Bake into Model' (base name ends in -dashboard)."""
+    try:
+        models = _get_ollama_service().get_available_models()
+        derived = [m for m in models if (m.get('name') or '').split(':')[0].endswith('-dashboard')]
+        return {"models": derived}
+    except Exception as e:
+        return {"models": [], "error": str(e)}, 500
+
+
 @bp.route('/api/models/running')
 def get_running_models():
     """Get list of currently running models. Always fetches fresh from Ollama for accuracy."""
@@ -1541,3 +1552,5 @@ def init_app(app):
     # Template filters (`datetime` and `time_ago`) are registered in app factory via app.__init__.
     # Avoid duplicate registration here to prevent platform-specific filter overrides.
     app.register_blueprint(bp)
+    from app.routes.proxy import bp as proxy_bp  # pylint: disable=import-outside-toplevel
+    app.register_blueprint(proxy_bp)

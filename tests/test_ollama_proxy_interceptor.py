@@ -33,20 +33,17 @@ class FakeUpstreamResponse:
 def _create_app_for_proxy_tests(tmp_path, monkeypatch, ollama_host='localhost', model_name=None, settings=None):
     """Build an app wired to an isolated model_settings.json and a chosen OLLAMA_HOST.
 
-    Env vars are set BEFORE create_app() runs because the injected proxy captures
-    both `settings_path` and `ollama_url` once, as closure variables, at app-creation
-    time — mutating app.config afterwards (as test_chat_model_settings.py does for
-    the dashboard's OWN /api/chat route, which re-resolves both per request) would
-    never reach them.
+    The proxy blueprint (app/routes/proxy.py) resolves settings_path and ollama_url
+    at request time from current_app.config, so env vars only need to be set before
+    create_app() — which populates app.config from them — not before each request.
     """
     monkeypatch.setenv('MODEL_SETTINGS_FILE', str(tmp_path / "model_settings.json"))
     monkeypatch.setenv('OLLAMA_HOST', ollama_host)
     monkeypatch.delenv('OLLAMA_PORT', raising=False)
     app = create_app()
-    from app.routes.main import ollama_service as route_ollama_service
-    route_ollama_service.init_app(app)
     if model_name is not None:
-        route_ollama_service.save_model_settings(model_name, settings or {}, source='user')
+        svc = app.config['OLLAMA_SERVICE']
+        svc.save_model_settings(model_name, settings or {}, source='user')
     return app
 
 

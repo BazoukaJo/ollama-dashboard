@@ -11,6 +11,7 @@ from unittest.mock import patch
 from app import create_app
 
 
+@pytest.mark.live_background_thread
 class TestInitAppIdempotency:
     """Verify that the service survives multiple init_app() calls cleanly."""
 
