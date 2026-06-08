@@ -43,8 +43,13 @@ def test_windows_official_setup_success(control, tmp_path):
                     ok, msg = control._windows_install_via_official_setup()
                     assert ok is True
                     assert "official" in msg.lower() or msg == "ok"
-                    mock_run.assert_called_once()
-                    argv = mock_run.call_args[0][0]
+                    # The background stats thread also calls subprocess.run (nvidia-smi),
+                    # so assert_called_once() is flaky. Filter for the installer call instead.
+                    installer_calls = [c for c in mock_run.call_args_list if c.args[0][0] == path]
+                    assert len(installer_calls) == 1, (
+                        f"Expected OllamaSetup.exe to be run exactly once: {mock_run.call_args_list}"
+                    )
+                    argv = installer_calls[0].args[0]
                     assert argv[0] == path
                     assert "/VERYSILENT" in argv
                     assert "/NORESTART" in argv

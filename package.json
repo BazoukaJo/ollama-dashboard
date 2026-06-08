@@ -1,5 +1,12 @@
 {
+  "name": "ollama-dashboard-settings-proxy",
+  "private": true,
+  "description": "Optional reverse proxy that applies the dashboard's saved per-model settings to external Ollama clients (see server_with_proxy.js).",
+  "scripts": {
+    "proxy": "node server_with_proxy.js"
+  },
   "dependencies": {
+    "express": "^4.21.0",
     "http-proxy-middleware": "^4.1.0"
   }
 }

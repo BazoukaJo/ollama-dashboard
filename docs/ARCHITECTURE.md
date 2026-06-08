@@ -170,6 +170,49 @@ service: ollama_service.save_model_settings(model_name, settings)
     └─ Release lock
 ```
 
+> **Application scope:** saving writes to `model_settings.json` only. Settings are then
+> *re-read and merged into the `options` field of outgoing requests* by the dashboard itself —
+> see `app/routes/main.py` in `api_start_model` (~line 313), `restart_model` (~line 676),
+> `bulk_start_models` (~line 1099), and `api_chat` (~line 1156). Ollama applies `options`
+> per-request and does not persist them against the model, so **clients that talk to Ollama
+> directly (VS Code's Ollama extension, `ollama run`, `curl`, etc.) never see these values** —
+> they get Ollama's own defaults / whatever is baked into the model's `Modelfile` — *unless*
+> they're pointed at one of the interception mechanisms below.
+>
+> To make settings apply for *any* client, three mechanisms exist (documented in the README's
+> [Per-Model Settings: scope and limitations](../README.md#per-model-settings-scope-and-limitations)):
+> 1. **Built-in proxy at `/ollama/api/...`** (`intercept_ollama_parameters` /
+>    `proxy_general_ollama_calls` in `app/__init__.py`, ~line 168) — registered directly on
+>    the Flask app; no extra process. Reads `model_settings.json` via
+>    `lookup_settings_entry()`, merges the matched entry's `settings` sub-dict into the
+>    request's `options` (saved values win), and streams the rewritten request to Ollama.
+>    Point a client's base URL at `http://<dashboard-host>:<port>/ollama` (e.g. the
+>    `apiBase` in `settings.json`) to use it — original model names and every saved option
+>    (including ones that can't be baked, like `presence_penalty`) are preserved exactly.
+>    *(Fixed 2026-06-07: originally merged the whole stored entry — `{settings, source,
+>    last_updated}` — into `options` instead of just the inner `settings` dict, so saved
+>    values never reached Ollama; this was very likely the cause of the "saved settings
+>    don't reach VS Code" symptom for anyone using this route. A second bug fixed the same
+>    day: `ollama_url` was assembled via naive `f"{OLLAMA_HOST}:{OLLAMA_PORT}"` string
+>    concatenation, which double-ports into `http://127.0.0.1:11436:11434` whenever
+>    `OLLAMA_HOST` itself carries an embedded port — exactly the configuration the README's
+>    "port takeover" deployment relies on. Now resolved via the same `_get_ollama_host_port()`
+>    the rest of the app already used for outbound calls, so embedded ports just work.)*
+> 2. **Bake into Model** in the Settings dialog (`POST /api/models/settings/<model>/bake`,
+>    see `OllamaServiceUtilities.bake_model_settings` in `app/services/ollama_utilities.py`).
+>    Writes a `Modelfile` with `PARAMETER` directives for the saved values and calls Ollama's
+>    `/api/create` to produce a derived model (`<model>-dashboard`). Best for clients with no
+>    configurable base URL (plain `ollama run`); requires referencing the derived name and
+>    can't express every option (e.g. `presence_penalty`).
+> 3. **`server_with_proxy.js`** — functionally equivalent to (1) but as an independent
+>    Node/Express process (`npm run proxy`, default port 11435); reads the same
+>    `model_settings.json`. Useful when the Flask dashboard isn't always running. Unlike (1),
+>    it mirrors Ollama's API at its own root rather than under `/ollama/...`, so — uniquely —
+>    it can also fully *take over* Ollama's default port and apply to every client with zero
+>    per-client config (see the README's "port takeover" walkthrough and
+>    `start_proxy_takeover.bat`). It carried the identical embedded-port `OLLAMA_HOST`
+>    double-porting bug as (1), fixed the same day via an equivalent `resolveOllamaHostPort()`.
+
 ---
 
 ## Caching Strategy
@@ -280,6 +323,13 @@ docker-compose up -d
 ```bash
 export OLLAMA_HOST=localhost
 export OLLAMA_PORT=11434
+
+# OLLAMA_HOST may also be the combined "host:port" form — Ollama's own convention for
+# this variable (an embedded port wins over OLLAMA_PORT). The dashboard, its built-in
+# /ollama/api/... proxy, and server_with_proxy.js all split it out the same way, so one
+# value configures everything consistently — see the README's "Per-Model Settings: scope
+# and limitations" for the port-takeover deployment this enables:
+export OLLAMA_HOST=127.0.0.1:11436
 ```
 
 ### Checking Health

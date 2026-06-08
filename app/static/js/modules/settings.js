@@ -75,12 +75,14 @@
                   <div class="form-text text-muted mt-2">Advanced parameters fine-tune sampling and penalties. Leave defaults if unsure.</div>
                 </div>
                 <div class="form-text text-muted">Recommended values are shown when not overridden; saving persists this model's defaults.</div>
+                <div class="form-text text-warning">Note: these settings apply directly only to requests made through this dashboard (chat, warm-load, restart). For external clients (VS Code, <code>ollama run</code>, etc.) hitting Ollama directly, either point their base URL at <code>http://&lt;this-host&gt;/ollama</code> (the dashboard's built-in settings-injecting proxy — keeps the original model name, applies every option), or click "Bake into model" below to create a derived model with these values built into its Modelfile (works without the dashboard running, but a few advanced fields can't be expressed in a Modelfile).</div>
               </form>
             </div>
             <div class="modal-footer">
               <button type="button" class="btn btn-danger" id="ms-delete">Delete Custom</button>
               <button type="button" class="btn btn-secondary" id="ms-recommend">Reset to Recommended</button>
               <button type="button" class="btn btn-outline-primary" id="ms-apply-recommended">Apply Recommended</button>
+              <button type="button" class="btn btn-outline-warning" id="ms-bake" data-dashboard-tooltip="Create a derived Ollama model (e.g. mymodel-dashboard) with these settings baked in as Modelfile PARAMETER directives, so external clients get them too.">Bake into Model</button>
               <button type="button" class="btn btn-primary" id="ms-save">Save</button>
             </div>
           </div>
@@ -103,6 +105,16 @@
         await deleteModelSettings(modelName); modal.hide();
       };
       document.getElementById('ms-recommend').onclick = ()=>loadRecommendedIntoForm(modelName);
+      document.getElementById('ms-bake').onclick = async ()=>{
+        if(!confirm(`This will save your current settings, then ask Ollama to create a derived model from "${modelName}" with these values baked in. Continue?`)) return;
+        try {
+          await submitModelSettings(modelName, collectSettingsPayload());
+          const r = await fetch('/api/models/settings/' + encodeURIComponent(modelName) + '/bake', {method:'POST'});
+          const jr = await readApiJson(r);
+          if(!jr.responseOk || !jr.data.success){ window.showNotification(jr.data?.message || jr.message || 'Failed to bake settings into model','error'); return; }
+          window.showNotification(jr.data.message,'success');
+        } catch(err){ window.showNotification('Failed: '+err.message,'error'); }
+      };
       document.getElementById('ms-apply-recommended').onclick = async ()=>{
         try {
           const r = await fetch('/api/models/settings/reset?model=' + encodeURIComponent(modelName),{method:'POST'});

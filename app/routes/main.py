@@ -987,6 +987,26 @@ def api_delete_model_settings(model_name=None):
         return _json_error(f"Unexpected error deleting model settings: {str(e)}")
 
 
+@bp.route('/api/models/settings/<model_name>/bake', methods=['POST'])
+@bp.route('/api/models/settings/bake', methods=['POST'], endpoint='api_bake_model_settings_qp')
+def api_bake_model_settings(model_name=None):
+    """Create a derived Ollama model with the dashboard's saved settings baked in
+    as Modelfile PARAMETER directives, so external clients (VS Code, `ollama run`,
+    etc.) that talk to Ollama directly also get these defaults.
+    """
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
+    try:
+        result = _get_ollama_service().bake_model_settings(model_name)
+        if result.get('success'):
+            return _json_success(result.get('message', f"Baked settings into {result.get('model')}"),
+                                 extra={'model': result.get('model')})
+        return _json_error(result.get('message', f"Failed to bake settings for {model_name}"), status=500)
+    except Exception as e:
+        return _json_error(f"Unexpected error baking model settings: {str(e)}")
+
+
 @bp.route('/api/models/settings/migrate', methods=['POST'])
 def api_migrate_model_settings():
     try:

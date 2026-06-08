@@ -61,6 +61,9 @@ def create_app(config_name='development'):
     # Ollama connection
     app.config['OLLAMA_HOST'] = os.getenv('OLLAMA_HOST', 'localhost')
     app.config['OLLAMA_PORT'] = int(os.getenv('OLLAMA_PORT', '11434'))
+    # Controls the AutoStartOllama background thread in OllamaServiceCore.init_app —
+    # on dashboard startup, start Ollama automatically if it isn't already running.
+    app.config['AUTO_START_OLLAMA'] = os.getenv('AUTO_START_OLLAMA', 'true').lower() in ('true', '1', 'yes', 'on')
 
     # Persistence
     app.config['HISTORY_FILE'] = os.getenv('HISTORY_FILE', 'history.json')
@@ -161,9 +164,19 @@ def create_app(config_name='development'):
     import json
     import requests
     from flask import request, Response, stream_with_context
+    from app.services.model_settings_helpers import lookup_settings_entry  # pylint: disable=import-outside-toplevel
 
-    settings_path = Path(app.config['DATA_DIR']) / app.config['MODEL_SETTINGS_FILE']
-    ollama_url = f"http://{app.config['OLLAMA_HOST']}:{app.config['OLLAMA_PORT']}"
+    # Same resolution as model_settings_file_path() in model_settings_helpers.py: a bare
+    # filename resolved against the process CWD (NOT joined with DATA_DIR — that pointed
+    # at data/model_settings.json, a file that is never created or written to).
+    settings_path = Path(app.config['MODEL_SETTINGS_FILE'])
+    # Reuse the canonical host/port resolution OllamaService and main.py rely on for all
+    # outbound calls — it splits an embedded port out of OLLAMA_HOST (e.g. "127.0.0.1:11436")
+    # so this doesn't double up into "http://127.0.0.1:11436:11434" the way naive
+    # f"{OLLAMA_HOST}:{OLLAMA_PORT}" string concatenation would (see ollama_core.py
+    # _get_ollama_host_port and main.py _normalize_ollama_host_port_for_display).
+    _proxy_ollama_host, _proxy_ollama_port = ollama_service._get_ollama_host_port()
+    ollama_url = f"http://{_proxy_ollama_host}:{_proxy_ollama_port}"
 
     @app.route('/ollama/api/chat', methods=['POST'])
     @app.route('/ollama/api/generate', methods=['POST'])
@@ -178,7 +191,11 @@ def create_app(config_name='development'):
             try:
                 with open(settings_path, 'r', encoding='utf-8') as f:
                     all_settings = json.load(f)
-                    dashboard_options = all_settings.get(model_name, {})
+                # Persisted entries are {"settings": {...}, "source": ..., "last_updated": ...} —
+                # only the inner "settings" dict holds real Ollama option values.
+                entry = lookup_settings_entry(all_settings, model_name)
+                if entry:
+                    dashboard_options = entry.get('settings') or {}
             except Exception as proxy_err:
                 logger.error("Proxy failed reading settings database: %s", proxy_err)
 

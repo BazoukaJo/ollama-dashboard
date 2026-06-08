@@ -1,90 +1,169 @@
+// Optional companion proxy: makes the dashboard's saved per-model settings apply to
+// EXTERNAL clients (VS Code's Ollama extension, `ollama run`, curl, LangChain, etc.)
+// that talk to Ollama directly, not just to requests the dashboard itself sends.
+//
+// How it works: this server sits in front of the real Ollama API. Point external
+// clients at this proxy's URL instead of Ollama's. For every /api/chat or
+// /api/generate request it looks up the target model in the SAME model_settings.json
+// file the dashboard reads/writes (see app/services/model_settings_helpers.py),
+// merges the saved "settings" into the request's "options", and forwards the
+// rewritten request upstream to Ollama.
+//
+// This is an alternative to the dashboard's "Bake into Model" feature
+// (POST /api/models/settings/<model>/bake): baking creates a derived model with
+// PARAMETER directives in its Modelfile (works with zero extra running services, but
+// can't express every option and requires clients to reference the derived model
+// name). This proxy applies the *exact* saved settings to the *original* model name,
+// for every request, but requires clients to point at this proxy's host:port instead
+// of Ollama's.
+//
+// Run with: node server_with_proxy.js
+// Configure with env vars (mirroring the Flask app's config):
+//   OLLAMA_HOST           Ollama host (default: localhost). May itself be "host:port"
+//                         (the form Ollama's OWN OLLAMA_HOST takes) — an embedded
+//                         port wins over OLLAMA_PORT below; see resolveOllamaHostPort().
+//   OLLAMA_PORT           Ollama port (default: 11434)
+//   MODEL_SETTINGS_FILE   Path to model_settings.json (default: ./model_settings.json,
+//                         same default the Flask app uses — point both at the same file)
+//   PROXY_PORT            Port this proxy listens on (default: 11435)
+//
+// Port takeover: rather than pointing every client at this proxy individually, you
+// can make EVERYTHING that assumes Ollama's default address (VS Code extensions,
+// `ollama run`, curl, LangChain, ...) flow through it with zero per-client config:
+//   1. Relocate the real Ollama off its default port — set OLLAMA_HOST=host:port
+//      (e.g. 127.0.0.1:11436) in the environment that *launches Ollama*, and restart it.
+//   2. Run this proxy with PROXY_PORT=11434 (Ollama's now-vacated default) and
+//      OLLAMA_HOST/OLLAMA_PORT pointed at the relocated address from step 1.
+// See README.md > "Per-Model Settings: scope and limitations" for the full walkthrough.
+
 const express = require('express');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const { createProxyMiddleware, fixRequestBody } = require('http-proxy-middleware');
 const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const PORT = 3000; // Your dashboard UI port
-const OLLAMA_URL = 'http://127.0.0.1:11434';
-const SETTINGS_FILE_PATH = path.join(__dirname, 'saved_parameters.json');
 
-// Ensure database file exists on startup
-if (!fs.existsSync(SETTINGS_FILE_PATH)) {
-    fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify({}, null, 2));
+// Mirrors _get_ollama_host_port() / _normalize_ollama_host_port_for_display() in the
+// Python app (app/services/ollama_core.py, app/routes/main.py): splits an embedded
+// port out of OLLAMA_HOST — taking precedence over OLLAMA_PORT — so naive
+// `${OLLAMA_HOST}:${OLLAMA_PORT}` concatenation can't double-port it into
+// "http://127.0.0.1:11436:11434". This is exactly the value Ollama's own OLLAMA_HOST
+// expects when relocating it for the port-takeover pattern described above, so a
+// single env var configures both the real Ollama and this proxy consistently.
+function resolveOllamaHostPort(rawHost, rawPort) {
+    let host = (rawHost || 'localhost').trim() || 'localhost';
+    let port = parseInt(rawPort, 10);
+    if (!Number.isFinite(port)) port = 11434;
+    const embedded = /^([^:]+):(\d+)$/.exec(host);
+    if (embedded) {
+        host = embedded[1];
+        port = parseInt(embedded[2], 10);
+    }
+    return { host, port };
 }
 
-// 1. DASHBOARD UI INTERNAL SAVE ROUTE
-// Update this path if your frontend calls a different endpoint to save settings
-app.use(express.json());
-app.post('/dashboard/api/save-settings', (req, res) => {
+const PROXY_PORT = parseInt(process.env.PROXY_PORT || '11435', 10);
+const { host: OLLAMA_HOST, port: OLLAMA_PORT } = resolveOllamaHostPort(process.env.OLLAMA_HOST, process.env.OLLAMA_PORT || '11434');
+const OLLAMA_URL = `http://${OLLAMA_HOST}:${OLLAMA_PORT}`;
+const SETTINGS_FILE_PATH = path.resolve(process.env.MODEL_SETTINGS_FILE || path.join(__dirname, 'model_settings.json'));
+const OLLAMA_DEFAULT_PORT = 11434;
+const IS_PORT_TAKEOVER = PROXY_PORT === OLLAMA_DEFAULT_PORT;
+
+function loadModelSettings() {
     try {
-        const { model, parameters } = req.body;
-        if (!model || !parameters) {
-            return res.status(400).json({ error: 'Missing model or parameters configuration' });
-        }
-
-        const currentSettings = JSON.parse(fs.readFileSync(SETTINGS_FILE_PATH, 'utf8'));
-        currentSettings[model] = parameters;
-
-        fs.writeFileSync(SETTINGS_FILE_PATH, JSON.stringify(currentSettings, null, 2));
-        return res.json({ success: true, message: `Parameters updated for ${model}` });
+        if (!fs.existsSync(SETTINGS_FILE_PATH)) return {};
+        const raw = JSON.parse(fs.readFileSync(SETTINGS_FILE_PATH, 'utf8'));
+        return (raw && typeof raw === 'object') ? raw : {};
     } catch (error) {
-        return res.status(500).json({ error: error.message });
+        console.error('Failed to read model settings file:', error.message);
+        return {};
     }
-});
+}
 
-// 2. INCOMING REQUEST INTERCEPTOR & INTERMEDIARY
-// Captures external payloads from VS Code to overwrite runtime configurations
-app.use(['/api/chat', '/api/generate'], (req, res, next) => {
-    const { model, options = {} } = req.body || {};
+// Mirrors normalize_model_settings_key()/lookup_settings_entry() in
+// app/services/model_settings_helpers.py: keys are matched by stripped equality so
+// minor whitespace differences between persisted keys and request model names don't matter.
+function findSettingsForModel(modelSettings, modelName) {
+    if (!modelName) return null;
+    const want = String(modelName).trim();
+    if (!want) return null;
+    if (Object.prototype.hasOwnProperty.call(modelSettings, want)) {
+        const entry = modelSettings[want];
+        return (entry && typeof entry === 'object') ? entry.settings : null;
+    }
+    for (const key of Object.keys(modelSettings)) {
+        if (String(key).trim() === want) {
+            const entry = modelSettings[key];
+            return (entry && typeof entry === 'object') ? entry.settings : null;
+        }
+    }
+    return null;
+}
 
-    if (model) {
-        try {
-            const savedData = JSON.parse(fs.readFileSync(SETTINGS_FILE_PATH, 'utf8'));
-            const dashboardModelOptions = savedData[model];
+// Merge saved per-model settings into /api/chat and /api/generate request bodies
+// before they reach Ollama. Body parsing is scoped to just these two routes so the
+// proxy can still stream/forward everything else (model pulls, /api/ps, etc.)
+// untouched. Saved values take precedence over whatever the calling client sent, so
+// the dashboard's saved defaults are what actually gets used — matching the behavior
+// the dashboard applies to its own requests.
+app.use(['/api/chat', '/api/generate'], express.json(), (req, res, next) => {
+    const body = req.body || {};
+    const modelName = body.model;
 
-            if (dashboardModelOptions) {
-                // Merges settings. Dashboard parameters take complete precedence.
-                req.body.options = {
-                    ...options,
-                    ...dashboardModelOptions
-                };
-
-                // Re-serialize the modified body string for the proxy target pipeline
-                req.rawBody = JSON.stringify(req.body);
-            }
-        } catch (error) {
-            console.error("Proxy parameter parsing interceptor error:", error);
+    if (modelName) {
+        const savedSettings = findSettingsForModel(loadModelSettings(), modelName);
+        if (savedSettings && typeof savedSettings === 'object') {
+            req.body = {
+                ...body,
+                options: {
+                    ...(body.options || {}),
+                    ...savedSettings,
+                },
+            };
         }
     }
     next();
 });
 
-// 3. UPSTREAM REVERSE PROXY TO OLLAMA CORE ENGINE
+// Mounted at root with pathFilter (rather than app.use('/api', proxy)) so the
+// upstream request keeps the '/api/...' prefix — Express strips the mount prefix
+// from req.url before handing off, which would otherwise send Ollama 'POST /chat'
+// instead of 'POST /api/chat'.
 const ollamaProxy = createProxyMiddleware({
     target: OLLAMA_URL,
     changeOrigin: true,
+    pathFilter: '/api',
     on: {
-        proxyReq: (proxyReq, req, res) => {
-            // Re-inject the updated options parameter configuration stream back into the pipeline
-            if (req.rawBody && (req.method === 'POST' || req.method === 'PUT')) {
-                proxyReq.setHeader('Content-Type', 'application/json');
-                proxyReq.setHeader('Content-Length', Buffer.byteLength(req.rawBody));
-                proxyReq.write(req.rawBody);
-            }
-        }
-    }
+        // Re-serializes req.body (rewritten above by express.json() + our middleware)
+        // back onto the proxied request — required because body-parser consumes the
+        // original request stream. No-ops for routes where req.body was never parsed.
+        proxyReq: fixRequestBody,
+    },
 });
 
-// Forward all general API calls directly to Ollama
-app.use('/api', ollamaProxy);
+app.use(ollamaProxy);
 
-// 4. SERVE YOUR STATIC DASHBOARD WEB INTERFACE ASSETS
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.listen(PORT, () => {
-    console.log(`====================================================`);
-    console.log(`🚀 Dashboard UI serving on: http://localhost:${PORT}`);
-    console.log(`🔌 Route VS Code requests to: http://localhost:${PORT}`);
-    console.log(`====================================================`);
+app.listen(PROXY_PORT, () => {
+    console.log('====================================================');
+    console.log(`Ollama settings-injecting proxy listening on: http://localhost:${PROXY_PORT}`);
+    console.log(`Forwarding to Ollama at: ${OLLAMA_URL}`);
+    console.log(`Reading saved settings from: ${SETTINGS_FILE_PATH}`);
+    console.log('');
+    if (IS_PORT_TAKEOVER) {
+        console.log(`Port-takeover mode: this proxy has taken over Ollama's default port`);
+        console.log(`(${OLLAMA_DEFAULT_PORT}). Existing clients need NO changes — anything that`);
+        console.log("already assumes Ollama lives at its default address (VS Code extensions,");
+        console.log('`ollama run`, curl, LangChain, ...) transparently flows through here now.');
+        console.log('');
+        console.log(`Make sure the REAL Ollama is actually running at ${OLLAMA_URL} (relocated`);
+        console.log('via OLLAMA_HOST=host:port in the environment that launches it) — otherwise');
+        console.log('this proxy and the real Ollama will fight over the same port.');
+    } else {
+        console.log('Point external clients (VS Code, ollama run, curl, etc.) at this URL');
+        console.log("instead of Ollama's URL to apply your saved per-model settings.");
+        console.log('');
+        console.log('(Prefer zero client-side config? See "port takeover" in the file header');
+        console.log('comment / README — run this with PROXY_PORT=11434 instead.)');
+    }
+    console.log('====================================================');
 });

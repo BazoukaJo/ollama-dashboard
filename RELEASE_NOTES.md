@@ -3,6 +3,8 @@
 ## Version 1.1.0 (2026)
 
 - **Python package** — `pyproject.toml` is a full setuptools project: runtime dependencies, `package-data` for `app` templates/static/JSON, and console script **`ollama-dashboard`** (`ollama_dashboard_cli.py`). Version is **PEP 440**–compliant (`1.1.0`; legacy tags like `1.0005` normalize to `1.5` on PyPI). Build with `python -m build`; install with `pip install dist/*.whl` or publish via `twine` (see README).
+- **Settings-injecting proxy fixes** — both the dashboard's built-in `/ollama/api/...` proxy (`intercept_ollama_parameters` in `app/__init__.py`) and the standalone `server_with_proxy.js` had bugs that could silently stop saved per-model settings from ever reaching Ollama for external clients (VS Code, `ollama run`, etc.): merging the *whole* stored `{settings, source, last_updated}` entry instead of just its inner `settings` dict, and — whenever `OLLAMA_HOST` carried an embedded port (`host:port`) — double-porting the upstream URL into `http://127.0.0.1:11436:11434`. Both fixed in both proxies, which now share the same `_get_ollama_host_port()` / `resolveOllamaHostPort()` resolution as the rest of the app. New regression suite: `tests/test_ollama_proxy_interceptor.py`.
+- **Port-takeover deployment mode** — `server_with_proxy.js` can now stand in for Ollama at Ollama's *own* default address (`:11434`): relocate the real Ollama via `OLLAMA_HOST=host:port` and run the proxy on the vacated port, and every client that assumes Ollama lives at its default address (VS Code, `ollama run`, curl, LangChain, ...) gets saved settings transparently — zero per-client reconfiguration. New `start_proxy_takeover.bat` launcher automates the takeover with pre-flight checks. See the README's [Per-Model Settings: scope and limitations](README.md#per-model-settings-scope-and-limitations).
 
 ## Version 1.0005 (2026)
 
@@ -48,7 +50,7 @@ First stable release of Ollama Dashboard: a web UI to monitor, control, and mana
 - **System monitoring** — Real-time CPU, RAM, VRAM, and GPU utilization with 1-second updates and simple timeline views.
 - **Health & service control** — Health status every 15 seconds; start, stop, and restart the Ollama service (including on Windows).
 - **Capabilities** — Vision, tools, and reasoning indicators on model cards, using Ollama `/api/show` when available and per-model caching to limit repeated calls.
-- **Per-model settings** — Temperature, top-k, and related parameters with JSON-backed persistence.
+- **Per-model settings** — Temperature, top-k, and related parameters with JSON-backed persistence, applied to requests made through the dashboard (chat, warm-load, restart) *and*, for external clients (VS Code, `ollama run`, etc.), via the dashboard's built-in settings-injecting proxy at `/ollama/api/...` (point a client's base URL at `http://<dashboard-host>:<port>/ollama`), **Bake into Model** (derived `<model>-dashboard` with `PARAMETER` directives), or the standalone `server_with_proxy.js` — see [README: Per-Model Settings scope and limitations](README.md#per-model-settings-scope-and-limitations).
 - **Model discovery** — Browse and download from a curated list; “Find Model” search with input focused when the modal opens.
 - **UI** — Dark theme, compact mode toggle, capability filters for available and downloadable models, and reduced vertical spacing in the uncollapsed layout.
 

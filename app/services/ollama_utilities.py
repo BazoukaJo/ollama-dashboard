@@ -405,6 +405,75 @@ class OllamaServiceUtilities:
         """Delete settings for a specific model."""
         return delete_model_settings_entry(self, model_name)
 
+    # PARAMETER directives recognized by Ollama Modelfiles. Keys outside this
+    # set (e.g. presence_penalty, frequency_penalty, typical_p, penalize_newline)
+    # are accepted as per-request `options` but are not valid Modelfile parameters.
+    _MODELFILE_PARAMETER_KEYS = (
+        'mirostat', 'mirostat_eta', 'mirostat_tau', 'num_ctx', 'repeat_last_n',
+        'repeat_penalty', 'temperature', 'seed', 'stop', 'num_predict',
+        'top_k', 'top_p', 'min_p',
+    )
+
+    def derived_model_name(self, model_name):
+        """Name used for the baked-in derived model created from `model_name`."""
+        base, sep, tag = model_name.partition(':')
+        return f"{base}-dashboard{sep}{tag}" if sep else f"{base}-dashboard"
+
+    def build_modelfile(self, model_name, settings):
+        """Build Modelfile text that bakes `settings` into a model derived from `model_name`."""
+        lines = [f"FROM {model_name}"]
+        for key in self._MODELFILE_PARAMETER_KEYS:
+            if key not in settings:
+                continue
+            value = settings[key]
+            if key == 'stop':
+                for stop_seq in (value or []):
+                    lines.append(f'PARAMETER stop "{stop_seq}"')
+                continue
+            if isinstance(value, bool):
+                value = 'true' if value else 'false'
+            lines.append(f"PARAMETER {key} {value}")
+        return "\n".join(lines) + "\n"
+
+    def bake_model_settings(self, model_name, derived_name=None):
+        """Create a derived Ollama model with the saved per-model settings baked in
+        as Modelfile PARAMETER directives, so external clients (VS Code, `ollama run`,
+        other apps hitting the Ollama API directly) get the same defaults the
+        dashboard applies to its own requests.
+
+        Returns a dict: {"success": bool, "model": <derived name>, "message": str}
+        """
+        if self._session is None:
+            return {"success": False, "message": "Session not initialized"}
+
+        entry = self.get_model_settings_with_fallback(model_name)
+        settings = entry.get('settings') if isinstance(entry, dict) else None
+        if not isinstance(settings, dict):
+            return {"success": False, "message": f"No settings available for {model_name}"}
+
+        target_name = derived_name or self.derived_model_name(model_name)
+        modelfile = self.build_modelfile(model_name, settings)
+
+        try:
+            host, port = self._get_ollama_host_port()
+            create_url = f"http://{host}:{port}/api/create"
+            response = self._session.post(
+                create_url,
+                json={"model": target_name, "modelfile": modelfile, "stream": False},
+                timeout=600,
+            )
+            if response.status_code == 200:
+                return {
+                    "success": True,
+                    "model": target_name,
+                    "modelfile": modelfile,
+                    "message": f"Created {target_name} with your saved settings baked in. "
+                               f"Use '{target_name}' in VS Code or other external clients to get these defaults.",
+                }
+            return {"success": False, "message": f"Failed to create {target_name}: {response.text}"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
     def _ensure_model_settings_exists(self, model_info):
         """Ensure model settings exist, creating defaults if needed."""
         return ensure_model_settings_exists(self, model_info)

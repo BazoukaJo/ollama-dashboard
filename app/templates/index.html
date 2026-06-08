@@ -430,7 +430,7 @@
                                         </div>
                                     </div>
                                     <div class="model-actions model-actions--running">
-                                        <button type="button" class="btn btn-primary" data-model-action="restart" onclick="restartModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Reload this model in memory (applies updated settings from disk).">
+                                        <button type="button" class="btn btn-primary" data-model-action="restart" onclick="restartModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Reload this model and re-send your saved settings with the warm-up request. This only affects requests made through this dashboard — it does not change the model itself. Other clients (VS Code, ollama run, etc.) still see Ollama's defaults unless they go through the dashboard's /ollama proxy or you use 'Bake into model'.">
                                             <i class="fas fa-redo"></i> <span class="model-action-btn-label">Restart</span>
                                         </button>
                                         <button type="button" class="btn btn-warning" data-model-action="stop" onclick="stopModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Unload from VRAM (ollama stop). Model files stay installed.">

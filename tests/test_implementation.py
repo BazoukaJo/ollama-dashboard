@@ -14,17 +14,35 @@ from app import create_app
 
 
 def test_auto_start_config():
-    """Test that AUTO_START_OLLAMA config is properly set."""
+    """Test that AUTO_START_OLLAMA is read from the environment into app.config
+    (so it actually controls the AutoStartOllama background thread, and users can
+    disable it with AUTO_START_OLLAMA=false)."""
     print("=" * 60)
     print("Test 1: Auto-Start Configuration")
     print("=" * 60)
 
-    app = create_app()
-    with app.app_context():
-        auto_start = app.config.get('AUTO_START_OLLAMA')
-        print(f"✓ AUTO_START_OLLAMA config: {auto_start}")
-        assert isinstance(auto_start, bool) or auto_start is None, "AUTO_START_OLLAMA should be boolean or None"
-        print("✓ Configuration test passed\n")
+    original = os.environ.get('AUTO_START_OLLAMA')
+    try:
+        os.environ.pop('AUTO_START_OLLAMA', None)
+        app = create_app()
+        with app.app_context():
+            auto_start = app.config.get('AUTO_START_OLLAMA')
+            print(f"✓ AUTO_START_OLLAMA config (default, unset): {auto_start}")
+            assert auto_start is True, "AUTO_START_OLLAMA should default to True when unset"
+
+        os.environ['AUTO_START_OLLAMA'] = 'false'
+        app2 = create_app()
+        with app2.app_context():
+            auto_start2 = app2.config.get('AUTO_START_OLLAMA')
+            print(f"✓ AUTO_START_OLLAMA config (env AUTO_START_OLLAMA=false): {auto_start2}")
+            assert auto_start2 is False, "AUTO_START_OLLAMA=false in the environment should disable auto-start"
+    finally:
+        if original is None:
+            os.environ.pop('AUTO_START_OLLAMA', None)
+        else:
+            os.environ['AUTO_START_OLLAMA'] = original
+
+    print("✓ Configuration test passed\n")
 
 def test_service_status_check():
     """Test service status checking."""
