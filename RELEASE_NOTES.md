@@ -35,7 +35,7 @@
 
 ## Version 1.0002 (2026)
 
-- UI: streamlined header (versions row + Ollama mark), more downloadable models before “View More”, compact toggle optional via [docs/UI.md](docs/UI.md).
+- UI: streamlined header (versions row + Ollama mark), more downloadable models before “View More”.
 - Models: card “More” menu (copy CLI/curl, library link, quick chat, copy settings), settings copy API, recent error strip, quantization row when available.
 - Polling: model list refresh on the countdown; Ollama install detection vs API version; `OLLAMA_HOST` with embedded port normalized for display and URLs.
 - Docs: [docs/UI.md](docs/UI.md) for UI toggles and layout constants.

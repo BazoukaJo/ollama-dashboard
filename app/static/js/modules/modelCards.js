@@ -124,7 +124,7 @@ if (!window.getCapabilitiesHTML) {
                     </div>
                 </div>
                 <div class="model-specs">
-                  <div class="spec-row compact-hide">
+                  <div class="spec-row">
                         <div class="spec-item">
                             <div class="spec-icon">
                                 <i class="fas fa-cogs"></i>
@@ -145,7 +145,7 @@ if (!window.getCapabilitiesHTML) {
                             </div>
                         </div>
                     </div>
-                    <div class="spec-row compact-hide">
+                    <div class="spec-row">
                         <div class="spec-item">
                             <div class="spec-icon">
                                 <i class="fas fa-hdd"></i>

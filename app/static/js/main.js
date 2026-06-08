@@ -795,6 +795,158 @@ async function showModelInfo(modelName) {
   }
 }
 
+// ===== Ask? modal =====
+let _askModelName = null;
+let _askAbortController = null;
+
+function openAskModal(modelName) {
+  _askModelName = modelName;
+  _askAbortController = null;
+
+  const nameEl = document.getElementById("askModelModalName");
+  if (nameEl) nameEl.textContent = modelName;
+
+  const input = document.getElementById("askModelInput");
+  if (input) {
+    input.value = "";
+    input.onkeydown = function (e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendAskModelQuestion();
+      }
+    };
+  }
+
+  const responseWrap = document.getElementById("askModelResponseWrap");
+  if (responseWrap) responseWrap.style.display = "none";
+
+  const responseEl = document.getElementById("askModelResponse");
+  if (responseEl) responseEl.textContent = "";
+
+  const spinner = document.getElementById("askModelSpinner");
+  if (spinner) spinner.style.display = "none";
+
+  const sendBtn = document.getElementById("askModelSendBtn");
+  if (sendBtn) sendBtn.disabled = false;
+
+  const modalEl = document.getElementById("askModelModal");
+  if (!modalEl) return;
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+
+  // Focus textarea after modal is shown
+  modalEl.addEventListener("shown.bs.modal", function onShown() {
+    modalEl.removeEventListener("shown.bs.modal", onShown);
+    if (input) input.focus();
+  });
+
+  // Abort any in-flight request when modal is hidden
+  modalEl.addEventListener("hidden.bs.modal", function onHidden() {
+    modalEl.removeEventListener("hidden.bs.modal", onHidden);
+    if (_askAbortController) {
+      _askAbortController.abort();
+      _askAbortController = null;
+    }
+  });
+}
+
+async function sendAskModelQuestion() {
+  const question = (document.getElementById("askModelInput")?.value || "").trim();
+  if (!question) return;
+
+  const sendBtn = document.getElementById("askModelSendBtn");
+  const spinner = document.getElementById("askModelSpinner");
+  const responseWrap = document.getElementById("askModelResponseWrap");
+  const responseEl = document.getElementById("askModelResponse");
+
+  if (sendBtn) sendBtn.disabled = true;
+  if (responseWrap) responseWrap.style.display = "";
+  if (responseEl) responseEl.textContent = "";
+  if (spinner) spinner.style.display = "";
+
+  if (_askAbortController) _askAbortController.abort();
+  _askAbortController = new AbortController();
+
+  try {
+    const resp = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: _askModelName,
+        prompt: question,
+        stream: true,
+      }),
+      signal: _askAbortController.signal,
+    });
+
+    if (!resp.ok) {
+      let errMsg = `HTTP ${resp.status}`;
+      try {
+        const errJson = await resp.json();
+        errMsg = errJson.error || errMsg;
+      } catch (_) {}
+      if (responseEl) responseEl.textContent = "Error: " + errMsg;
+      if (spinner) spinner.style.display = "none";
+      if (sendBtn) sendBtn.disabled = false;
+      return;
+    }
+
+    if (spinner) spinner.style.display = "";
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let gotFirstToken = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep incomplete last line
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (parsed.response != null) {
+            if (!gotFirstToken) {
+              gotFirstToken = true;
+              if (spinner) spinner.style.display = "none";
+            }
+            if (responseEl) {
+              responseEl.textContent += parsed.response;
+              // auto-scroll
+              responseEl.scrollTop = responseEl.scrollHeight;
+            }
+          }
+        } catch (_) {
+          // skip non-JSON lines
+        }
+      }
+    }
+    // flush remaining buffer
+    if (buffer.trim()) {
+      try {
+        const parsed = JSON.parse(buffer.trim());
+        if (parsed.response != null && responseEl) {
+          responseEl.textContent += parsed.response;
+          responseEl.scrollTop = responseEl.scrollHeight;
+        }
+      } catch (_) {}
+    }
+  } catch (err) {
+    if (err.name !== "AbortError") {
+      if (responseEl) responseEl.textContent = "Error: " + err.message;
+    }
+  } finally {
+    if (spinner) spinner.style.display = "none";
+    if (sendBtn) sendBtn.disabled = false;
+    _askAbortController = null;
+  }
+}
+// ===== End Ask? modal =====
+
 function buildModelSummary(info, details, modelName) {
   const summaryItems = [];
 
@@ -1620,7 +1772,7 @@ function updateRunningModelsDisplay(models) {
             </div>
           </div>
           <div class="model-specs">
-            <div class="spec-row compact-hide">
+            <div class="spec-row">
               <div class="spec-item">
                 <div class="spec-icon">
                   <i class="fas fa-cogs"></i>
@@ -1649,7 +1801,7 @@ function updateRunningModelsDisplay(models) {
                 </div>
               </div>
             </div>
-            <div class="spec-row compact-hide">
+            <div class="spec-row">
               <div class="spec-item">
                 <div class="spec-icon">
                   <i class="fas fa-hdd"></i>
@@ -1675,7 +1827,7 @@ function updateRunningModelsDisplay(models) {
                 </div>
               </div>
             </div>
-            <div class="spec-row compact-hide">
+            <div class="spec-row">
               <div class="spec-item">
                 <div class="spec-icon">
                   <i class="fas fa-layer-group"></i>
@@ -1797,7 +1949,7 @@ function buildAvailableModelCardHTML(model) {
             </div>
           </div>
           <div class="model-specs">
-            <div class="spec-row compact-hide">
+            <div class="spec-row">
               <div class="spec-item">
                 <div class="spec-icon">
                   <i class="fas fa-cogs"></i>
@@ -1818,7 +1970,7 @@ function buildAvailableModelCardHTML(model) {
                 </div>
               </div>
             </div>
-            <div class="spec-row compact-hide">
+            <div class="spec-row">
               <div class="spec-item">
                 <div class="spec-icon">
                   <i class="fas fa-hdd"></i>
@@ -1848,6 +2000,9 @@ function buildAvailableModelCardHTML(model) {
           <div class="model-actions model-actions--available">
             <button type="button" class="btn btn-primary btn-dashboard-download" onclick="startModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Load into memory so you can use it via API, CLI, or apps (ollama run)." aria-label="Start model">
               <i class="fas fa-play"></i> <span class="model-action-btn-label">Start</span>
+            </button>
+            <button type="button" class="btn btn-success" onclick="openAskModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Send a question to this model (streams the response)." aria-label="Ask this model a question">
+              <i class="fas fa-comment-dots"></i> <span class="model-action-btn-label">Ask?</span>
             </button>
             <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Modal with full Ollama model JSON." aria-label="View model information">
               <i class="fas fa-info-circle"></i> <span class="model-action-btn-label">Info</span>
@@ -1960,47 +2115,6 @@ function updateVersionDisplay(version) {
 // updateModelMemoryDisplay removed (was already a no-op; call eliminated from polling)
 
 // Service management functions moved to serviceControl.js
-
-// Compact mode: CSS remains in styles.css; the #compactToggle button is omitted from index.html by default.
-// See docs/UI.md to restore the toggle. compactMode in localStorage applies only when the toggle is present;
-// without it, the layout always loads expanded so users are not stuck in compact with no control.
-function initializeCompactMode() {
-  const compactToggle = document.getElementById("compactToggle");
-  const body = document.body;
-  const isCompact =
-    Boolean(compactToggle) && localStorage.getItem("compactMode") === "true";
-
-  if (isCompact) {
-    body.classList.add("compact-mode");
-  } else {
-    body.classList.remove("compact-mode");
-  }
-
-  if (!compactToggle) {
-    return;
-  }
-
-  if (isCompact) {
-    compactToggle.classList.add("active");
-    compactToggle.innerHTML = '<i class="fas fa-expand"></i>';
-  }
-
-  compactToggle.addEventListener("click", function () {
-    const isCurrentlyCompact = body.classList.contains("compact-mode");
-
-    if (isCurrentlyCompact) {
-      body.classList.remove("compact-mode");
-      compactToggle.classList.remove("active");
-      compactToggle.innerHTML = '<i class="fas fa-compress"></i>';
-      localStorage.setItem("compactMode", "false");
-    } else {
-      body.classList.add("compact-mode");
-      compactToggle.classList.add("active");
-      compactToggle.innerHTML = '<i class="fas fa-expand"></i>';
-      localStorage.setItem("compactMode", "true");
-    }
-  });
-}
 
 // updateHealthStatus & updateServiceControlButtons moved to serviceControl.js
 

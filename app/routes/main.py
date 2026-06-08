@@ -1193,7 +1193,7 @@ def chat():
                 for k, v in model_settings_entry['settings'].items():
                     options[k] = v
         except Exception as e:
-            print(f"Failed to merge per-model settings for {model_name}: {e}")
+            logger.error("Failed to merge per-model settings for %s: %s", model_name, e)
         chat_data["options"] = options
 
         try:

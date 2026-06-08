@@ -16,7 +16,7 @@ _DEF_TEMPLATE = {
     'temperature': 0.75,
     'top_k': 40,
     'top_p': 0.9,
-    'num_ctx': 4096,
+    'num_ctx': 8192,
     'seed': 0,
     'num_predict': 512,
     'repeat_last_n': 64,

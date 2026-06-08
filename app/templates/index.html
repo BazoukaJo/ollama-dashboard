@@ -282,6 +282,38 @@
         </div>
         {% endif %}
 
+        <!-- Ask model modal -->
+        <div class="modal fade" id="askModelModal" tabindex="-1" aria-labelledby="askModelModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-centered">
+                <div class="modal-content bg-dark text-light">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="askModelModalLabel">Ask <span id="askModelModalName" class="text-success"></span></h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <textarea id="askModelInput" class="form-control bg-dark text-light border-secondary" rows="3" placeholder="Type your question and press Enter (or click Send)..." aria-label="Question for the model"></textarea>
+                        </div>
+                        <div id="askModelResponseWrap" style="display:none;">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="text-muted small">Response</span>
+                                <div id="askModelSpinner" class="spinner-border spinner-border-sm text-success" role="status" style="display:none;">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                            </div>
+                            <div id="askModelResponse" class="ask-model-response-area p-3 border border-secondary rounded" style="white-space:pre-wrap; max-height:400px; overflow-y:auto; font-size:0.9rem; background:#1a1a1a;"></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                        <button id="askModelSendBtn" type="button" class="btn btn-success" onclick="sendAskModelQuestion()">
+                            <i class="fas fa-paper-plane me-1"></i>Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Find Model modal -->
         <div class="modal fade" id="findModelModal" tabindex="-1" aria-labelledby="findModelModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -356,7 +388,7 @@
                                         </div>
                                     </div>
                                     <div class="model-specs">
-                                        <div class="spec-row compact-hide">
+                                        <div class="spec-row">
                                             <div class="spec-item">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-cogs"></i>
@@ -379,7 +411,7 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="spec-row compact-hide">
+                                        <div class="spec-row">
                                             <div class="spec-item">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-hdd"></i>
@@ -408,7 +440,7 @@
                                         {% set md = model.details if model.details is mapping else {} %}
                                         {% set ctx_max = md.get('context_length') or model.context_length or 'Unknown' %}
                                         {% set ctx_loaded = model.loaded_context_length|default(model.context_length) %}
-                                        <div class="spec-row compact-hide">
+                                        <div class="spec-row">
                                             <div class="spec-item">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-layer-group"></i>
@@ -513,7 +545,7 @@
                                         </div>
                                     </div>
                                     <div class="model-specs">
-                                        <div class="spec-row compact-hide">
+                                        <div class="spec-row">
                                             <div class="spec-item">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-cogs"></i>
@@ -537,7 +569,7 @@
                                             </div>
                                         </div>
                                         {% set _d = model.details if model.details is mapping else {} %}
-                                        <div class="spec-row compact-hide">
+                                        <div class="spec-row">
                                             <div class="spec-item">
                                                 <div class="spec-icon">
                                                     <i class="fas fa-hdd"></i>
@@ -572,6 +604,9 @@
                                     <div class="model-actions model-actions--available">
                                         <button type="button" class="btn btn-primary" onclick="startModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Load into memory so you can use it via API, CLI, or apps (ollama run)." aria-label="Start model">
                                             <i class="fas fa-play"></i> <span class="model-action-btn-label">Start</span>
+                                        </button>
+                                        <button type="button" class="btn btn-success" onclick="openAskModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Send a question to this model (streams the response)." aria-label="Ask this model a question">
+                                            <i class="fas fa-comment-dots"></i> <span class="model-action-btn-label">Ask?</span>
                                         </button>
                                         <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Modal with full Ollama model JSON." aria-label="View model information">
                                             <i class="fas fa-info-circle"></i> <span class="model-action-btn-label">Info</span>

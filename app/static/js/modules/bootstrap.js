@@ -25,7 +25,6 @@
 
   function init() {
     if (typeof updateTimes === "function") updateTimes();
-    if (typeof initializeCompactMode === "function") initializeCompactMode();
     if (typeof loadDownloadableModels === "function") loadDownloadableModels();
     if (typeof updateModelData === "function") updateModelData();
     if (typeof resumeActiveDownloads === "function") resumeActiveDownloads();

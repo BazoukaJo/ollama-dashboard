@@ -20,45 +20,10 @@
   --space-major: 1rem;
 }
 
-/* ===== Compact Mode Toggle Button ===== */
-.compact-toggle-btn {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(102, 102, 102, 0.8);
-  color: #e6e6e6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  z-index: 1000;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  font-size: 1rem;
-  padding: 0;
-  line-height: 1;
-}
-
-/* Compact mode toggle: 30% smaller than standard top buttons */
-#compactToggle {
-  width: 28px;
-  height: 28px;
-  font-size: 0.7rem;
-}
-
 /* Small spin animation fallback if fontawesome fa-spin isn't applied */
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
-}
-.compact-toggle-btn .spinning {
-  animation: spin 1s linear infinite;
 }
 
 /* Health badge + service controls: one shared height (box left = buttons right) */
@@ -74,21 +39,6 @@
   justify-content: center;
   line-height: 1;
   font-size: 0.7rem;
-}
-
-.compact-toggle-btn:hover {
-  background: rgba(102, 102, 102, 1);
-  transform: scale(1.05);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-}
-
-.compact-toggle-btn.active {
-  background: rgba(128, 128, 128, 0.9);
-}
-
-.compact-toggle-btn.active:hover {
-  background: rgba(128, 128, 128, 1);
-  transform: scale(1.05);
 }
 
 body {
@@ -1578,21 +1528,11 @@ canvas {
   padding-right: 0 !important;
 }
 
-body.compact-mode .model-cards-row.row {
-  --model-card-min-track: min(100%, 18.94rem);
-  --model-card-max-track: 21.6rem;
-}
-
 /* Downloadable + extended grids: ~30% narrower max/min track than Running / Available */
 .model-cards-row.row.model-cards-row--downloadable {
   --model-card-min-track: min(100%, 18.54rem);
   /* At least as wide as min-track so grid min and .col max-width stay consistent */
   --model-card-max-track: 18.54rem;
-}
-
-body.compact-mode .model-cards-row.row.model-cards-row--downloadable {
-  --model-card-min-track: min(100%, 16.57rem);
-  --model-card-max-track: 16.57rem;
 }
 
 /* Professional Model Card Styles — vertical flow + uniform spec grid */
@@ -3209,353 +3149,191 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
   }
 }
 
-/* ===== Compact Mode Styles ===== */
-body.compact-mode {
-  display: block; /* Ensure body remains block */
-}
-
-/* Compact mode rules: only affect card internal styling */
-body.compact-mode .model-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.28rem;
-  padding: 0.4rem 0.48rem;
-}
-
-body.compact-mode .model-header.model-card-head {
-  gap: 0.35rem;
-  margin-bottom: 0;
-}
-
-body.compact-mode .model-header:not(.model-card-head) {
-  gap: 0.625rem;
-  margin-bottom: 0.625rem;
-}
-
-body.compact-mode .status-indicator {
-  font-size: 0.65rem;
-  padding: 0.2rem 0.5rem;
-}
-
-body.compact-mode .model-specs {
-  margin-bottom: 0;
-}
-
-body.compact-mode .model-card .model-specs {
-  gap: 0.22rem;
-}
-
-body.compact-mode .model-card .spec-item {
-  padding: 0.16rem 0.28rem;
-  min-height: 1.38rem;
-}
-
-body.compact-mode .spec-icon {
-  width: 14px;
-  height: 14px;
-}
-
-body.compact-mode .spec-icon i {
-  font-size: 0.75rem;
-}
-
-body.compact-mode .spec-label {
-  font-size: 0.72rem;
-  margin-bottom: 0.12rem;
-}
-
-body.compact-mode .spec-value {
-  font-size: 0.8125rem;
-}
-
-body.compact-mode .model-actions {
-  gap: 0.28rem 0.25rem;
-}
-
-body.compact-mode .model-actions .btn {
-  font-size: 0.8125rem;
-  padding: 0.3rem 0.42rem;
-}
-
-body.compact-mode .model-actions .model-action-settings-btn {
-  padding: 0.18rem 0.26rem !important;
-  font-size: 0.72rem !important;
-}
-
-body.compact-mode .model-actions .model-action-settings-btn .model-settings-status-badge.badge {
-  padding: 0.06rem 0.3rem 0.07rem !important;
-  font-size: 0.52rem !important;
-  gap: 0.14rem;
-}
-
-body.compact-mode .model-actions .model-action-settings-btn .model-settings-status-badge .model-settings-status-ic {
-  font-size: 0.46rem;
-}
-
-body.compact-mode .model-action-btn-label {
-  display: none !important;
-}
-/* Hide sections marked for removal in compact mode */
-body.compact-mode .compact-hide {
-  display: none !important;
-}
-
-/* ===== Page-level spacing - compact mode ===== */
-body.compact-mode #dashboard-page {
+/* ===== Page-level spacing ===== */
+#dashboard-page {
   padding-top: 0 !important;
   padding-bottom: 0.28rem !important;
 }
 
-body.compact-mode .title-container.mb-1 {
+.title-container.mb-1 {
   margin-bottom: 0.15rem !important;
 }
 
-body.compact-mode .d-flex.justify-content-center.mb-2.align-items-center.gap-2 {
+.refresh-indicator.mb-2,
+.refresh-indicator {
+  margin-bottom: 0.15rem !important;
+}
+
+.d-flex.justify-content-center.mb-2.align-items-center.gap-2 {
   margin-bottom: 0.18rem !important;
   gap: 0.35rem !important;
 }
 
-body.compact-mode .service-controls.d-flex.gap-2 {
-  gap: 0.35rem !important;
-}
-
-body.compact-mode .health-status-badge {
-  padding: 0.25rem 0.75rem !important;
-  font-size: 0.8125rem !important;
-  line-height: 1.25 !important;
-  min-height: var(--health-service-hit, calc(0.5rem + 0.8125rem * 1.25)) !important;
-}
-
-body.compact-mode .models-management.mt-4 {
-  margin-top: 0.65rem !important;
-}
-
-body.compact-mode .models-management > div,
-body.compact-mode .models-management > div.mb-4 {
-  margin-bottom: 0.9rem !important;
-}
-
-body.compact-mode .models-management > div:last-child {
-  margin-bottom: 0.72rem !important;
-}
-
-body.compact-mode .models-management .d-flex.align-items-center.justify-content-between.mb-3,
-body.compact-mode .models-management .d-flex.align-items-center.gap-2.mb-3 {
-  margin-bottom: 0.22rem !important;
-}
-
-body.compact-mode .models-management .d-flex.align-items-center.gap-2 {
-  gap: 0.35rem !important;
-  margin-bottom: 0 !important;
-}
-
-body.compact-mode .models-section .section-icon {
-  font-size: 0.8rem;
-}
-
-body.compact-mode .models-section .section-title-text {
-  font-size: 0.875rem;
-  line-height: 1.2;
-}
-
-body.compact-mode .models-section {
-  margin-top: 0.65rem !important;
-}
-
-body.compact-mode #runningModelsContainer.row.g-3 {
-  --bs-gutter-x: 0.45rem;
-  --bs-gutter-y: 0.4rem;
-}
-
-body.compact-mode .compact-system-resources.mb-2 {
-  margin-bottom: 0.25rem !important;
-}
-
-/* ===== Page-level spacing - normal mode (uncollapsed, reduced vertical spacing) ===== */
-body:not(.compact-mode) #dashboard-page {
-  padding-top: 0 !important;
-  padding-bottom: 0.28rem !important;
-}
-
-body:not(.compact-mode) .title-container.mb-1 {
-  margin-bottom: 0.15rem !important;
-}
-
-body:not(.compact-mode) .refresh-indicator.mb-2,
-body:not(.compact-mode) .refresh-indicator {
-  margin-bottom: 0.15rem !important;
-}
-
-body:not(.compact-mode) .d-flex.justify-content-center.mb-2.align-items-center.gap-2 {
-  margin-bottom: 0.18rem !important;
-  gap: 0.35rem !important;
-}
-
-body:not(.compact-mode) .compact-system-resources {
+.compact-system-resources {
   padding: 0.22rem 0.45rem 0.28rem;
   border-radius: 8px;
   margin-bottom: 0.35rem !important;
 }
 
-body:not(.compact-mode) .compact-system-resources .compact-resources-head {
+.compact-system-resources .compact-resources-head {
   margin-bottom: 0.18rem !important;
 }
 
-body:not(.compact-mode) .compact-system-resources .section-title-text {
+.compact-system-resources .section-title-text {
   font-size: 0.875rem;
   line-height: 1.2;
 }
 
-body:not(.compact-mode) .compact-system-resources .section-icon {
+.compact-system-resources .section-icon {
   font-size: 0.8rem;
 }
 
-body:not(.compact-mode) .compact-system-resources .last-update-time {
+.compact-system-resources .last-update-time {
   font-size: 0.65rem;
   line-height: 1.2;
 }
 
-body:not(.compact-mode) .compact-system-resources .resource-icon {
+.compact-system-resources .resource-icon {
   font-size: 0.68rem;
 }
 
-body:not(.compact-mode) .compact-metrics-grid {
+.compact-metrics-grid {
   gap: 0.18rem;
   margin-top: 0.05rem;
 }
 
-body:not(.compact-mode) .compact-metric {
+.compact-metric {
   padding: 0.12rem 0.28rem 0.14rem;
   border-radius: 4px;
 }
 
-body:not(.compact-mode) .timeline-canvas {
+.timeline-canvas {
   height: 10px;
   margin-top: 0.04rem;
 }
 
-body:not(.compact-mode) .metric-label-compact {
+.metric-label-compact {
   font-size: 0.6875rem;
   line-height: 1.15;
 }
 
-body:not(.compact-mode) .metric-value-compact {
+.metric-value-compact {
   font-size: 0.8125rem;
   line-height: 1.15;
 }
 
-body:not(.compact-mode) .models-management.mt-4 {
+.models-management.mt-4 {
   margin-top: 1.35rem !important;
 }
 
-body:not(.compact-mode) .models-management > div,
-body:not(.compact-mode) .models-management > div.mb-4 {
+.models-management > div,
+.models-management > div.mb-4 {
   margin-bottom: 1.2rem !important;
 }
 
-body:not(.compact-mode) .models-management > div:last-child {
+.models-management > div:last-child {
   margin-bottom: 0.75rem !important;
 }
 
-body:not(.compact-mode) .models-management .d-flex.align-items-center.justify-content-between.mb-3,
-body:not(.compact-mode) .models-management .d-flex.align-items-center.gap-2.mb-3 {
+.models-management .d-flex.align-items-center.justify-content-between.mb-3,
+.models-management .d-flex.align-items-center.gap-2.mb-3 {
   margin-bottom: 0.45rem !important;
 }
 
-body:not(.compact-mode) .models-management .d-flex.align-items-center.gap-2 {
+.models-management .d-flex.align-items-center.gap-2 {
   gap: 0.35rem !important;
   margin-bottom: 0 !important;
 }
 
-body:not(.compact-mode) #runningModelsContainer.row.g-3 {
+#runningModelsContainer.row.g-3 {
   --bs-gutter-x: 0.45rem;
   --bs-gutter-y: 0.4rem;
 }
 
-/* Normal mode: card padding aligns with flex layout */
-body:not(.compact-mode) .model-card {
+/* Card padding */
+.model-card {
   padding: 0.5rem 0.62rem;
   border: 1px solid var(--model-card-border, rgba(255, 255, 255, 0.08));
 }
 
-body:not(.compact-mode) .model-header:not(.model-card-head) {
+.model-header:not(.model-card-head) {
   margin-bottom: 2px !important;
   gap: 4px !important;
 }
 
-body:not(.compact-mode) .model-card .model-header.model-card-head {
+.model-card .model-header.model-card-head {
   margin-bottom: 0 !important;
 }
 
-body:not(.compact-mode) .model-title,
-body:not(.compact-mode) .model-card .model-title {
+.model-title,
+.model-card .model-title {
   margin-bottom: 0 !important;
   margin-top: 0 !important;
   padding-bottom: 0 !important;
   border-bottom: none !important;
 }
 
-body:not(.compact-mode) .model-specs {
+.model-specs {
   margin-bottom: 0 !important;
 }
 
-body:not(.compact-mode) .model-card .spec-item {
+.model-card .spec-item {
   padding: 0.18rem 0.32rem !important;
   min-height: 1.42rem !important;
 }
 
-body:not(.compact-mode) .model-actions {
+.model-actions {
   gap: 0.28rem 0.26rem !important;
 }
 
-body:not(.compact-mode) .model-actions .btn {
+.model-actions .btn {
   padding: 0.3rem 0.42rem !important;
   font-size: 0.8125rem !important;
 }
 
-body:not(.compact-mode) .model-actions .model-action-settings-btn {
+.model-actions .model-action-settings-btn {
   padding: 0.22rem 0.3rem !important;
   font-size: 0.75rem !important;
 }
 
-body:not(.compact-mode) .health-status-badge {
+.health-status-badge {
   padding: 0.25rem 0.75rem;
   font-size: 0.8125rem;
   line-height: 1.25;
   min-height: var(--health-service-hit, calc(0.5rem + 0.8125rem * 1.25));
 }
 
-body:not(.compact-mode) .models-section .section-icon {
+.models-section .section-icon {
   font-size: 0.8rem;
 }
 
-body:not(.compact-mode) .models-section .section-title-text {
+.models-section .section-title-text {
   font-size: 0.875rem;
   line-height: 1.2;
 }
 
-body:not(.compact-mode) .extended-models-container.mt-2 {
+.extended-models-container.mt-2 {
   margin-top: 0.25rem !important;
 }
 
-body:not(.compact-mode) .text-center.mt-3 {
+.text-center.mt-3 {
   margin-top: 0.25rem !important;
 }
 
-body:not(.compact-mode) .service-controls.d-flex.gap-2 {
+.service-controls.d-flex.gap-2 {
   gap: 0.35rem !important;
 }
 
-body:not(.compact-mode) .models-section {
+.models-section {
   margin-top: 1rem !important;
 }
 
-body:not(.compact-mode) .text-center.py-4 {
+.text-center.py-4 {
   padding-top: 0.6rem !important;
   padding-bottom: 0.6rem !important;
 }
 
-body:not(.compact-mode) .text-center.py-5 {
+.text-center.py-5 {
   padding-top: 1rem !important;
   padding-bottom: 1rem !important;
 }
@@ -3592,10 +3370,6 @@ body:not(.compact-mode) .text-center.py-5 {
   margin-bottom: 0;
 }
 
-body.compact-mode .badge {
-  font-size: 0.7rem;
-  padding: 0.25rem 0.5rem;
-}
 /* Utility classes extracted from inline styles */
 .icon-xs { font-size: 0.9rem; }
 .heading-xs { font-size: 0.95rem; }
@@ -3603,18 +3377,7 @@ body.compact-mode .badge {
 .extended-models-container.mt-2 { margin-top: 0.35rem !important; }
 .text-center.mt-3 { margin-top: 0.5rem !important; }
 
-body.compact-mode .text-muted {
-  font-size: 0.8rem;
-}
-
-/* System resources compact styles removed from compact mode - always use compact styling */
-
-/* Hide elements marked as compact-hide in compact mode */
-body.compact-mode .compact-hide {
-  display: none !important;
-}
-
-/* Action button text: visible on phones; hidden only in compact mode (see above) */
+/* Action button text: always visible */
 .model-action-btn-label {
   display: inline;
 }
@@ -3961,7 +3724,6 @@ body.compact-mode .compact-hide {
     animation: none !important;
   }
 
-  .compact-toggle-btn:hover,
   .resource-card:hover,
   .resource-card-modern:hover,
   .model-card:hover,
