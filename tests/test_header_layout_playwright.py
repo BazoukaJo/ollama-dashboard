@@ -187,8 +187,8 @@ def test_header_layout_at_viewport(page, server_process, width, height, label):
         f"{label}: Ollama row should sit above proxy row"
     )
 
-    # Meta cluster sits on the same row as controls when the banner is very wide.
-    if banner_w >= 1056:
+    # Meta cluster sits on the same row as controls when the banner is wide enough (~48rem+).
+    if banner_w >= 768:
         assert abs(start["top"] - meta["top"]) < 20, (
             f"{label}: meta group should share row with Ollama controls (banner={banner_w})"
         )
@@ -206,14 +206,14 @@ def test_header_layout_at_viewport(page, server_process, width, height, label):
             ".dashboard-header-info-panel .dashboard-header-panel-full"
         ).first.is_visible()
 
-    # Medium row 2: full panel keeps min-width and stays inside the bar.
-    if 672 < banner_w < 1056:
+    # Stacked layout: status drops below controls only below ~48rem.
+    if 672 < banner_w < 768:
         assert page.locator(".dashboard-header-info-panel .dashboard-header-panel-full").first.is_visible()
         min_layout_w = page.evaluate(
             """() => {
               const density = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-density')) || 1;
               const visual = parseFloat(getComputedStyle(document.querySelector('.dashboard-header-meta-group'))
-                .getPropertyValue('--hdr-meta-panel-min-visual')) || 15;
+                .getPropertyValue('--hdr-meta-panel-min-visual')) || 12;
               return Math.floor((visual / density) * 16 * 0.92);
             }"""
         )
@@ -232,6 +232,30 @@ def test_header_layout_at_viewport(page, server_process, width, height, label):
         start_bottom = start["top"] + start["height"]
         assert start["top"] < meta["top"] - 4 or start_bottom <= meta["top"] + 4, (
             f"{label}: meta group should sit below controls when banner={banner_w}"
+        )
+
+    # Medium-wide: same row as controls; panel stays inside the bar.
+    if 768 <= banner_w < 1056:
+        assert page.locator(".dashboard-header-info-panel .dashboard-header-panel-full").first.is_visible()
+        min_layout_w = page.evaluate(
+            """() => {
+              const density = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-density')) || 1;
+              const visual = parseFloat(getComputedStyle(document.querySelector('.dashboard-header-meta-group'))
+                .getPropertyValue('--hdr-meta-panel-min-visual')) || 12;
+              return Math.floor((visual / density) * 16 * 0.92);
+            }"""
+        )
+        info_layout_w = page.evaluate(
+            "(s) => document.querySelector(s)?.offsetWidth || 0", ".dashboard-header-info-panel"
+        )
+        assert info_layout_w >= min_layout_w, (
+            f"{label}: info panel below min width ({info_layout_w}px < {min_layout_w}px, banner={banner_w})"
+        )
+        assert info_panel["left"] >= bar["left"] - 6, (
+            f"{label}: info panel clipped left (panel={info_panel['left']:.0f}, bar={bar['left']:.0f})"
+        )
+        assert info_panel["right"] <= bar["right"] + 6, (
+            f"{label}: info panel clipped right (panel={info_panel['right']:.0f}, bar={bar['right']:.0f})"
         )
 
     # Panel borders wrap their chips when full panel is visible.
@@ -262,8 +286,8 @@ def test_header_layout_at_viewport(page, server_process, width, height, label):
                     f"{label}: Connect should sit after proxy status badge"
                 )
 
-    # Meta pair centered when on row 2; never stretched to full bar width.
-    if banner_w < 1056:
+    # Meta pair centered when stacked on row 2; never stretched to full bar width.
+    if banner_w < 768:
         bar_cx = (bar["left"] + bar["right"]) / 2
         meta_cx = (meta["left"] + meta["right"]) / 2
         assert abs(bar_cx - meta_cx) < 48, (

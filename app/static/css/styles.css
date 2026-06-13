@@ -364,7 +364,7 @@ html.light .dashboard-header-ollama-cta {
   align-items: center;
   align-content: center;
   gap: 0.32rem 0.4rem;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
@@ -427,9 +427,9 @@ html.light .dashboard-header-ollama-cta {
 
 /* Meta cluster: unified info panel — content-sized, centered. */
 .dashboard-header-meta-group {
-  --hdr-meta-panel-min-visual: 15rem;
+  --hdr-meta-panel-min-visual: 12rem;
   --hdr-meta-panel-min: 0px;
-  --hdr-meta-panel-max: min(32rem, calc(100vw - var(--header-theme-hit) - var(--header-theme-gap) - 2 * var(--dashboard-page-pad-x) - var(--space-md)));
+  --hdr-meta-panel-max: min(34rem, calc(100vw - var(--header-theme-hit) - var(--header-theme-gap) - 2 * var(--dashboard-page-pad-x) - var(--space-md)));
   --hdr-meta-panel-share: 100%;
   display: grid;
   grid-template-columns: max-content;
@@ -517,14 +517,14 @@ html.light .dashboard-header-ollama-cta {
 }
 
 .dashboard-header-info-row--proxy {
-  flex-wrap: wrap;
-  row-gap: 0.12rem;
-  overflow: visible;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 
 .dashboard-header-info-row--proxy .dashboard-header-proxy-url {
-  flex: 1 1 8rem;
-  max-width: min(100%, 14rem);
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 11rem;
 }
 
 .dashboard-header-info-row--proxy .dashboard-header-proxy-label {
@@ -633,43 +633,35 @@ html.light .dashboard-header-ollama-cta {
   border-color: var(--header-meta-chip-border) !important;
 }
 
-/* Wide: Ollama controls + full meta panels on one row when the banner is wide enough */
-@container dash-hdr (min-width: 66rem) {
+/* Wide: Ollama controls + status panel share one row (from ~768px banner) */
+@container dash-hdr (min-width: 48rem) {
   .dashboard-header-bar {
     flex-wrap: nowrap;
     align-items: center;
-    gap: var(--space-xs) var(--space-md);
+    gap: var(--space-xs) var(--space-sm);
+  }
+
+  .dashboard-header-start {
+    flex: 0 1 auto;
   }
 
   .dashboard-header-meta-group {
+    flex: 0 1 auto;
     margin-left: auto;
     margin-right: max(0px, env(safe-area-inset-right, 0px));
     justify-content: center;
+    width: auto;
+    max-width: min(34rem, calc(100% - 11rem));
   }
 
   .dashboard-header-meta-group > .dashboard-header-info-panel {
     width: max-content;
     max-width: var(--hdr-meta-panel-max);
   }
-
-  .dashboard-header-banner .refresh-indicator {
-    align-items: center;
-    width: auto;
-    max-width: 100%;
-    min-width: 0;
-    justify-content: flex-end;
-  }
-
-  .dashboard-header-banner .refresh-indicator-cluster {
-    width: auto;
-    max-width: 100%;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
-  }
 }
 
-/* Crowded single row: shrink Ollama controls so meta panels still fit */
-@container dash-hdr (min-width: 66rem) and (max-width: 80rem) {
+/* Crowded single row: shrink Ollama controls so status panel still fits */
+@container dash-hdr (min-width: 48rem) and (max-width: 80rem) {
   .dashboard-header-bar {
     --header-ollama-control-height: 1.875rem;
     --health-service-hit: var(--header-ollama-control-height);
@@ -700,8 +692,8 @@ html.light .dashboard-header-ollama-cta {
   }
 }
 
-/* Meta cluster on row 2: honor panel min-width; switch to compact strips when too narrow */
-@container dash-hdr (max-width: 65.99rem) {
+/* Stack status below controls only on narrow banners */
+@container dash-hdr (max-width: 47.99rem) {
   .dashboard-header-bar {
     --header-ollama-control-height: 1.9rem;
     --health-service-hit: var(--header-ollama-control-height);
@@ -1135,8 +1127,8 @@ html.light .dashboard-header-meta-chip--warn {
 /* Health pill: fixed single-line width so service buttons never shift */
 .dashboard-header-banner .dashboard-header-health.health-status-badge {
   flex: 0 0 auto;
-  min-width: 9.5rem;
-  max-width: 14rem;
+  min-width: 5.5rem;
+  max-width: 8.5rem;
   padding: 0.2rem 0.55rem;
   font-size: 0.78rem;
   line-height: 1.3;
