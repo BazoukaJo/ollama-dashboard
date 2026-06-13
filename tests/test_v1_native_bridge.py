@@ -68,6 +68,17 @@ def test_prepare_v1_chat_completions_payload_merges_options():
     assert out['options']['temperature'] == 0.6
 
 
+def test_stream_maps_tool_calls_to_openai_format():
+    lines = [
+        b'{"message":{"role":"assistant","tool_calls":[{"id":"call_x","function":{"index":0,"name":"calc","arguments":{"expr":"2+2"}}}]},"done":false}',
+        b'{"message":{"role":"assistant","content":""},"done":true}',
+    ]
+    out = ''.join(stream_native_chat_lines_to_openai_sse(iter(lines), model='qwen3:14b'))
+    assert '"arguments": "{\\"expr\\": \\"2+2\\"}"' in out or '"arguments":"{\\"expr\\": \\"2+2\\"}"' in out
+    assert '"finish_reason": "tool_calls"' in out or '"finish_reason":"tool_calls"' in out
+    assert '"type": "function"' in out or '"type":"function"' in out
+
+
 def test_stream_maps_thinking_to_reasoning_delta():
     lines = [
         b'{"message":{"role":"assistant","thinking":"Hmm","content":""},"done":false}',

@@ -38,8 +38,8 @@ merges saved settings on **inference** routes:
 | `GET /ollama/api/tags`, `GET /ollama/v1/models` | No (model listing only) |
 
 Copilot does **not** call the dashboard **Start model** API; the first chat message loads the
-model. The proxy merges saved settings (including `num_ctx`) into `options` on
-`/ollama/v1/chat/completions` and forwards to Ollama's native v1 endpoint.
+model. The proxy bridges `/ollama/v1/chat/completions` to native `/api/chat` so saved
+`num_ctx` applies (Ollama's raw `/v1/...` endpoint ignores `options.num_ctx`).
 
 **GitHub Copilot setup:**
 
@@ -129,10 +129,20 @@ If you use the dashboard proxy (`http://<host>:5000/ollama`) or port-takeover pr
 Until you save a higher `num_ctx`, the default **8192** applies — which is too small for
 typical VS Code prompts (~20k–100k tokens).
 
-**Copilot loads model at 4K despite saved 40K context:** Confirm the endpoint is
-`:5000/ollama`, not `:11434` directly. Save a higher **Context (num_ctx)** in the dashboard,
-restart the dashboard, then send a new Copilot message (Copilot loads the model on the first
-inference request — not via dashboard **Start**).
+**Allocated context shows 4096/8192 but Settings shows more:** The **Allocated** column is
+what Ollama actually loaded (`/api/ps`), not what you saved. Common causes:
+
+1. **Model already in memory** — Ollama keeps the context size from the *first* load. Use
+   **Restart model** on the dashboard card, or stop the model, then send a new Copilot message
+   through `:5000/ollama`.
+2. **Bypassing the proxy** — Copilot or another client pointed at `:11434` directly never
+   gets dashboard settings.
+3. **Raw Ollama v1** — Even with merged `options`, Ollama's `/v1/chat/completions` ignores
+   `num_ctx`; the dashboard bridges v1 chat to `/api/chat` so saved context applies.
+
+**Copilot loads model at 4K despite saved 40K context:** Confirm endpoint is
+`:5000/ollama`, restart the dashboard, **restart/stop the model**, then send a new Copilot
+message.
 
 **"Sorry, no response was returned" in Copilot Chat:** Usually means Copilot received an
 empty or malformed stream. After upgrading the dashboard, **restart** it (`restart_app.bat`),

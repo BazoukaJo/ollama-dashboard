@@ -1,11 +1,12 @@
 """Helpers for OpenAI-compatible /v1 inference via the dashboard proxy.
 
-``prepare_v1_chat_completions_payload()`` merges saved dashboard settings into the
-``options`` dict on Copilot / OpenAI chat requests before passthrough to Ollama
-``/v1/chat/completions``.
+Ollama's ``/v1/chat/completions`` endpoint does **not** apply ``options.num_ctx`` (verified
+on 0.30.x — models load at ~4096 regardless of saved settings). Copilot chat is therefore
+**bridged** to native ``/api/chat`` where ``options`` is honored, and responses are converted
+back to OpenAI SSE (reasoning, tool calls, finish reasons).
 
-``/v1/completions`` is still translated to native ``/api/generate`` (where ``options`` is
-always honored).  Stream/response conversion helpers remain for that path and for tests.
+``prepare_v1_chat_completions_payload()`` remains for tests/helpers; production Copilot
+traffic uses ``openai_chat_to_native()`` + ``/api/chat``.
 """
 from __future__ import annotations
 
@@ -73,6 +74,35 @@ def _resolve_think_from_openai_payload(payload: dict[str, Any]) -> Any | None:
     if effort_s in ('none', 'false', 'off', '0'):
         return False
     return effort
+
+
+def _native_tool_calls_to_openai(native_calls: Any) -> list[dict[str, Any]]:
+    """Convert Ollama ``/api/chat`` tool_calls to OpenAI/Copilot SSE shape."""
+    if not isinstance(native_calls, list):
+        return []
+    openai_calls: list[dict[str, Any]] = []
+    for i, tc in enumerate(native_calls):
+        if not isinstance(tc, dict):
+            continue
+        fn = tc.get('function') if isinstance(tc.get('function'), dict) else {}
+        args = fn.get('arguments')
+        if isinstance(args, dict):
+            args_str = json.dumps(args, ensure_ascii=False)
+        elif args is None:
+            args_str = '{}'
+        else:
+            args_str = str(args)
+        idx = fn.get('index') if fn.get('index') is not None else i
+        openai_calls.append({
+            'id': tc.get('id') or f'call_{i}',
+            'index': idx,
+            'type': tc.get('type') or 'function',
+            'function': {
+                'name': fn.get('name') or '',
+                'arguments': args_str,
+            },
+        })
+    return openai_calls
 
 
 def _assistant_reasoning_piece(message: dict[str, Any]) -> str | None:
@@ -158,8 +188,10 @@ def native_chat_response_to_openai(native: dict[str, Any], completion_id: str | 
         'finish_reason': 'stop' if native.get('done', True) else None,
     }
     if message.get('tool_calls'):
-        choice['message']['tool_calls'] = message['tool_calls']
-        choice['finish_reason'] = 'tool_calls'
+        converted = _native_tool_calls_to_openai(message['tool_calls'])
+        if converted:
+            choice['message']['tool_calls'] = converted
+            choice['finish_reason'] = 'tool_calls'
     reasoning = _assistant_reasoning_piece(message)
     if reasoning:
         choice['message']['reasoning'] = reasoning
@@ -230,6 +262,7 @@ def stream_native_chat_lines_to_openai_sse(
     """Convert NDJSON ``/api/chat`` stream lines to OpenAI SSE chunks."""
     cid = completion_id or _completion_id()
     sent_role = False
+    seen_tool_calls = False
     last_native: dict[str, Any] | None = None
 
     for raw in line_iter:
@@ -258,11 +291,15 @@ def stream_native_chat_lines_to_openai_sse(
         elif content:
             delta['content'] = content
         if msg.get('tool_calls'):
-            delta['tool_calls'] = msg['tool_calls']
+            converted = _native_tool_calls_to_openai(msg['tool_calls'])
+            if converted:
+                seen_tool_calls = True
+                delta['tool_calls'] = converted
+                delta.setdefault('content', '')
         if delta:
             yield _openai_chat_chunk(cid, model, delta)
         if native.get('done'):
-            finish = 'tool_calls' if msg.get('tool_calls') else 'stop'
+            finish = 'tool_calls' if seen_tool_calls else 'stop'
             usage = None
             if include_usage:
                 usage = {}

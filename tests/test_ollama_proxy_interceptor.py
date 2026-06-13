@@ -225,8 +225,8 @@ def test_v1_models_passthrough(tmp_path, monkeypatch):
     assert captured['url'] == 'http://localhost:11434/v1/models'
 
 
-def test_v1_chat_completions_passthrough_with_num_ctx(tmp_path, monkeypatch):
-    """Copilot uses POST /v1/chat/completions; saved num_ctx merges into options."""
+def test_v1_chat_completions_routes_via_native_api_with_num_ctx(tmp_path, monkeypatch):
+    """Copilot uses POST /v1/chat/completions; saved num_ctx must reach /api/chat options."""
     app = _create_app_for_proxy_tests(
         tmp_path, monkeypatch,
         model_name='copilot-test', settings={'temperature': 0.55, 'num_ctx': 16384},
@@ -240,14 +240,17 @@ def test_v1_chat_completions_passthrough_with_num_ctx(tmp_path, monkeypatch):
         if kwargs.get('stream'):
             class StreamResp:
                 status_code = 200
-                def iter_content(self, chunk_size=1024):
-                    yield b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
-                    yield b'data: [DONE]\n\n'
+                def iter_lines(self):
+                    yield b'{"model":"copilot-test","message":{"role":"assistant","content":"hi"},"done":true}'
             return StreamResp()
         class Resp:
             status_code = 200
-            content = b'{"choices":[{"message":{"content":"hi"}}]}'
-            headers = {'Content-Type': 'application/json'}
+            def json(self):
+                return {
+                    'model': 'copilot-test',
+                    'message': {'role': 'assistant', 'content': 'hi'},
+                    'done': True,
+                }
         return Resp()
 
     with patch('requests.post', side_effect=fake_post):
@@ -259,7 +262,7 @@ def test_v1_chat_completions_passthrough_with_num_ctx(tmp_path, monkeypatch):
         resp.get_data()
 
     assert resp.status_code == 200
-    assert captured['url'] == 'http://localhost:11434/v1/chat/completions'
+    assert captured['url'] == 'http://localhost:11434/api/chat'
     assert captured['json']['options']['temperature'] == 0.55
     assert captured['json']['options']['num_ctx'] == 16384
     assert captured['json']['messages'] == [{'role': 'user', 'content': 'hi'}]

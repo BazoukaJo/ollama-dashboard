@@ -171,7 +171,7 @@ runs the model for that request). Saved values **win** over whatever the client 
 |------------------------------|-----------------|-------------------|
 | `POST /ollama/api/chat` | `/api/chat` | Yes |
 | `POST /ollama/api/generate` | `/api/generate` | Yes |
-| `POST /ollama/v1/chat/completions` | `/v1/chat/completions` (passthrough) | Yes (**GitHub Copilot Chat**) |
+| `POST /ollama/v1/chat/completions` | `/api/chat` (bridged) | Yes (**GitHub Copilot Chat**) |
 | `POST /ollama/v1/completions` | `/api/generate` (bridged) | Yes |
 | `GET /ollama/api/tags`, `GET /ollama/v1/models`, etc. | passthrough | No (list/show only) |
 
@@ -179,11 +179,10 @@ Ollama applies `options` **per request** — it does not remember them after unl
 does **not** use the dashboard **Start** button; the first Copilot chat message loads the
 model with your saved `num_ctx`, temperature, etc.
 
-**Copilot / OpenAI v1 note:** GitHub Copilot uses `/v1/chat/completions`. The dashboard
-proxy **passthroughs** that route to Ollama's native v1 endpoint (preserving Copilot-compatible
-SSE, reasoning, and tool-call format) while merging your saved settings into the request
-`options` (including `num_ctx`). Do not point Copilot at `:11434` directly if you want saved
-context from the dashboard.
+**Copilot / OpenAI v1 note:** Ollama's raw `/v1/chat/completions` does **not** apply
+`options.num_ctx` on current releases (models load at ~4096). The dashboard proxy
+**bridges** Copilot traffic to native `/api/chat` with your saved settings, then converts
+responses back to OpenAI SSE (`app/services/v1_native_bridge.py`).
 
 #### GitHub Copilot Chat (built-in Ollama provider)
 

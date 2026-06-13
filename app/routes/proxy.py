@@ -13,10 +13,12 @@ from flask import Blueprint, Response, current_app, jsonify, request, stream_wit
 
 from app.services.model_settings_helpers import lookup_settings_entry, merge_options_for_external_proxy
 from app.services.v1_native_bridge import (
+    native_chat_response_to_openai,
     native_generate_response_to_openai,
+    openai_chat_to_native,
     openai_completion_to_native,
     openai_error_sse_lines,
-    prepare_v1_chat_completions_payload,
+    stream_native_chat_lines_to_openai_sse,
     stream_native_generate_lines_to_openai_sse,
 )
 
@@ -131,47 +133,6 @@ def _v1_include_usage(payload):
     return isinstance(stream_opts, dict) and bool(stream_opts.get('include_usage'))
 
 
-def _forward_v1_chat_completions(payload):
-    """Forward Copilot chat to Ollama's native ``/v1/chat/completions`` (SSE-compatible)."""
-    ollama_url = _ollama_url()
-    upstream_url = f"{ollama_url}/v1/chat/completions"
-    stream = bool(payload.get('stream'))
-    model_name = payload.get('model') or ''
-
-    if stream:
-        upstream = requests.post(upstream_url, json=payload, stream=True)
-        if upstream.status_code != 200:
-            err_text = (upstream.text or upstream.reason or 'Upstream error')[:2000]
-
-            def error_stream():
-                for line in openai_error_sse_lines(
-                    err_text, status_code=upstream.status_code, model=model_name,
-                ):
-                    yield line.encode('utf-8')
-
-            response = Response(
-                stream_with_context(error_stream()),
-                status=upstream.status_code,
-                content_type='text/event-stream',
-            )
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Cache-Control'] = 'no-cache'
-            return response
-
-        def stream_body():
-            for chunk in upstream.iter_content(chunk_size=1024):
-                if chunk:
-                    yield chunk
-
-        response = Response(stream_with_context(stream_body()), content_type='text/event-stream')
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Cache-Control'] = 'no-cache'
-        return response
-
-    response_data = requests.post(upstream_url, json=payload)
-    return _proxy_upstream_response(response_data)
-
-
 def _forward_v1_via_native_api(native_payload, native_endpoint, openai_payload):
     """POST to native Ollama API and return an OpenAI-shaped response."""
     ollama_url = _ollama_url()
@@ -200,11 +161,19 @@ def _forward_v1_via_native_api(native_payload, native_endpoint, openai_payload):
             return response
 
         def stream_body():
-            for chunk in stream_native_generate_lines_to_openai_sse(
-                upstream.iter_lines(),
-                model=model_name,
-            ):
-                yield chunk.encode('utf-8')
+            if native_endpoint == '/api/chat':
+                for chunk in stream_native_chat_lines_to_openai_sse(
+                    upstream.iter_lines(),
+                    model=model_name,
+                    include_usage=_v1_include_usage(openai_payload),
+                ):
+                    yield chunk.encode('utf-8')
+            else:
+                for chunk in stream_native_generate_lines_to_openai_sse(
+                    upstream.iter_lines(),
+                    model=model_name,
+                ):
+                    yield chunk.encode('utf-8')
 
         response = Response(stream_with_context(stream_body()), content_type='text/event-stream')
         response.headers['Access-Control-Allow-Origin'] = '*'
@@ -218,7 +187,10 @@ def _forward_v1_via_native_api(native_payload, native_endpoint, openai_payload):
         native_body = response_data.json()
     except ValueError:
         return _proxy_upstream_response(response_data)
-    openai_body = native_generate_response_to_openai(native_body)
+    if native_endpoint == '/api/chat':
+        openai_body = native_chat_response_to_openai(native_body)
+    else:
+        openai_body = native_generate_response_to_openai(native_body)
     response = Response(
         json.dumps(openai_body),
         status=200,
@@ -230,11 +202,11 @@ def _forward_v1_via_native_api(native_payload, native_endpoint, openai_payload):
 
 @bp.route('/ollama/v1/chat/completions', methods=['POST'])
 def intercept_v1_chat_completions():
-    """OpenAI chat (VS Code Copilot): passthrough to Ollama /v1 with merged options."""
+    """OpenAI chat (VS Code Copilot): bridge to /api/chat so num_ctx and options apply."""
     payload = request.get_json(silent=True) or {}
     dashboard_options = _load_dashboard_options(payload.get('model'))
-    merged_payload = prepare_v1_chat_completions_payload(payload, dashboard_options)
-    return _forward_v1_chat_completions(merged_payload)
+    native_payload = openai_chat_to_native(payload, dashboard_options)
+    return _forward_v1_via_native_api(native_payload, '/api/chat', payload)
 
 
 @bp.route('/ollama/v1/completions', methods=['POST'])
