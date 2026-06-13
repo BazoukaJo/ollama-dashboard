@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ollama-dashboard"
 # PEP 440: use dotted releases (e.g. 1.0006 normalizes to 1.6 on PyPI).
-version = "1.1.0"
+version = "1.2.0"
 description = "Web dashboard for Ollama — models, settings, system stats"
 readme = "README.md"
 requires-python = ">=3.8"

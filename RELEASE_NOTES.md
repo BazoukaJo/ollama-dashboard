@@ -1,10 +1,19 @@
 # Release Notes
 
+## Version 1.2.0 (2026)
+
+- **Benchmark-backed model defaults** — `model_recommendation_profiles.json` applies family-specific settings (Qwen3, DeepSeek-R1, coders, Llama 3, vision, etc.) sourced from official model cards. Context sizing respects model window and local VRAM/RAM caps. **Apply Recommended** and `/api/models/settings/recommended` always recompute fresh values.
+- **Apply all recommended** — `POST /api/models/settings/apply_all_recommended` skips models with `source: user` so custom saves (e.g. a higher `num_ctx`) are not overwritten. Admin page shows applied/skipped counts.
+- **Copilot proxy fix** — `/ollama/v1/chat/completions` passthroughs to Ollama's native v1 endpoint with saved settings merged into `options` (including `num_ctx`). Preserves Copilot-compatible SSE for reasoning models and Agent-mode tool calls. `/v1/completions` still bridges to `/api/generate` via `v1_native_bridge.py`. Streaming upstream errors return proper SSE error chunks.
+- **Profile coverage** — Added patterns for `qwen3.6`, `gemma4`, `nemotron`, `lfm2.5`, and related current Ollama library names.
+- **Docs** — README, ARCHITECTURE, and TROUBLESHOOTING updated for Copilot v1 passthrough; troubleshooting entry for "Sorry, no response was returned".
+
 ## Version 1.1.0 (2026)
 
 - **Python package** — `pyproject.toml` is a full setuptools project: runtime dependencies, `package-data` for `app` templates/static/JSON, and console script **`ollama-dashboard`** (`ollama_dashboard_cli.py`). Version is **PEP 440**–compliant (`1.1.0`; legacy tags like `1.0005` normalize to `1.5` on PyPI). Build with `python -m build`; install with `pip install dist/*.whl` or publish via `twine` (see README).
 - **Settings-injecting proxy fixes** — both the dashboard's built-in `/ollama/api/...` proxy (`intercept_ollama_parameters` in `app/__init__.py`) and the standalone `server_with_proxy.js` had bugs that could silently stop saved per-model settings from ever reaching Ollama for external clients (VS Code, `ollama run`, etc.): merging the *whole* stored `{settings, source, last_updated}` entry instead of just its inner `settings` dict, and — whenever `OLLAMA_HOST` carried an embedded port (`host:port`) — double-porting the upstream URL into `http://127.0.0.1:11436:11434`. Both fixed in both proxies, which now share the same `_get_ollama_host_port()` / `resolveOllamaHostPort()` resolution as the rest of the app. New regression suite: `tests/test_ollama_proxy_interceptor.py`.
 - **Port-takeover deployment mode** — `server_with_proxy.js` can now stand in for Ollama at Ollama's *own* default address (`:11434`): relocate the real Ollama via `OLLAMA_HOST=host:port` and run the proxy on the vacated port, and every client that assumes Ollama lives at its default address (VS Code, `ollama run`, curl, LangChain, ...) gets saved settings transparently — zero per-client reconfiguration. New `start_proxy_takeover.bat` launcher automates the takeover with pre-flight checks. See the README's [Per-Model Settings: scope and limitations](README.md#per-model-settings-scope-and-limitations).
+- **GitHub Copilot / OpenAI-compatible proxy** — built-in `/ollama/v1/chat/completions` and `/ollama/v1/models` routes (`app/routes/proxy.py`); saved settings merged on inference. Fixes Waitress 500 when passthrough forwarded hop-by-hop headers from Ollama. Docs updated for Copilot endpoint `http://127.0.0.1:5000/ollama`.
 
 ## Version 1.0005 (2026)
 

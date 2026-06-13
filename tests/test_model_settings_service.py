@@ -130,9 +130,9 @@ def test_recommendations_small_medium_large(tmp_path):
     assert 0.65 <= entry_med['temperature'] <= 0.75
     assert entry_med['num_ctx'] >= 2048
 
-    # Large model heuristic
+    # Large model — generic template unless a family profile matches
     entry_large = svc._recommend_settings_for_model({'name': 'big-model', 'details': {'parameter_size': '13B'}, 'has_vision': False})
-    assert entry_large['temperature'] <= 0.65
+    assert entry_large['temperature'] <= 0.75
     assert entry_large['num_ctx'] >= 4096
 
 def test_recommendation_clamps_num_ctx_to_model_window(tmp_path):
@@ -186,7 +186,7 @@ def test_recommendations_for_coding_models_are_more_deterministic(tmp_path):
             'has_tools': True,
         }
     )
-    assert entry_code['temperature'] <= 0.32
+    assert entry_code['temperature'] <= 0.25
     assert entry_code['num_predict'] >= 1024
     assert entry_code['num_ctx'] >= 8192
 

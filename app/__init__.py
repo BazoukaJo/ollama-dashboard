@@ -4,7 +4,7 @@ Initializes Flask app with configuration, services, and route blueprints.
 Single initialization point - ensures no duplicate service creation.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 import html
 import logging
@@ -161,7 +161,7 @@ def create_app(config_name='development'):
         return response
 
     # ===== BLUEPRINT REGISTRATION =====
-    # (Proxy routes for /ollama/api/... are in app/routes/proxy.py, registered via init_app)
+    # Settings-injecting /ollama/... proxy (native + /v1 for Copilot): app/routes/proxy.py
     from app.routes import init_app  # pylint: disable=import-outside-toplevel
 
     init_app(app)

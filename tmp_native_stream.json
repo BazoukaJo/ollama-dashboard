@@ -1,0 +1,1 @@
+{"model":"qwen3:14b","messages":[{"role":"user","content":"Say hi"}],"stream":true}

@@ -7,7 +7,10 @@
 // /api/generate request it looks up the target model in the SAME model_settings.json
 // file the dashboard reads/writes (see app/services/model_settings_helpers.py),
 // merges the saved "settings" into the request's "options", and forwards the
-// rewritten request upstream to Ollama.
+// rewritten request upstream to Ollama. Also accepts /v1/chat/completions and /v1/completions
+// (GitHub Copilot): merges saved settings into request options before forwarding.
+// For Copilot with the /ollama URL prefix and CORS, prefer the Flask dashboard proxy
+// at :5000/ollama (app/routes/proxy.py).
 //
 // This is an alternative to the dashboard's "Bake into Model" feature
 // (POST /api/models/settings/<model>/bake): baking creates a derived model with
@@ -69,6 +72,13 @@ const SETTINGS_FILE_PATH = path.resolve(process.env.MODEL_SETTINGS_FILE || path.
 const OLLAMA_DEFAULT_PORT = 11434;
 const IS_PORT_TAKEOVER = PROXY_PORT === OLLAMA_DEFAULT_PORT;
 
+function mergeOptionsForExternalProxy(incomingOptions, dashboardSettings) {
+    const incoming = { ...(incomingOptions || {}) };
+    const dashboard = { ...(dashboardSettings || {}) };
+    // Saved dashboard values (including num_ctx) win over the client request.
+    return { ...incoming, ...dashboard };
+}
+
 function loadModelSettings() {
     try {
         if (!fs.existsSync(SETTINGS_FILE_PATH)) return {};
@@ -100,39 +110,30 @@ function findSettingsForModel(modelSettings, modelName) {
     return null;
 }
 
-// Merge saved per-model settings into /api/chat and /api/generate request bodies
-// before they reach Ollama. Body parsing is scoped to just these two routes so the
-// proxy can still stream/forward everything else (model pulls, /api/ps, etc.)
-// untouched. Saved values take precedence over whatever the calling client sent, so
-// the dashboard's saved defaults are what actually gets used — matching the behavior
-// the dashboard applies to its own requests.
-app.use(['/api/chat', '/api/generate'], express.json(), (req, res, next) => {
-    const body = req.body || {};
-    const modelName = body.model;
-
-    if (modelName) {
-        const savedSettings = findSettingsForModel(loadModelSettings(), modelName);
-        if (savedSettings && typeof savedSettings === 'object') {
-            req.body = {
-                ...body,
-                options: {
-                    ...(body.options || {}),
-                    ...savedSettings,
-                },
-            };
-        }
+// Merge saved per-model settings into inference request bodies before they reach Ollama.
+function applySavedSettings(body) {
+    const modelName = body && body.model;
+    if (!modelName) return body;
+    const savedSettings = findSettingsForModel(loadModelSettings(), modelName);
+    if (savedSettings && typeof savedSettings === 'object') {
+        return {
+            ...body,
+            options: mergeOptionsForExternalProxy(body.options, savedSettings),
+        };
     }
+    return body;
+}
+
+app.use(['/api/chat', '/api/generate', '/v1/chat/completions', '/v1/completions'], express.json(), (req, res, next) => {
+    req.body = applySavedSettings(req.body || {});
     next();
 });
 
-// Mounted at root with pathFilter (rather than app.use('/api', proxy)) so the
-// upstream request keeps the '/api/...' prefix — Express strips the mount prefix
-// from req.url before handing off, which would otherwise send Ollama 'POST /chat'
-// instead of 'POST /api/chat'.
+// Mounted at root with pathFilter so the upstream request keeps the full path prefix.
 const ollamaProxy = createProxyMiddleware({
     target: OLLAMA_URL,
     changeOrigin: true,
-    pathFilter: '/api',
+    pathFilter: (pathname) => pathname.startsWith('/api') || pathname.startsWith('/v1'),
     on: {
         // Re-serializes req.body (rewritten above by express.json() + our middleware)
         // back onto the proxied request — required because body-parser consumes the
@@ -165,5 +166,9 @@ app.listen(PROXY_PORT, () => {
         console.log('(Prefer zero client-side config? See "port takeover" in the file header');
         console.log('comment / README — run this with PROXY_PORT=11434 instead.)');
     }
+    console.log('====================================================');
+    console.log('NOTE: For GitHub Copilot, prefer the Flask dashboard proxy at');
+    console.log(':5000/ollama (CORS + /ollama prefix). This Node proxy merges saved');
+    console.log('settings on /api/chat, /api/generate, and /v1/chat/completions.');
     console.log('====================================================');
 });

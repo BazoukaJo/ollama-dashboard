@@ -14,10 +14,17 @@ from app.services.model_fetcher import get_all_downloadable_models_live as _get_
 from app.services.model_fetcher import get_best_models_live as _get_best
 from app.services.model_fetcher import get_downloadable_models_live as _get_dl
 from app.services.model_helpers import context_length_as_int
+from app.services.model_recommendation_profiles import (
+    apply_profile_settings,
+    match_recommendation_profile,
+    resolve_num_ctx_for_model,
+)
 from app.services.model_settings_helpers import (
+    compute_fresh_recommended_settings_entry,
     delete_model_settings_entry,
     ensure_model_settings_exists,
     get_default_settings_template,
+    get_existing_model_settings_entry,
     get_model_settings_with_fallback_entry,
     load_model_settings,
     model_settings_file_path,
@@ -571,67 +578,44 @@ class OllamaServiceUtilities:
         is_unreal_workflow = any(k in name_l for k in ('unreal', 'ue5', 'blueprint', 'cpp', 'c++'))
         code_first_profile = is_coding_model or is_unreal_workflow
         ctx_cap = _resource_ctx_cap()
-
-        # Base heuristics by parameter size (billions)
         param_size = _param_size_to_float(details.get('parameter_size'))
+
+        # Light parameter-size nudges (profile + context resolver apply stronger defaults).
         if param_size is not None:
             if param_size <= 2:
-                settings['temperature'] = max(settings['temperature'], 0.78)
                 settings['num_predict'] = max(settings['num_predict'], 512)
-                settings['num_ctx'] = max(settings['num_ctx'], 4096)
             elif param_size <= 8:
-                settings['temperature'] = min(max(settings['temperature'], 0.68), 0.78)
                 settings['num_predict'] = max(settings['num_predict'], 768)
-                settings['num_ctx'] = max(settings['num_ctx'], 8192)
             elif param_size <= 14:
-                settings['temperature'] = min(settings['temperature'], 0.62)
                 settings['num_predict'] = max(settings['num_predict'], 896)
-                settings['num_ctx'] = max(settings['num_ctx'], 12288)
             else:
-                settings['temperature'] = min(settings['temperature'], 0.58)
                 settings['num_predict'] = max(settings['num_predict'], 1024)
-                settings['num_ctx'] = max(settings['num_ctx'], 16384)
 
-        # Coding-heavy defaults (Unreal C++ / Blueprint review benefits from deterministic output).
-        if code_first_profile:
-            settings['temperature'] = min(settings['temperature'], 0.32)
-            settings['top_p'] = min(settings.get('top_p', 0.9), 0.9)
-            settings['top_k'] = min(settings.get('top_k', 40), 30)
-            settings['repeat_penalty'] = max(settings.get('repeat_penalty', 1.05), 1.08)
-            settings['num_predict'] = max(settings.get('num_predict', 512), 1152)
+        # Benchmark-backed family profile (Qwen3, DeepSeek-R1, Llama 3, coders, etc.).
+        profile = match_recommendation_profile(info)
+        max_ctx = context_length_as_int(info)
+        apply_profile_settings(settings, profile, max_ctx=max_ctx, ctx_cap=ctx_cap)
 
-            # Keep larger context for large codebases while respecting rig-aware cap.
-            coding_ctx_target = 12288
-            if param_size is not None and param_size >= 12:
-                coding_ctx_target = 16384
-            if param_size is not None and param_size >= 30:
-                coding_ctx_target = 20480
-            settings['num_ctx'] = max(settings.get('num_ctx', 4096), min(coding_ctx_target, ctx_cap))
-
-        # Capabilities heuristics
+        # Capability flags after profile (tool/vision metadata refines profile defaults).
         if info.get('has_vision') or 'vision' in families or 'llava' in name_l:
-            settings['num_ctx'] = max(settings['num_ctx'], 4096)
-            settings['top_p'] = max(settings['top_p'], 0.92)
-        if info.get('has_reasoning') or 'deepseek' in name_l:
-            settings['num_ctx'] = max(settings['num_ctx'], 8192)
-            settings['temperature'] = min(settings['temperature'], 0.5)
             settings['num_predict'] = max(settings['num_predict'], 1024)
         if info.get('has_tools') or 'tool' in name_l:
             settings['top_k'] = min(settings.get('top_k', 40), 20)
-            settings['temperature'] = min(settings['temperature'], 0.55)
+        if info.get('has_reasoning'):
+            settings['temperature'] = min(settings.get('temperature', 0.75), 0.6)
+            settings['num_predict'] = max(settings['num_predict'], 8192)
 
-        # Family-specific nudges
-        if 'qwen' in families or 'qwen' in name_l:
-            settings['repeat_penalty'] = max(settings['repeat_penalty'], 1.08)
-            settings['num_predict'] = max(settings['num_predict'], 640)
+        # Unreal / niche coding workflows without a catalog profile match.
+        if code_first_profile and not profile:
+            settings['temperature'] = min(settings['temperature'], 0.32)
+            settings['top_p'] = min(settings.get('top_p', 0.9), 0.9)
+            settings['top_k'] = min(settings.get('top_k', 40), 30)
+            settings['repeat_penalty'] = max(settings.get('repeat_penalty', 1.05), 1.1)
+            settings['num_predict'] = max(settings.get('num_predict', 512), 4096)
 
-        # Respect model context window from Ollama /api/show (first save after download)
-        max_ctx = context_length_as_int(info)
-        # Also respect local rig cap to avoid excessive memory pressure.
-        settings['num_ctx'] = min(settings.get('num_ctx', 4096), ctx_cap)
-        if max_ctx is not None:
-            target = min(max_ctx, max(settings['num_ctx'], min(8192, max_ctx)))
-            settings['num_ctx'] = target
+        settings['num_ctx'] = resolve_num_ctx_for_model(
+            settings, max_ctx=max_ctx, ctx_cap=ctx_cap, param_size=param_size,
+        )
 
         return settings
 

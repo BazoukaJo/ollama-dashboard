@@ -348,15 +348,12 @@ async function pollForModelDeleted(
 
 async function startModel(modelName) {
   try {
-    const response = await fetch(
-      `/api/models/start/${encodeURIComponent(modelName)}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+    const response = await fetch(modelActionUrl("start", modelName), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+    });
     const r = await readApiJson(response);
     if (!r.responseOk) {
       showNotification(
@@ -400,16 +397,13 @@ async function stopModel(modelName, force) {
       "info",
     );
 
-    const response = await fetch(
-      `/api/models/stop/${encodeURIComponent(modelName)}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ force: !!force }),
+    const response = await fetch(modelActionUrl("stop", modelName), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      body: JSON.stringify({ force: !!force }),
+    });
 
     const sr = await readApiJson(response);
     if (!sr.responseOk) {
@@ -497,15 +491,12 @@ async function restartModel(modelName) {
   try {
     showNotification(`Restarting model ${modelName}...`, "info");
 
-    const response = await fetch(
-      `/api/models/restart/${encodeURIComponent(modelName)}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+    const response = await fetch(modelActionUrl("restart", modelName), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+    });
     const r = await readApiJson(response);
     if (!r.responseOk) {
       showNotification(
@@ -554,15 +545,12 @@ async function deleteModel(modelName) {
   try {
     showNotification(`Deleting model ${modelName}...`, "info");
 
-    const response = await fetch(
-      `/api/models/delete/${encodeURIComponent(modelName)}`,
-      {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
+    const response = await fetch(modelActionUrl("delete", modelName), {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+    });
     const dr = await readApiJson(response);
     const result = dr.responseOk
       ? dr.data
@@ -2435,7 +2423,7 @@ async function pullModel(modelName) {
   try {
     // Step 1: Pull model with streaming status updates
     const pullResp = await fetch(
-      `/api/models/pull/${encodeURIComponent(modelName)}?stream=true`,
+      modelActionUrl("pull", modelName, { stream: "true" }),
       { method: "POST" },
     );
     if (!pullResp.ok) {
@@ -2526,10 +2514,9 @@ async function pullModel(modelName) {
       }
     } else {
       // Fallback for environments without streaming support
-      const fallback = await fetch(
-        `/api/models/pull/${encodeURIComponent(modelName)}`,
-        { method: "POST" },
-      );
+      const fallback = await fetch(modelActionUrl("pull", modelName), {
+        method: "POST",
+      });
       const fr = await readApiJson(fallback);
       const fallbackResult = fr.responseOk ? fr.data : {};
       pullSucceeded = !!fallbackResult.success;

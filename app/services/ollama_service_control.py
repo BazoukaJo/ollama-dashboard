@@ -29,6 +29,22 @@ WINDOWS_UPDATE_FAILURE_TAG = " [win-upd:setup-exe]"
 _CURL_FALLBACK_PATHS = (r"%SystemRoot%\System32\curl.exe",)
 
 
+def _windows_quit_tray_app():
+    """Quit Ollama desktop tray app (Ollama app.exe). Leaves backend serve/service alone."""
+    if platform.system() != 'Windows':
+        return
+    try:
+        subprocess.run(
+            ['taskkill', '/F', '/IM', 'Ollama app.exe'],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError, OSError):
+        pass
+
+
 def _windows_resolve_exe(name: str, *extra_paths: str) -> Optional[str]:
     """Find an executable: PATH first, then well-known install locations (service / non-login PATH)."""
     found = shutil.which(name)
@@ -310,6 +326,7 @@ class OllamaServiceControl:
         """Force-kill Ollama and child processes (Windows: sc stop + taskkill /T, Unix: pkill -9)."""
         try:
             if platform.system() == 'Windows':
+                _windows_quit_tray_app()
                 try:
                     subprocess.run(
                         ['sc', 'stop', 'Ollama'],
@@ -548,6 +565,8 @@ class OllamaServiceControl:
                     return {"success": True, "message": "Ollama service appears to be running (API verification failed)"}
 
             if platform.system() == "Windows":
+                # Never launch the desktop tray app — backend service / ollama serve only.
+                _windows_quit_tray_app()
                 # On Windows, try multiple methods
                 methods_tried = []
 
@@ -958,7 +977,7 @@ class OllamaServiceControl:
 
             try:
                 proc = subprocess.run(
-                    [path, "/SP-", "/VERYSILENT", "/NORESTART"],
+                    [path, "/SP-", "/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES"],
                     capture_output=True,
                     text=True,
                     timeout=900,
@@ -1207,6 +1226,9 @@ class OllamaServiceControl:
                 time.sleep(10)
 
             ok, upgrade_msg = self._run_ollama_upgrade()
+            if platform.system() == "Windows":
+                time.sleep(2)
+                _windows_quit_tray_app()
             start_result = self.start_service()
 
             try:
@@ -1404,6 +1426,9 @@ class OllamaServiceControl:
                 pass
 
             ok, detail = self._run_ollama_install()
+            if platform.system() == "Windows":
+                time.sleep(2)
+                _windows_quit_tray_app()
             start_result = self.start_service()
 
             try:

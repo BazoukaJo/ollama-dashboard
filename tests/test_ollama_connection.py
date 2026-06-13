@@ -78,6 +78,21 @@ class TestGetOllamaHostPort:
         service_with_app.app.config['OLLAMA_PORT'] = 11434
         assert service_with_app.get_ollama_host_port() == service_with_app._get_ollama_host_port()
 
+    def test_strips_proxy_url_misconfiguration(self, service_with_app):
+        """OLLAMA_HOST=host:port/ollama must not append /ollama to outbound API URLs."""
+        service_with_app.app.config['OLLAMA_HOST'] = '127.0.0.1:11436/ollama'
+        service_with_app.app.config['OLLAMA_PORT'] = 11434
+        host, port = service_with_app._get_ollama_host_port()
+        assert host == '127.0.0.1'
+        assert port == 11436
+
+    def test_embedded_port_in_host_after_scheme_strip(self, service_with_app):
+        service_with_app.app.config['OLLAMA_HOST'] = 'http://127.0.0.1:11436'
+        service_with_app.app.config['OLLAMA_PORT'] = 11434
+        host, port = service_with_app._get_ollama_host_port()
+        assert host == '127.0.0.1'
+        assert port == 11436
+
 
 class TestAppConfig:
     """Verify that create_app() correctly exposes OLLAMA_HOST/PORT."""

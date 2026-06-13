@@ -21,6 +21,11 @@ from app.services.model_helpers import (
     attach_last_token_usage_to_model,
     attach_request_context_to_model,
 )
+from app.services.model_settings_helpers import (
+    compute_fresh_recommended_settings_entry,
+    get_existing_model_settings_entry,
+)
+from app.services.ollama_core import OllamaServiceCore
 from app.services.ollama_update_check import run_startup_ollama_update_check
 from app.services.validators import InputValidator
 
@@ -50,7 +55,7 @@ def _get_timezone_name():
 
 def _normalize_ollama_host_port_for_display(raw_host, raw_port):
     """If OLLAMA_HOST is host:port, use that port once (avoid 127.0.0.1:11434:11434 in UI)."""
-    host = str(raw_host or 'localhost').strip() or 'localhost'
+    host = OllamaServiceCore._clean_ollama_host_string(str(raw_host or 'localhost'))
     try:
         port = int(raw_port)
     except (TypeError, ValueError):
@@ -271,7 +276,8 @@ def _handle_model_error(response, model_name, operation="operation"):
 
 
 @bp.route('/api/models/start/<model_name>', methods=['POST'], endpoint='api_start_model')
-def start_model(model_name):
+@bp.route('/api/models/start', methods=['POST'], endpoint='api_start_model_qp')
+def start_model(model_name=None):
     """
     Start a model by loading it into memory.
 
@@ -279,9 +285,9 @@ def start_model(model_name):
     tries to pull the model from the registry before loading.
     Retries up to 3 times for transient connection errors (forcibly closed).
     """
-    err, status = _validate_model_name(model_name)
-    if err is not None:
-        return err, status
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
     try:
         # Check if model is already running
         running_models = _get_ollama_service().get_running_models(force_refresh=True)
@@ -505,15 +511,16 @@ def _force_unload_via_ollama_restart(model_name):
 
 
 @bp.route('/api/models/stop/<model_name>', methods=['POST'])
-def stop_model(model_name):
+@bp.route('/api/models/stop', methods=['POST'], endpoint='api_stop_model_qp')
+def stop_model(model_name=None):
     """Unload a model from memory using Ollama API (keep_alive=0).
 
     Optional JSON body ``{"force": true}`` restarts Ollama to force-clear memory
     when graceful unload fails or the model is stuck.
     """
-    err, status = _validate_model_name(model_name)
-    if err is not None:
-        return err, status
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
     try:
         payload = request.get_json(silent=True) or {}
         force = bool(payload.get('force'))
@@ -606,15 +613,16 @@ def stop_model(model_name):
 
 
 @bp.route('/api/models/restart/<model_name>', methods=['POST'])
-def restart_model(model_name):
+@bp.route('/api/models/restart', methods=['POST'], endpoint='api_restart_model_qp')
+def restart_model(model_name=None):
     """Restart a model by stopping then starting it.
 
     Atomically performs stop (if running) followed by warm start.
     If stop fails, does not proceed with start.
     """
-    err, status = _validate_model_name(model_name)
-    if err is not None:
-        return err, status
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
     try:
         # Verify Ollama service is running
         if not _get_ollama_service().get_service_status():
@@ -959,7 +967,7 @@ def api_get_recommended_settings(model_name=None):
     if err_resp:
         return err_resp
     try:
-        data = _get_ollama_service().get_model_settings_with_fallback(model_name)
+        data = compute_fresh_recommended_settings_entry(_get_ollama_service(), model_name)
         if data is None:
             return {"error": f"Settings not available for model {model_name}"}, 404
         return {"model": model_name, "settings": data.get('settings'), "source": data.get('source', 'recommended')}
@@ -1030,19 +1038,30 @@ def api_migrate_model_settings():
 def api_apply_all_recommended():
     try:
         models = _get_ollama_service().get_available_models()
+        svc = _get_ollama_service()
         applied = 0
+        skipped = 0
         errors = []
         for m in models:
             try:
                 name = m.get('name')
-                settings_data = _get_ollama_service().get_model_settings_with_fallback(name)
-                if settings_data and settings_data.get('settings'):
-                    success = _get_ollama_service().save_model_settings(name, settings_data['settings'], source='recommended')
+                if not name:
+                    continue
+                existing = get_existing_model_settings_entry(svc, name)
+                if existing and existing.get('source') == 'user':
+                    skipped += 1
+                    continue
+                fresh = compute_fresh_recommended_settings_entry(svc, name)
+                if fresh and fresh.get('settings'):
+                    success = svc.save_model_settings(name, fresh['settings'], source='recommended')
                     if success:
                         applied += 1
             except Exception as e:
                 errors.append(str(e))
-        return _json_success(f"Applied recommended settings to {applied} models.", extra={'applied': applied, 'errors': errors})
+        return _json_success(
+            f"Applied recommended settings to {applied} models ({skipped} user-saved skipped).",
+            extra={'applied': applied, 'skipped': skipped, 'errors': errors},
+        )
     except Exception as e:
         return _json_error(f"Error applying all recommended settings: {str(e)}")
 
@@ -1079,7 +1098,7 @@ def api_reset_model_settings(model_name=None):
         return err_resp
     try:
         # Get recommended settings via fallback
-        settings_data = _get_ollama_service().get_model_settings_with_fallback(model_name)
+        settings_data = compute_fresh_recommended_settings_entry(_get_ollama_service(), model_name)
         if not settings_data or not settings_data.get('settings'):
             return _json_error(f"Could not determine recommended settings for {model_name}", status=500)
         # Save as recommended (not user)
@@ -1251,11 +1270,12 @@ def _verify_model_deleted(model_name, max_attempts=5, delay_seconds=1):
 
 
 @bp.route('/api/models/delete/<model_name>', methods=['DELETE'])
-def delete_model(model_name):
+@bp.route('/api/models/delete', methods=['DELETE'], endpoint='api_delete_model_qp')
+def delete_model(model_name=None):
     """Delete a model and its settings."""
-    err, status = _validate_model_name(model_name)
-    if err is not None:
-        return err, status
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
     try:
         svc = _get_ollama_service()
         # Unload model first if it is running (Ollama may refuse or fail to delete loaded models)
@@ -1488,11 +1508,12 @@ def _json_error(message, status=500):
     return jsonify({"success": False, "error": message, "message": message}), status
 
 @bp.route('/api/models/pull/<model_name>', methods=['POST'])
-def api_pull_model(model_name):
+@bp.route('/api/models/pull', methods=['POST'], endpoint='api_pull_model_qp')
+def api_pull_model(model_name=None):
     """Pull a model with optional streaming progress updates."""
-    err, status = _validate_model_name(model_name)
-    if err is not None:
-        return err, status
+    model_name, err_resp = _resolve_model_name(model_name)
+    if err_resp:
+        return err_resp
     stream = request.args.get('stream', 'false').lower() == 'true'
     try:
         if stream:

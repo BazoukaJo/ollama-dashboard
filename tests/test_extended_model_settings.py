@@ -36,9 +36,10 @@ def test_recommendation_preserves_keys():
     rec = svc._recommend_settings_for_model(model_info)
     for k in ALL_KEYS:
         assert k in rec, f"Recommended missing key {k}"
-    # Heuristic expectations
-    assert rec['num_predict'] >= 300  # medium bucket adjustment
-    assert rec['repeat_penalty'] >= 1.05  # qwen adjustment raises
+    # Qwen2.5 profile (official: repeat_penalty 1.0 on Ollama — not 1.1)
+    assert rec['temperature'] == 0.7
+    assert rec['repeat_penalty'] == 1.0
+    assert rec['top_k'] == 20
 
 
 def test_save_normalizes_types(tmp_path):

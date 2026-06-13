@@ -119,6 +119,25 @@ def test_stop_model_invalid_name(client):
     assert data['success'] is False
 
 
+@patch('app.routes.main._verify_model_unloaded', return_value=True)
+@patch('app.routes.main.ollama_service._session.post')
+@patch('app.routes.main.ollama_service.get_running_models')
+@patch('app.routes.main.ollama_service.get_service_status')
+def test_stop_model_query_param_with_slash(
+    mock_status, mock_running, mock_post, mock_verify, client
+):
+    """POST /api/models/stop?model=... handles library-style names with slashes."""
+    mock_status.return_value = True
+    mock_running.return_value = [{'name': 'user/model:latest', 'size': 1}]
+    mock_post.return_value = MagicMock(status_code=200, json=lambda: {'status': 'success'})
+
+    resp = client.post('/api/models/stop?model=user/model:latest')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['success'] is True
+    assert mock_post.call_args[1]['json']['model'] == 'user/model:latest'
+
+
 # ---------------------------------------------------------------------------
 # Force unload (Ollama restart escape hatch)
 # ---------------------------------------------------------------------------

@@ -351,6 +351,23 @@ class OllamaServiceCore:
         except (TypeError, ValueError, AttributeError):
             return None
 
+    @staticmethod
+    def _clean_ollama_host_string(host: str) -> str:
+        """Strip scheme or path suffixes from misconfigured OLLAMA_HOST values.
+
+        Users following the /ollama proxy docs sometimes set OLLAMA_HOST to
+        ``http://localhost:5000/ollama`` — that breaks direct ``/api/...`` calls.
+        """
+        host = (host or '').strip()
+        lower = host.lower()
+        for prefix in ('https://', 'http://'):
+            if lower.startswith(prefix):
+                host = host[len(prefix):]
+                break
+        if '/' in host:
+            host = host.split('/', 1)[0]
+        return host.strip() or 'localhost'
+
     def _get_ollama_host_port(self):
         """Get Ollama host and port with proper fallbacks."""
         logger = self.__dict__.get('logger', logging.getLogger(__name__))
@@ -376,6 +393,7 @@ class OllamaServiceCore:
             # Ensure we have valid values
             if not host or not isinstance(host, str):
                 host = 'localhost'
+            host = self._clean_ollama_host_string(host)
             # If host is "host:port" (one colon, port digits), strip port to avoid double port (e.g. 0.0.0.0:11434:11434)
             if isinstance(host, str) and host.count(':') == 1:
                 host_part, _, port_part = host.partition(':')

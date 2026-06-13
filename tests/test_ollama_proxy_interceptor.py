@@ -76,7 +76,7 @@ def test_intercept_chat_merges_only_inner_settings_dict(tmp_path, monkeypatch):
     options = captured['json']['options']
     assert options['temperature'] == 0.6  # saved value wins over the client's 0.9
     assert options['top_k'] == 20
-    assert options['num_ctx'] == 16384
+    assert options['num_ctx'] == 16384  # saved num_ctx wins over default 8192
     assert options['extra_client_opt'] == 'keep-me'  # client-only keys survive the merge
     for leaked_key in ('settings', 'source', 'last_updated'):
         assert leaked_key not in options
@@ -148,3 +148,149 @@ def test_proxy_general_ollama_calls_forwards_to_embedded_port(tmp_path, monkeypa
     assert resp.status_code == 200
     assert captured['method'] == 'GET'
     assert captured['url'] == 'http://127.0.0.1:11436/api/tags'
+
+
+def test_proxy_general_strips_hop_by_hop_headers(tmp_path, monkeypatch):
+    """Ollama hop-by-hop headers must not reach the WSGI response (Waitress 500)."""
+    app = _create_app_for_proxy_tests(tmp_path, monkeypatch)
+    client = app.test_client()
+
+    class ChunkyUpstream(FakeUpstreamResponse):
+        headers = {
+            'Content-Type': 'application/json',
+            'Transfer-Encoding': 'chunked',
+            'Connection': 'keep-alive',
+        }
+
+    with patch('requests.request', return_value=ChunkyUpstream()):
+        resp = client.get('/ollama/api/tags')
+
+    assert resp.status_code == 200
+    assert resp.headers.get('Transfer-Encoding') is None
+    assert resp.headers.get('Connection') is None
+    assert 'application/json' in (resp.headers.get('Content-Type') or '')
+
+
+def test_proxy_ollama_root_returns_json(tmp_path, monkeypatch):
+    app = _create_app_for_proxy_tests(tmp_path, monkeypatch)
+    client = app.test_client()
+    resp = client.get('/ollama')
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data.get('success') is True
+    assert '/ollama/api/tags' in data.get('message', '')
+
+
+def test_intercept_saved_num_ctx_overrides_client_and_default(tmp_path, monkeypatch):
+    """Saved num_ctx in model_settings.json wins over client options and the 8192 default."""
+    app = _create_app_for_proxy_tests(
+        tmp_path, monkeypatch,
+        model_name='ctx-test', settings={'temperature': 0.4, 'num_ctx': 32768},
+    )
+    client = app.test_client()
+    captured = {}
+
+    def fake_post(url, json=None, **kwargs):
+        captured['json'] = json
+        return FakeUpstream()
+
+    with patch('requests.post', side_effect=fake_post):
+        resp = client.post('/ollama/api/chat', json={
+            'model': 'ctx-test',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            'options': {'num_ctx': 8192},
+        })
+        resp.get_data()
+
+    assert resp.status_code == 200
+    options = captured['json']['options']
+    assert options['temperature'] == 0.4
+    assert options['num_ctx'] == 32768
+
+
+def test_v1_models_passthrough(tmp_path, monkeypatch):
+    """VS Code Copilot lists models via GET /v1/models."""
+    app = _create_app_for_proxy_tests(tmp_path, monkeypatch)
+    client = app.test_client()
+    captured = {}
+
+    def fake_request(method=None, url=None, **kwargs):
+        captured['url'] = url
+        return FakeUpstreamResponse()
+
+    with patch('requests.request', side_effect=fake_request):
+        resp = client.get('/ollama/v1/models')
+
+    assert resp.status_code == 200
+    assert captured['url'] == 'http://localhost:11434/v1/models'
+
+
+def test_v1_chat_completions_passthrough_with_num_ctx(tmp_path, monkeypatch):
+    """Copilot uses POST /v1/chat/completions; saved num_ctx merges into options."""
+    app = _create_app_for_proxy_tests(
+        tmp_path, monkeypatch,
+        model_name='copilot-test', settings={'temperature': 0.55, 'num_ctx': 16384},
+    )
+    client = app.test_client()
+    captured = {}
+
+    def fake_post(url, json=None, **kwargs):
+        captured['url'] = url
+        captured['json'] = json
+        if kwargs.get('stream'):
+            class StreamResp:
+                status_code = 200
+                def iter_content(self, chunk_size=1024):
+                    yield b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+                    yield b'data: [DONE]\n\n'
+            return StreamResp()
+        class Resp:
+            status_code = 200
+            content = b'{"choices":[{"message":{"content":"hi"}}]}'
+            headers = {'Content-Type': 'application/json'}
+        return Resp()
+
+    with patch('requests.post', side_effect=fake_post):
+        resp = client.post('/ollama/v1/chat/completions', json={
+            'model': 'copilot-test',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            'stream': True,
+        })
+        resp.get_data()
+
+    assert resp.status_code == 200
+    assert captured['url'] == 'http://localhost:11434/v1/chat/completions'
+    assert captured['json']['options']['temperature'] == 0.55
+    assert captured['json']['options']['num_ctx'] == 16384
+    assert captured['json']['messages'] == [{'role': 'user', 'content': 'hi'}]
+
+
+def test_v1_chat_stream_upstream_error_returns_sse(tmp_path, monkeypatch):
+    app = _create_app_for_proxy_tests(tmp_path, monkeypatch)
+    client = app.test_client()
+
+    class FailStream:
+        status_code = 503
+        text = 'model not found'
+        reason = 'Service Unavailable'
+
+        def iter_lines(self):
+            return iter([])
+
+    def fake_post(url, json=None, **kwargs):
+        if kwargs.get('stream'):
+            return FailStream()
+        raise AssertionError('expected streaming post')
+
+    with patch('requests.post', side_effect=fake_post):
+        resp = client.post('/ollama/v1/chat/completions', json={
+            'model': 'missing',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            'stream': True,
+        })
+        body = resp.get_data(as_text=True)
+
+    assert resp.status_code == 503
+    assert 'text/event-stream' in (resp.headers.get('Content-Type') or '')
+    assert 'model not found' in body
+    assert 'data: [DONE]' in body

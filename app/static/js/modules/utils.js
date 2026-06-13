@@ -75,7 +75,21 @@ async function readApiJson(response) {
   };
 }
 
+/**
+ * Build a model-scoped API URL using ?model= (handles names with / or : safely).
+ */
+function modelActionUrl(action, modelName, extraQuery) {
+  const q = new URLSearchParams({ model: modelName });
+  if (extraQuery) {
+    for (const [k, v] of Object.entries(extraQuery)) {
+      q.set(k, v);
+    }
+  }
+  return `/api/models/${action}?${q.toString()}`;
+}
+
 // Expose on window for inline handlers and other scripts.
 window.escapeHtml = escapeHtml;
 window.cssEscape = cssEscape;
 window.readApiJson = readApiJson;
+window.modelActionUrl = modelActionUrl;

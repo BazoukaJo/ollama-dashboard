@@ -1,0 +1,193 @@
+{
+  "_comment": "Curated inference defaults matched by model name (first win). Sourced from official model cards and community benchmarks (2025–2026). Applied by model_recommendation_profiles.py on top of size/rig heuristics.",
+  "match_order": "first_match_wins — list most specific patterns before broad families.",
+  "sources": [
+    "https://huggingface.co/Qwen/Qwen3-32B/raw/main/README.md",
+    "https://github.com/deepseek-ai/DeepSeek-R1",
+    "https://localaiops.com/posts/ollama-modelfile-guide-custom-system-prompts-and-parameters/",
+    "https://techjacksolutions.com/ai-tools/qwen/run-qwen-locally/",
+    "https://docs.ollama.com/"
+  ],
+  "profiles": [
+    {
+      "id": "coding_specialist",
+      "patterns": [
+        "qwen3-coder", "qwen2.5-coder", "deepseek-coder", "codellama", "starcoder",
+        "starcoder2", "codegemma", "codeqwen", "granite-code", "magicoder", "phind",
+        "devstral", "stable-code", "dolphin-coder"
+      ],
+      "settings": {
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "top_k": 20,
+        "min_p": 0.05,
+        "repeat_penalty": 1.1,
+        "num_predict": 4096,
+        "context_target": 16384,
+        "context_min": 8192,
+        "context_fraction": 0.125
+      }
+    },
+    {
+      "id": "vision_multimodal",
+      "patterns": [
+        "qwen3-vl", "qwen2.5-vl", "qwen2.5vl", "qwen-vl", "qwen2-vl",
+        "llava", "bakllava", "moondream", "minicpm-v", "llama3.2-vision", "llama4",
+        "gemma3", "gemma4", "granite3.2-vision", "cogvlm", "yi-vl", "deepseek-vl", "ministral"
+      ],
+      "settings": {
+        "temperature": 0.6,
+        "top_p": 0.92,
+        "top_k": 30,
+        "repeat_penalty": 1.05,
+        "num_predict": 2048,
+        "context_target": 8192,
+        "context_min": 4096,
+        "context_fraction": 0.0625
+      }
+    },
+    {
+      "id": "reasoning_thinking",
+      "patterns": [
+        "deepseek-r1", "deepseek-reasoning", "qwq", "qwen-qwq", "openthinker",
+        "deepscaler", "phi4-reasoning", "phi4-mini-reasoning", "marco-o1", "gpt-oss",
+        "nemotron", "lfm2", "lfm2.5"
+      ],
+      "settings": {
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0,
+        "repeat_penalty": 1.0,
+        "num_predict": 8192,
+        "context_target": 16384,
+        "context_min": 8192,
+        "context_fraction": 0.125
+      }
+    },
+    {
+      "id": "qwen3_thinking",
+      "patterns": ["qwen3.6", "qwen3.5", "qwen3:"],
+      "exclude_patterns": ["coder", "vl", "vision", "embed"],
+      "settings": {
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0,
+        "repeat_penalty": 1.0,
+        "presence_penalty": 0.0,
+        "num_predict": 8192,
+        "context_target": 32768,
+        "context_min": 8192,
+        "context_fraction": 0.25
+      }
+    },
+    {
+      "id": "qwen25_instruct",
+      "patterns": ["qwen2.5", "qwen2:", "qwen:"],
+      "exclude_patterns": ["coder", "vl", "vision", "embed"],
+      "settings": {
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0.0,
+        "repeat_penalty": 1.0,
+        "num_predict": 2048,
+        "context_target": 32768,
+        "context_min": 8192,
+        "context_fraction": 0.25
+      }
+    },
+    {
+      "id": "llama3_instruct",
+      "patterns": ["llama3.3", "llama3.2", "llama3.1", "llama3:", "llama4"],
+      "exclude_patterns": ["vision", "coder", "code"],
+      "settings": {
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "top_k": 40,
+        "repeat_penalty": 1.1,
+        "num_predict": 2048,
+        "context_target": 8192,
+        "context_min": 8192,
+        "context_fraction": 0.0625
+      }
+    },
+    {
+      "id": "mistral_family",
+      "patterns": [
+        "mistral", "mixtral", "ministral", "mistral-nemo", "mistral-small",
+        "mistral-large", "codestral", "devstral"
+      ],
+      "settings": {
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "top_k": 40,
+        "repeat_penalty": 1.05,
+        "num_predict": 2048,
+        "context_target": 8192,
+        "context_min": 8192,
+        "context_fraction": 0.0625
+      }
+    },
+    {
+      "id": "command_r_tools",
+      "patterns": ["command-r", "command-a", "command-r7b"],
+      "settings": {
+        "temperature": 0.5,
+        "top_p": 0.9,
+        "top_k": 20,
+        "repeat_penalty": 1.05,
+        "num_predict": 2048,
+        "context_target": 8192,
+        "context_min": 8192,
+        "context_fraction": 0.0625
+      }
+    },
+    {
+      "id": "gemma_general",
+      "patterns": ["gemma2", "gemma:"],
+      "exclude_patterns": ["gemma3", "gemma4"],
+      "settings": {
+        "temperature": 0.7,
+        "top_p": 0.9,
+        "top_k": 40,
+        "repeat_penalty": 1.05,
+        "num_predict": 1024,
+        "context_target": 8192,
+        "context_min": 4096,
+        "context_fraction": 0.0625
+      }
+    },
+    {
+      "id": "phi_microsoft",
+      "patterns": ["phi3", "phi4", "phi-"],
+      "exclude_patterns": ["reasoning"],
+      "settings": {
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "top_k": 40,
+        "repeat_penalty": 1.05,
+        "num_predict": 2048,
+        "context_target": 8192,
+        "context_min": 4096,
+        "context_fraction": 0.0625
+      }
+    },
+    {
+      "id": "granite_ibm",
+      "patterns": ["granite3", "granite4", "granite:"],
+      "exclude_patterns": ["vision", "code"],
+      "settings": {
+        "temperature": 0.5,
+        "top_p": 0.9,
+        "top_k": 30,
+        "repeat_penalty": 1.05,
+        "num_predict": 2048,
+        "context_target": 8192,
+        "context_min": 4096,
+        "context_fraction": 0.0625
+      }
+    }
+  ]
+}

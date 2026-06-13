@@ -20,40 +20,60 @@ The app treats **Ollama’s HTTP API as the source of truth** after install/upda
 
 ## My saved per-model settings aren't used by VS Code / `ollama run` / other tools
 
-By default, this is expected, not a bug. The dashboard merges your saved settings into the
-`options` field of requests **it sends itself** (chat, warm-load, restart, bulk-start —
-`app/routes/main.py`). Ollama applies `options` strictly per-request and never stores them
-against the model, so any client that talks to Ollama **directly** (VS Code's Ollama
-extension, `ollama run`, `curl`, LangChain, etc.) will use Ollama's own defaults / the
-model's `Modelfile` parameters instead.
+By default, this is expected when clients talk to Ollama **directly** at `:11434`. The
+dashboard merges saved settings into the `options` field of requests **it sends itself**
+(chat, warm-load, restart, bulk-start — `app/routes/main.py`). Ollama applies `options`
+strictly per-request and never stores them against the model.
 
-> **If your client's base URL already points at `<dashboard-host>/ollama` (e.g.
-> `http://localhost:5000/ollama` — check `apiBase` in `settings.json` / your extension
-> config) and settings *still* aren't applied:** that route had a bug where it merged the
-> *whole* stored entry (`{"settings": {...}, "source": ..., "last_updated": ...}`) into
-> `options` instead of just the inner `settings` dict — so `temperature`/`top_k`/etc. never
-> actually reached Ollama (`options` got `source`/`last_updated`/`settings` keys instead,
-> which Ollama silently ignores). Fixed in `app/__init__.py` (`intercept_ollama_parameters`,
-> ~line 176) on 2026-06-07 — **restart the dashboard** to pick up the fix; no client-side
-> changes needed.
+### Using the dashboard proxy (recommended for VS Code / Copilot)
+
+Point the client at **`http://<dashboard-host>:<port>/ollama`** (e.g.
+`http://127.0.0.1:5000/ollama`). The proxy in `app/routes/proxy.py` forwards to Ollama and
+merges saved settings on **inference** routes:
+
+| Via dashboard | Settings? |
+|---------------|-----------|
+| `POST /ollama/v1/chat/completions` | Yes — **GitHub Copilot Chat** |
+| `POST /ollama/api/chat`, `/ollama/api/generate` | Yes |
+| `GET /ollama/api/tags`, `GET /ollama/v1/models` | No (model listing only) |
+
+Copilot does **not** call the dashboard **Start model** API; the first chat message loads the
+model. The proxy merges saved settings (including `num_ctx`) into `options` on
+`/ollama/v1/chat/completions` and forwards to Ollama's native v1 endpoint.
+
+**GitHub Copilot setup:**
+
+1. Dashboard running on port 5000 (or your port).
+2. Ollama endpoint: `http://127.0.0.1:5000/ollama` — **do not** add `/v1` (Copilot appends
+   `/v1/chat/completions`).
+3. Setting: `"github.copilot.chat.byok.ollamaEndpoint": "http://127.0.0.1:5000/ollama"`.
+4. Save settings per model in the dashboard UI.
+
+**Verify:**
+
+```text
+http://127.0.0.1:5000/ollama/v1/models
+http://127.0.0.1:5000/ollama/api/tags
+```
+
+Both must return JSON. HTML 404/500 means restart the dashboard after an upgrade.
+
+> **Historical bug (2026-06-07):** `/ollama/api/...` merged the whole stored entry instead of
+> just `settings`; fixed in `app/routes/proxy.py`. Another bug double-ported `OLLAMA_HOST`
+> when it carried `host:port`.
 
 Three ways to get saved settings to external clients — see the README's
 [Per-Model Settings: scope and limitations](../README.md#per-model-settings-scope-and-limitations)
 for full details:
 
-1. **Point the client at the dashboard's built-in proxy** — set its base URL /
-   `apiBase` to `http://<dashboard-host>:<port>/ollama` (e.g. `http://localhost:5000/ollama`)
-   instead of Ollama's `:11434` directly. No extra process, keeps original model names,
-   applies every saved option exactly (`intercept_ollama_parameters` in `app/__init__.py`).
-2. **Bake into Model** (Settings dialog button) — generates a `Modelfile` with `PARAMETER`
-   directives for your saved values and calls Ollama's `/api/create` to build a derived model
-   (named `<model>-dashboard`). Point external clients at that derived name — works even
-   without the dashboard running (e.g. plain `ollama run`). A few advanced fields
-   (`presence_penalty`, `frequency_penalty`, `typical_p`, `penalize_newline`) aren't valid
-   Modelfile parameters and can't be baked in this way.
-3. **Run `server_with_proxy.js`** (`npm install && npm run proxy`) — functionally the same
-   as option 1 but as an independent Node process (default `http://localhost:11435`, no
-   `/ollama` suffix); useful when the Flask dashboard isn't always running.
+1. **Point the client at the dashboard's built-in proxy** — base URL
+   `http://<dashboard-host>:<port>/ollama`. Covers native `/api/...` and OpenAI-compatible
+   `/v1/chat/completions` (Copilot).
+2. **Bake into Model** (Settings dialog button) — derived model name for clients you can't
+   repoint.
+3. **Run `server_with_proxy.js`** — same injection at the proxy root (port takeover on
+   `:11434`). Merges settings on `/api/chat`, `/api/generate`, and `/v1/chat/completions`.
+   For Copilot, the Flask dashboard proxy at `:5000/ollama` is still recommended (CORS + `/ollama` prefix).
 
 ## Port-takeover proxy: nothing answers at `:11434`, or it won't start
 
@@ -81,6 +101,57 @@ with `PROXY_PORT=11434` (e.g. via `start_proxy_takeover.bat`).
 proxy, point `OLLAMA_HOST` back at Ollama's default — or remove the override entirely — and
 restart Ollama. It resumes listening on `:11434` directly, and every client reaches it
 unchanged.
+
+## VS Code / Copilot / IDE: `exceed_context_size_error` (8192 tokens)
+
+Symptoms: VS Code reports a 400 like:
+
+```text
+request (31995 tokens) exceeds the available context size (8192 tokens)
+```
+
+**Cause:** Ollama's context window for that request is **8192** (`num_ctx`), but the IDE
+sent a much larger prompt (open files + chat history). **8192 is only the dashboard default**
+— your **saved** per-model settings override it once you change and save Context in the
+dashboard (or via `model_settings.json`).
+
+If you use the dashboard proxy (`http://<host>:5000/ollama`) or port-takeover proxy
+(`:11434`), saved settings — including `num_ctx` — are merged into every IDE request.
+
+**Fix:**
+
+1. Open the model's **Settings** in the dashboard → **Context (num_ctx)** → set to what
+   the model supports (e.g. **32768** or **131072**) → **Save**.
+2. Restart the dashboard / Node proxy if running, then retry in VS Code.
+3. Alternatively, point the IDE at Ollama directly and set context in the extension, or
+   reduce how much workspace context the extension includes.
+
+Until you save a higher `num_ctx`, the default **8192** applies — which is too small for
+typical VS Code prompts (~20k–100k tokens).
+
+**Copilot loads model at 4K despite saved 40K context:** Confirm the endpoint is
+`:5000/ollama`, not `:11434` directly. Save a higher **Context (num_ctx)** in the dashboard,
+restart the dashboard, then send a new Copilot message (Copilot loads the model on the first
+inference request — not via dashboard **Start**).
+
+**"Sorry, no response was returned" in Copilot Chat:** Usually means Copilot received an
+empty or malformed stream. After upgrading the dashboard, **restart** it (`restart_app.bat`),
+start a **new chat**, and confirm `http://127.0.0.1:5000/ollama/v1/models` returns JSON.
+Recent builds passthrough `/ollama/v1/chat/completions` to Ollama's native v1 endpoint (required
+for reasoning models and Agent-mode tool calls). If it persists, try **Ask** mode first, then
+check Copilot Chat diagnostics for the underlying HTTP error.
+
+**404 HTML "Not Found" in Copilot Chat:** GitHub Copilot sends chat to
+`POST {baseUrl}/v1/chat/completions`, not `/api/chat`. The dashboard proxy must expose
+`/ollama/v1/...` (added in recent builds). After updating, restart the dashboard and
+confirm:
+
+```text
+http://127.0.0.1:5000/ollama/v1/models
+```
+
+returns JSON (not an HTML 404 page). VS Code Ollama base URL stays
+`http://127.0.0.1:5000/ollama` (no `/v1` suffix — Copilot adds `/v1/chat/completions`).
 
 ## `model_settings.json` corrupted or empty
 

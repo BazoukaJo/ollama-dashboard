@@ -36,6 +36,20 @@ def get_default_settings_template():
     return dict(_DEF_TEMPLATE)
 
 
+def merge_options_for_external_proxy(incoming_options, dashboard_settings):
+    """Merge dashboard saved settings into an external client's Ollama ``options`` dict.
+
+    Saved per-model values (including ``num_ctx`` when configured in the dashboard)
+    win over the client's request and over the global 8192 default template — so
+    raising Context in Settings and saving applies to VS Code and other clients
+    using the ``/ollama`` or port-takeover proxy. Client-only keys not in the saved
+    settings are preserved.
+    """
+    incoming = dict(incoming_options or {})
+    dashboard = dict(dashboard_settings or {})
+    return {**incoming, **dashboard}
+
+
 def normalize_model_settings_key(model_name):
     """Canonical dict key for per-model settings (matches Ollama API name strings)."""
     if model_name is None:
@@ -152,6 +166,34 @@ def merge_model_info_for_recommendation(service, model_name, hint=None):
     if isinstance(detailed, dict):
         merged = {**merged, **detailed, "name": name}
     return merged
+
+
+def compute_fresh_recommended_settings_entry(service, model_name):
+    """Recompute recommended settings from model metadata (ignores cached JSON entry)."""
+    merged = merge_model_info_for_recommendation(service, model_name, None)
+    recommended = service._recommend_settings_for_model(merged)
+    return {
+        'settings': recommended,
+        'source': 'recommended',
+        'last_updated': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def get_existing_model_settings_entry(service, model_name):
+    """Return stored entry for ``model_name`` without creating recommended defaults."""
+    want = normalize_model_settings_key(model_name)
+    if not want:
+        return None
+    with service._model_settings_lock:
+        if not service._model_settings:
+            service._model_settings = load_model_settings(service) or {}
+        if want in service._model_settings:
+            entry = service._model_settings[want]
+            return entry if isinstance(entry, dict) else None
+        for k, v in service._model_settings.items():
+            if normalize_model_settings_key(k) == want:
+                return v if isinstance(v, dict) else None
+    return None
 
 
 def normalize_setting_value(key, value, default_val):

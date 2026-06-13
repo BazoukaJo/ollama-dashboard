@@ -42,6 +42,13 @@
         </div>
       </div>
     </header>
+    <div class="alert alert-secondary small mb-3" role="note">
+      <strong>Apply all</strong> recomputes benchmark-backed defaults for every installed model.
+      Models you saved manually (<span class="badge model-settings-status-badge model-settings-status-badge--saved">Saved</span> in the dashboard) are <em>skipped</em>.
+      For GitHub Copilot, point VS Code at <code>http://127.0.0.1:5000/ollama</code> (Flask proxy).
+      The optional <code>server_with_proxy.js</code> port-takeover proxy also merges settings on
+      <code>/v1/chat/completions</code>, but Copilot is easiest via the dashboard URL above.
+    </div>
     <div class="table-responsive">
       <table class="table table-dark table-striped">
         <thead>
@@ -107,10 +114,25 @@
 
     document.getElementById('applyAllBtn').onclick = async () => {
       const r = await fetch('/api/models/settings/apply_all_recommended', { method: 'POST'});
-      const jr = await r.json();
-      if (jr.success) alert('Applied recommended defaults to all models.');
-      else alert('Failed: ' + JSON.stringify(jr));
-    }
+      const jr = await readApiJson(r);
+      if (!jr.responseOk) {
+        alert('Failed: ' + (jr.message || JSON.stringify(jr.data)));
+        return;
+      }
+      const d = jr.data || {};
+      if (d.success) {
+        const skipped = typeof d.skipped === 'number' ? d.skipped : 0;
+        const applied = typeof d.applied === 'number' ? d.applied : 0;
+        alert(
+          (d.message || 'Done.') +
+          (skipped ? `\n\n${skipped} user-saved model(s) were left unchanged.` : '') +
+          (applied ? `\n${applied} model(s) updated.` : '')
+        );
+        loadModelDefaults();
+      } else {
+        alert('Failed: ' + JSON.stringify(d));
+      }
+    };
 
     loadModelDefaults();
   </script>

@@ -83,7 +83,7 @@
                   </div>
                   <div class="d-flex align-items-start gap-2 mb-1">
                     <span class="badge bg-info text-dark flex-shrink-0" style="min-width:5em;text-align:center">Proxy</span>
-                    <span class="text-muted">VS Code / any client pointed at <code>:5000/ollama</code> — injected per request, full option set, original model name kept.</span>
+                    <span class="text-muted">GitHub Copilot / VS Code at <code>:5000/ollama</code> — saved settings (including <code>num_ctx</code>) merge into <code>/v1/chat/completions</code>. Save here to override defaults.</span>
                   </div>
                   <div class="d-flex align-items-start gap-2">
                     <span class="badge bg-warning text-dark flex-shrink-0" style="min-width:5em;text-align:center">Baked</span>
