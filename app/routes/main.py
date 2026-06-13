@@ -7,6 +7,7 @@ lint rules to keep the legacy surface area stable while improving readability.
 import json
 import os
 import platform
+import re
 import signal
 import time
 from datetime import datetime
@@ -17,6 +18,7 @@ from flask import Response, current_app, jsonify, render_template, request, stre
 
 from app import __version__ as DASHBOARD_VERSION
 from app.routes import bp
+from app.services.ask_attachments import AttachmentError, prepare_chat_from_attachments
 from app.services.model_helpers import (
     attach_last_token_usage_to_model,
     attach_request_context_to_model,
@@ -26,11 +28,14 @@ from app.services.model_settings_helpers import (
     get_existing_model_settings_entry,
 )
 from app.services.ollama_core import OllamaServiceCore
+from app.services.ollama_models import OllamaConnectionError
 from app.services.ollama_update_check import run_startup_ollama_update_check
+from app.services.service_errors import HTTP_SERVICE_ERRORS
 from app.services.validators import InputValidator
 
 # Set by init_app from app.config['OLLAMA_SERVICE']; tests patch this
 ollama_service = None
+_ROUTE_ERRORS = HTTP_SERVICE_ERRORS + (OllamaConnectionError,)
 
 
 def _get_ollama_service():
@@ -44,11 +49,11 @@ def _get_timezone_name():
     """Get the local timezone name in a reliable way."""
     try:
         return datetime.now().astimezone().tzname()
-    except Exception:
+    except (OSError, ValueError, AttributeError, IndexError, TypeError):
         try:
             # Fallback to time module
             return time.tzname[0] if time.tzname and len(time.tzname) > 0 else 'UTC'
-        except Exception:
+        except (AttributeError, IndexError, TypeError):
             # Last resort
             return 'UTC'
 
@@ -71,11 +76,38 @@ def _normalize_ollama_host_port_for_display(raw_host, raw_port):
     return host, port
 
 
+def _format_ollama_host_port_label(host, port):
+    """Host:port label for UI (brackets IPv6 literals)."""
+    host = OllamaServiceCore._clean_ollama_host_string(str(host or 'localhost'))
+    port = int(port)
+    if ':' in host and not host.startswith('['):
+        host = f'[{host}]'
+    return f'{host}:{port}'
+
+
+def _format_ollama_api_base(host, port):
+    """Full Ollama backend URL shown in the dashboard header."""
+    return f'http://{_format_ollama_host_port_label(host, port)}'.rstrip('/')
+
+
+def _format_proxy_endpoint_label(url: str) -> str:
+    """Proxy endpoint for header display (scheme omitted, like host:port/path)."""
+    return re.sub(r'^https?://', '', (url or '').strip(), count=1, flags=re.IGNORECASE)
+
+
+def _proxy_ui_template_vars():
+    base = request.host_url.rstrip('/') + '/ollama'
+    return {
+        'proxy_endpoint': base,
+        'proxy_endpoint_label': _format_proxy_endpoint_label(base),
+    }
+
+
 def _ollama_ui_template_vars():
     """Expose Ollama host/port to the UI (matches service outbound host/port)."""
     try:
         host, port = _get_ollama_service()._get_ollama_host_port()
-    except Exception:
+    except _ROUTE_ERRORS:
         host, port = _normalize_ollama_host_port_for_display(
             current_app.config.get('OLLAMA_HOST', 'localhost'),
             current_app.config.get('OLLAMA_PORT', 11434),
@@ -84,7 +116,8 @@ def _ollama_ui_template_vars():
     return {
         'ollama_public_host': host,
         'ollama_public_port': port,
-        'ollama_api_base': f'http://{host}:{port}'.rstrip('/'),
+        'ollama_host_port_label': _format_ollama_host_port_label(host, port),
+        'ollama_api_base': _format_ollama_api_base(host, port),
     }
 
 
@@ -98,7 +131,7 @@ def _ollama_installed_for_dashboard(svc, update_result):
         try:
             if svc.is_ollama_installed():
                 return True
-        except Exception:
+        except _ROUTE_ERRORS:
             pass
     ver = (update_result or {}).get('current_version') or ''
     v = (ver or '').strip()
@@ -138,8 +171,9 @@ def index():
             dashboard_version=DASHBOARD_VERSION,
             timestamp=int(time.time()),
             **_ollama_ui_template_vars(),
+            **_proxy_ui_template_vars(),
         )
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         empty_stats = {
             'cpu_percent': 0,
             'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0},
@@ -152,11 +186,11 @@ def index():
                 _get_ollama_service(),
                 refresh_installed_version=True,
             )
-        except Exception:
+        except _ROUTE_ERRORS:
             pass
         try:
             svc_err = _get_ollama_service()
-        except Exception:
+        except _ROUTE_ERRORS:
             svc_err = None
         ollama_installed = _ollama_installed_for_dashboard(svc_err, _upd)
         version_err = _upd.get('current_version') or 'Unknown'
@@ -174,6 +208,7 @@ def index():
             dashboard_version=DASHBOARD_VERSION,
             timestamp=int(time.time()),
             **_ollama_ui_template_vars(),
+            **_proxy_ui_template_vars(),
         )
 
 @bp.route('/api/test')
@@ -184,7 +219,7 @@ def _get_ollama_url(endpoint=""):
     """Generate Ollama API URL (host may not include :port; see _normalize_ollama_host_port_for_display)."""
     try:
         host, port = _get_ollama_service()._get_ollama_host_port()
-    except Exception:
+    except _ROUTE_ERRORS:
         host, port = _normalize_ollama_host_port_for_display(
             current_app.config.get('OLLAMA_HOST', 'localhost'),
             current_app.config.get('OLLAMA_PORT', 11434),
@@ -241,7 +276,7 @@ def _verify_model_unloaded(model_name, max_attempts=5, delay_seconds=1):
                 models = data.get("models", [])
                 if not any(m.get("name") == model_name for m in models):
                     return True
-        except Exception:
+        except _ROUTE_ERRORS:
             pass
         time.sleep(delay_seconds)
     return False
@@ -330,7 +365,7 @@ def start_model(model_name=None):
                     for k, v in model_settings_entry['settings'].items():
                         options[k] = v
                 warm_payload["options"] = options
-            except Exception as e:
+            except _ROUTE_ERRORS as e:
                 current_app.logger.debug(f"Failed to apply per-model settings to warm start {model_name}: {e}")
 
             try:
@@ -346,7 +381,7 @@ def start_model(model_name=None):
                     # models from those that are merely loaded in memory.
                     try:
                         _get_ollama_service().record_model_activity(model_name)
-                    except Exception:
+                    except _ROUTE_ERRORS:
                         pass
                     return {"success": True, "response": response}
 
@@ -356,7 +391,7 @@ def start_model(model_name=None):
                     error_json = response.json()
                     if 'error' in error_json:
                         error_text = error_text + " " + str(error_json['error'])
-                except Exception:
+                except _ROUTE_ERRORS:
                     pass
 
                 # Log the error for debugging
@@ -392,7 +427,7 @@ def start_model(model_name=None):
                     _get_ollama_service().record_model_token_usage_from_response(
                         model_name, result["response"]
                     )
-                except Exception:
+                except _ROUTE_ERRORS:
                     pass
                 # Clear the cache for running models to force a refresh
                 # This ensures the UI shows the model as loaded immediately
@@ -400,7 +435,7 @@ def start_model(model_name=None):
                 # Force immediate refresh to populate cache with current state
                 try:
                     _get_ollama_service().get_running_models(force_refresh=True)
-                except Exception:
+                except _ROUTE_ERRORS:
                     pass  # Best-effort refresh, don't fail if it errors
                 return {"success": True, "message": f"Model {model_name} started successfully"}
 
@@ -425,14 +460,14 @@ def start_model(model_name=None):
                                 _get_ollama_service().record_model_token_usage_from_response(
                                     model_name, result["response"]
                                 )
-                            except Exception:
+                            except _ROUTE_ERRORS:
                                 pass
                             # Clear the cache for running models to force a refresh
                             _get_ollama_service().clear_cache('running_models')
                             # Force immediate refresh to populate cache with current state
                             try:
                                 _get_ollama_service().get_running_models(force_refresh=True)
-                            except Exception:
+                            except _ROUTE_ERRORS:
                                 pass  # Best-effort refresh, don't fail if it errors
                             return {"success": True, "message": f"Model {model_name} downloaded and started successfully"}
 
@@ -451,7 +486,7 @@ def start_model(model_name=None):
                 return {"success": False, "message": "Model loading failed after 3 retries due to connection issues. This can happen with large models on first load. Please try again."}, 503
             return {"success": False, "message": "Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct."}, 503
 
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
 
 def _force_unload_via_ollama_restart(model_name):
@@ -464,7 +499,7 @@ def _force_unload_via_ollama_restart(model_name):
         svc.clear_cache('running_models')
         try:
             svc.get_running_models(force_refresh=True)
-        except Exception:
+        except _ROUTE_ERRORS:
             pass
 
     if restart_result.get('success'):
@@ -482,7 +517,7 @@ def _force_unload_via_ollama_restart(model_name):
         if retry.get('success'):
             try:
                 svc.get_running_models(force_refresh=True)
-            except Exception:
+            except _ROUTE_ERRORS:
                 pass
             return {
                 "success": True,
@@ -565,7 +600,7 @@ def stop_model(model_name=None):
                             "message": f"Ollama error: {body['error']}",
                             "can_force": True,
                         }, 500
-                except Exception:
+                except _ROUTE_ERRORS:
                     pass
                 if not _verify_model_unloaded(model_name, max_attempts=10, delay_seconds=1):
                     return {
@@ -579,7 +614,7 @@ def stop_model(model_name=None):
                 _get_ollama_service().clear_cache('running_models')
                 try:
                     _get_ollama_service().get_running_models(force_refresh=True)
-                except Exception:
+                except _ROUTE_ERRORS:
                     pass
                 return {"success": True, "message": f"Model {model_name} stopped successfully"}
             elif unload_response.status_code == 404:
@@ -590,7 +625,7 @@ def stop_model(model_name=None):
                     error_detail = unload_response.json().get('error', '')
                     if error_detail:
                         error_msg += f" - {error_detail}"
-                except Exception:
+                except _ROUTE_ERRORS:
                     pass
                 return {
                     "success": False,
@@ -607,7 +642,7 @@ def stop_model(model_name=None):
         except requests.exceptions.RequestException as e:
             return {"success": False, "message": f"Network error while stopping model: {str(e)}"}, 503
 
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         current_app.logger.error(f"Unexpected error stopping model {model_name}: {str(e)}")
         return {"success": False, "message": f"Unexpected error stopping model: {str(e)}"}, 500
 
@@ -652,7 +687,7 @@ def restart_model(model_name=None):
                         error_detail = unload_response.json().get('error', '')
                         if error_detail:
                             error_msg += f" - {error_detail}"
-                    except Exception:
+                    except _ROUTE_ERRORS:
                         pass
                     return {"success": False, "message": error_msg}, unload_response.status_code
 
@@ -687,7 +722,7 @@ def restart_model(model_name=None):
                         for k, v in model_settings_entry['settings'].items():
                             options[k] = v
                     start_payload["options"] = options
-                except Exception as e:
+                except _ROUTE_ERRORS as e:
                     current_app.logger.debug(f"Failed to apply per-model settings to restart warm start {model_name}: {e}")
 
                 start_response = _get_ollama_service()._session.post(
@@ -701,7 +736,7 @@ def restart_model(model_name=None):
                         _get_ollama_service().record_model_token_usage_from_response(
                             model_name, start_response
                         )
-                    except Exception:
+                    except _ROUTE_ERRORS:
                         pass
                     message = f"Model {model_name} restarted successfully"
                     if attempt > 0:
@@ -719,7 +754,7 @@ def restart_model(model_name=None):
                             )
                             if pull_response.status_code == 200:
                                 continue  # Retry start after successful pull
-                        except Exception as pull_error:
+                        except _ROUTE_ERRORS as pull_error:
                             current_app.logger.error(f"Failed to pull model: {str(pull_error)}")
                     return {"success": False, "message": f"Model {model_name} not found"}, 404
                 else:
@@ -728,7 +763,7 @@ def restart_model(model_name=None):
                         error_detail = start_response.json().get('error', '')
                         if error_detail:
                             last_error += f" - {error_detail}"
-                    except Exception:
+                    except _ROUTE_ERRORS:
                         pass
 
                     # Check if this is a transient error worth retrying
@@ -755,7 +790,7 @@ def restart_model(model_name=None):
 
         return {"success": False, "message": f"Failed to restart model after {max_retries} attempts: {last_error}"}, 500
 
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         current_app.logger.error(f"Unexpected error restarting model {model_name}: {str(e)}")
         return {"success": False, "message": f"Unexpected error restarting model: {str(e)}"}, 500
 
@@ -773,7 +808,7 @@ def get_model_info(model_name):
             timeout=10
         )
         return response.json() if response.status_code == 200 else ({"error": "Model not found"}, 404)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 
@@ -783,7 +818,7 @@ def get_system_stats():
     try:
         stats = _get_ollama_service().get_system_stats()
         return stats if stats else ({"error": "System monitoring not available"}, 503)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 
@@ -798,7 +833,7 @@ def get_available_models():
                 len(models),
                 [m.get('name') for m in models],
             )
-        except Exception:
+        except _ROUTE_ERRORS:
             # Logging should never break the endpoint
             pass
         svc = _get_ollama_service()
@@ -808,7 +843,7 @@ def get_available_models():
             attach_request_context_to_model(svc, m)
             attach_last_token_usage_to_model(svc, m)
         return {"models": models}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e), "models": []}, 500
 
 
@@ -819,7 +854,7 @@ def get_derived_models():
         models = _get_ollama_service().get_available_models()
         derived = [m for m in models if (m.get('name') or '').split(':')[0].endswith('-dashboard')]
         return {"models": derived}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"models": [], "error": str(e)}, 500
 
 
@@ -838,11 +873,11 @@ def get_running_models():
                 len(models),
                 [m.get('name') for m in models],
             )
-        except Exception:
+        except _ROUTE_ERRORS:
             # Logging should never break the endpoint
             pass
         return {"models": list(models) if models is not None else []}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e), "models": []}, 500
 
 
@@ -896,7 +931,7 @@ def get_combined_models():
                 entry['has_custom_settings'] = bool(
                     svc.has_custom_model_settings(name)
                 )
-            except Exception:
+            except _ROUTE_ERRORS:
                 # If settings lookup fails, leave flag at default
                 pass
 
@@ -926,11 +961,11 @@ def get_combined_models():
                 len(by_name),
                 list(by_name.keys()),
             )
-        except Exception:
+        except _ROUTE_ERRORS:
             pass
 
         return {"models": list(by_name.values())}
-    except Exception as exc:
+    except _ROUTE_ERRORS as exc:
         return {"error": str(exc), "models": []}, 500
 
 
@@ -955,8 +990,9 @@ def api_get_model_settings(model_name=None):
         data = _get_ollama_service().get_model_settings_with_fallback(model_name)
         if data is None:
             return {"error": f"Settings not available for model {model_name}"}, 404
-        return data
-    except Exception as e:
+        from app.services.copilot_extras import attach_client_to_api_entry
+        return attach_client_to_api_entry(data)
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 
@@ -971,7 +1007,7 @@ def api_get_recommended_settings(model_name=None):
         if data is None:
             return {"error": f"Settings not available for model {model_name}"}, 404
         return {"model": model_name, "settings": data.get('settings'), "source": data.get('source', 'recommended')}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 
@@ -983,11 +1019,16 @@ def api_save_model_settings(model_name=None):
         return err_resp
     try:
         payload = request.get_json() or {}
-        success = _get_ollama_service().save_model_settings(model_name, payload, source='user')
+        copilot = payload.pop('copilot', None) if isinstance(payload, dict) else None
+        client = payload.pop('client', None) if isinstance(payload, dict) else None
+        extras = client or copilot
+        success = _get_ollama_service().save_model_settings(
+            model_name, payload, source='user', copilot=extras,
+        )
         if success:
             return _json_success(f"Settings for {model_name} saved.")
         return _json_error(f"Failed to save settings for {model_name}", status=500)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return _json_error(f"Unexpected error saving model settings: {str(e)}")
 
 
@@ -1002,7 +1043,7 @@ def api_delete_model_settings(model_name=None):
         if success:
             return _json_success(f"Settings for {model_name} deleted.")
         return _json_error(f"Settings for {model_name} not found.", status=404)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return _json_error(f"Unexpected error deleting model settings: {str(e)}")
 
 
@@ -1022,7 +1063,7 @@ def api_bake_model_settings(model_name=None):
             return _json_success(result.get('message', f"Baked settings into {result.get('model')}"),
                                  extra={'model': result.get('model')})
         return _json_error(result.get('message', f"Failed to bake settings for {model_name}"), status=500)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return _json_error(f"Unexpected error baking model settings: {str(e)}")
 
 
@@ -1030,7 +1071,7 @@ def api_bake_model_settings(model_name=None):
 def api_migrate_model_settings():
     try:
         return _json_error("Global settings migration no longer supported", status=410)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return _json_error(f"Migration error: {str(e)}")
 
 
@@ -1056,13 +1097,13 @@ def api_apply_all_recommended():
                     success = svc.save_model_settings(name, fresh['settings'], source='recommended')
                     if success:
                         applied += 1
-            except Exception as e:
+            except _ROUTE_ERRORS as e:
                 errors.append(str(e))
         return _json_success(
             f"Applied recommended settings to {applied} models ({skipped} user-saved skipped).",
             extra={'applied': applied, 'skipped': skipped, 'errors': errors},
         )
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return _json_error(f"Error applying all recommended settings: {str(e)}")
 
 
@@ -1072,7 +1113,7 @@ def api_copy_model_settings_between():
     body = request.get_json() or {}
     src = body.get('from') or body.get('source')
     dst = body.get('to') or body.get('target')
-    for label, raw in (('source', src), ('target', dst)):
+    for _, raw in (('source', src), ('target', dst)):
         err, status = _validate_model_name(raw)
         if err is not None:
             return err, status
@@ -1086,7 +1127,7 @@ def api_copy_model_settings_between():
         if not svc.save_model_settings(dst, src_data['settings'], source='user'):
             return _json_error(f"Failed to save settings for '{dst}'", status=500)
         return _json_success(f"Copied settings from '{src}' to '{dst}'.")
-    except Exception as exc:
+    except _ROUTE_ERRORS as exc:
         return _json_error(f"Copy settings failed: {str(exc)}")
 
 
@@ -1106,7 +1147,7 @@ def api_reset_model_settings(model_name=None):
         if success:
             return _json_success(f"Settings for {model_name} reset to recommended defaults.")
         return _json_error(f"Failed to reset settings for {model_name}", status=500)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return _json_error(f"Unexpected error resetting model settings: {str(e)}")
 
 
@@ -1116,7 +1157,7 @@ def get_ollama_version():
     try:
         version = _get_ollama_service().get_ollama_version()
         return {"version": version}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e), "version": "Unknown"}, 500
 
 
@@ -1152,7 +1193,7 @@ def bulk_start_models():
                         for k, v in model_settings_entry['settings'].items():
                             options[k] = v
                     bulk_payload["options"] = options
-                except Exception as e:
+                except _ROUTE_ERRORS as e:
                     current_app.logger.debug(f"Failed to apply per-model settings to bulk start {model_name}: {e}")
 
                 response = svc._session.post(
@@ -1165,13 +1206,13 @@ def bulk_start_models():
                     "success": response.status_code == 200,
                     "error": response.text if response.status_code != 200 else None
                 })
-            except Exception as e:
+            except _ROUTE_ERRORS as e:
                 results.append({"model": model_name, "success": False, "error": str(e)})
 
         # Invalidate the running-models cache so next GET /api/models/running reflects reality
         svc.clear_cache('running_models')
         return {"results": results}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 @bp.route('/api/chat', methods=['POST'])
@@ -1179,27 +1220,48 @@ def chat():
     """
     Handle chat requests with Ollama models.
 
-    Supports both streaming and non-streaming responses.
+    Supports streaming, optional attachments (images, PDF, Word, code snippets).
     """
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         model_name = data.get('model')
         prompt = data.get('prompt')
         stream = data.get('stream', False)
         context = data.get('context', [])
+        attachments = data.get('attachments')
 
-        if not model_name or not prompt:
-            return {"error": "Model name and prompt are required"}, 400
+        if not model_name:
+            return {"error": "Model name is required"}, 400
+
+        if not (prompt or '').strip() and not attachments:
+            return {"error": "Enter a question or add an attachment"}, 400
 
         # Verify model exists
-        if not _get_ollama_service().get_model_info_cached(model_name):
+        model_info = _get_ollama_service().get_model_info_cached(model_name)
+        if not model_info:
             return {"error": f"Model '{model_name}' not found. Please ensure it's installed."}, 404
+
+        model_has_vision = model_info.get('has_vision')
+        if model_has_vision is None and isinstance(model_info.get('capabilities'), list):
+            caps = {str(c).lower() for c in model_info['capabilities']}
+            model_has_vision = bool(caps & {'vision', 'image', 'multimodal'})
+
+        try:
+            prepared = prepare_chat_from_attachments(
+                prompt or '',
+                attachments,
+                model_has_vision=model_has_vision,
+            )
+        except AttachmentError as exc:
+            return {"error": str(exc)}, 400
 
         chat_data = {
             "model": model_name,
-            "prompt": prompt,
-            "stream": stream
+            "prompt": prepared["prompt"],
+            "stream": stream,
         }
+        if prepared.get("images"):
+            chat_data["images"] = prepared["images"]
         if context:
             chat_data["context"] = context
 
@@ -1211,7 +1273,7 @@ def chat():
             if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
                 for k, v in model_settings_entry['settings'].items():
                     options[k] = v
-        except Exception as e:
+        except _ROUTE_ERRORS as e:
             current_app.logger.error("Failed to merge per-model settings for %s: %s", model_name, e)
         chat_data["options"] = options
 
@@ -1232,7 +1294,7 @@ def chat():
             # for models that are actively handling chat traffic.
             try:
                 _get_ollama_service().record_model_activity(model_name)
-            except Exception:
+            except _ROUTE_ERRORS:
                 pass
             if stream:
                 def _generate_stream(r=response):
@@ -1243,7 +1305,7 @@ def chat():
                 _get_ollama_service().record_model_token_usage_from_response(
                     model_name, response
                 )
-            except Exception:
+            except _ROUTE_ERRORS:
                 pass
             return response.json()
 
@@ -1251,7 +1313,7 @@ def chat():
         error_result, status_code = _handle_model_error(response, model_name, "chat with")
         return error_result, status_code
 
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": f"Unexpected error: {str(e)}"}, 500
 
 
@@ -1263,7 +1325,7 @@ def _verify_model_deleted(model_name, max_attempts=5, delay_seconds=1):
             names = [m.get("name") for m in available if m.get("name")]
             if not any(n == model_name or n.startswith(model_name + ":") for n in names):
                 return True
-        except Exception:
+        except _ROUTE_ERRORS:
             pass
         time.sleep(delay_seconds)
     return False
@@ -1288,7 +1350,7 @@ def delete_model(model_name=None):
                     timeout=30,
                 )
                 _verify_model_unloaded(model_name)
-            except Exception as e:
+            except _ROUTE_ERRORS as e:
                 current_app.logger.warning("Unload before delete failed: %s", e)
 
         # Attempt to delete model from Ollama backend
@@ -1299,7 +1361,7 @@ def delete_model(model_name=None):
             try:
                 err_json = response.json()
                 error_msg = err_json.get("error") or err_json.get("message") or response.text
-            except Exception:
+            except _ROUTE_ERRORS:
                 error_msg = response.text
             return jsonify({"success": False, "message": f"Failed to delete model: {error_msg}"}), response.status_code if response.status_code >= 400 else 400
 
@@ -1315,7 +1377,7 @@ def delete_model(model_name=None):
             "success": True,
             "message": f"Model '{model_name}' deleted successfully. Settings removed: {settings_deleted}"
         }), 200
-    except Exception as exc:
+    except _ROUTE_ERRORS as exc:
         return jsonify({"success": False, "message": f"Exception: {str(exc)}"}), 500
 
 
@@ -1341,7 +1403,7 @@ def simple_health():
             return jsonify({'status': 'ok'}), 200
         else:
             return jsonify({'status': 'degraded'}), 503
-    except Exception:
+    except _ROUTE_ERRORS:
         return jsonify({'status': 'error'}), 500
 
 
@@ -1351,7 +1413,7 @@ def get_chat_history():
     try:
         history = _get_ollama_service().get_chat_history()
         return {"history": history}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 
@@ -1370,7 +1432,7 @@ def save_chat_history():
             return {"error": "Invalid JSON"}, 400
         _get_ollama_service().save_chat_session(data or {})
         return {"success": True}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 
@@ -1383,7 +1445,7 @@ def get_model_performance(model_name):
     try:
         performance = _get_ollama_service().get_model_performance(model_name)
         return performance
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 
@@ -1393,7 +1455,7 @@ def get_system_stats_history():
     try:
         history = _get_ollama_service().get_system_stats_history()
         return {"history": history}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 
@@ -1403,7 +1465,7 @@ def get_service_status():
     try:
         status = _get_ollama_service().get_service_status() or False
         return {"status": "running" if status else "stopped", "running": status}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e), "status": "unknown", "running": False}, 500
 
 @bp.route('/api/health')
@@ -1411,7 +1473,7 @@ def api_health():
     """Component health: background thread, cache ages, failure counters."""
     try:
         return _get_ollama_service().get_component_health()
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 
@@ -1423,7 +1485,7 @@ def start_service():
         if not result:
             return {"success": False, "message": "Service start returned no result"}, 500
         return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
 
 
@@ -1433,7 +1495,7 @@ def stop_service():
     try:
         result = _get_ollama_service().stop_service()
         return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
 
 
@@ -1443,7 +1505,7 @@ def restart_service():
     try:
         result = _get_ollama_service().restart_service()
         return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"success": False, "message": f"Unexpected error restarting service: {str(e)}"}, 500
 
 
@@ -1453,7 +1515,7 @@ def update_ollama():
     try:
         result = _get_ollama_service().update_ollama()
         return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"success": False, "message": f"Unexpected error updating Ollama: {str(e)}"}, 500
 
 
@@ -1463,7 +1525,7 @@ def install_ollama():
     try:
         result = _get_ollama_service().install_ollama()
         return (result, 200) if isinstance(result, dict) and result.get("success") else (result, 500)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"success": False, "message": f"Unexpected error installing Ollama: {str(e)}"}, 500
 
 
@@ -1473,7 +1535,7 @@ def full_restart():
     try:
         result = _get_ollama_service().full_restart()
         return (result, 200) if result.get("success") else (result, 500)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"success": False, "message": f"Unexpected error performing full restart: {str(e)}"}, 500
 
 
@@ -1483,7 +1545,7 @@ def get_models_memory_usage():
     try:
         memory_usage = _get_ollama_service().get_models_memory_usage()
         return memory_usage if memory_usage else ({"error": "Memory monitoring not available"}, 503)
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
 @bp.route('/api/models/downloadable')
@@ -1493,7 +1555,7 @@ def api_get_downloadable_models():
         category = request.args.get('category', 'best')
         models = _get_ollama_service().get_downloadable_models(category)
         return {"models": models}
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         current_app.logger.error(f"Error in downloadable models endpoint: {str(e)}", exc_info=True)
         return jsonify({"success": False, "message": str(e)}), 500
 
@@ -1527,39 +1589,13 @@ def api_pull_model(model_name=None):
         if isinstance(result, dict) and result.get("success"):
             return _json_success(result.get("message", f"Pulled {model_name}"))
         return _json_error(result.get("message", "Failed to pull model"))
-    except Exception as e:
+    except _ROUTE_ERRORS as e:
         return _json_error(f"Unexpected error pulling model: {str(e)}")
-
-
-# Removed duplicate warm-load start_model route; unified logic provided earlier with endpoint 'api_start_model'.
-
-
-@bp.route('/api/test-models-debug')
-def test_models_debug():
-    """Test endpoint to debug model counts."""
-    best = _get_ollama_service().get_best_models()
-    all_models = _get_ollama_service().get_all_downloadable_models()
-    best_via_method = _get_ollama_service().get_downloadable_models('best')
-    all_via_method = _get_ollama_service().get_downloadable_models('all')
-
-    return {
-        "best_count": len(best),
-        "all_downloadable_count": len(all_models),
-        "via_method_best_count": len(best_via_method),
-        "via_method_all_count": len(all_via_method),
-        "via_method_all_names": [m['name'] for m in all_via_method]
-    }
-
-
-# Legacy global settings page removed.
 
 
 @bp.route('/admin/model-defaults')
 def admin_model_defaults():
     return render_template('admin_model_defaults.html')
-
-
-# Global /api/settings endpoint removed (legacy global settings deprecated).
 
 
 def init_app(app):
@@ -1579,3 +1615,5 @@ def init_app(app):
     app.register_blueprint(bp)
     from app.routes.proxy import bp as proxy_bp  # pylint: disable=import-outside-toplevel
     app.register_blueprint(proxy_bp)
+    from app.routes.api_proxy import bp as api_proxy_bp  # pylint: disable=import-outside-toplevel
+    app.register_blueprint(api_proxy_bp)

@@ -4,4 +4,4 @@ REM Startup folder path:
 REM   %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
 REM   = C:\Users\Admin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
 cd /d "C:\Users\Admin\OneDrive\Bureau\ollama-dashboard"
-call start_app.bat
+call start.bat

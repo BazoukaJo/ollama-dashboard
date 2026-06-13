@@ -177,7 +177,7 @@ class OllamaService(
                 logger.debug("HTTP session closed")
 
             logger.info("OllamaService shutdown complete")
-        except Exception as e:
+        except (AttributeError, OSError, RuntimeError) as e:
             logger.warning(f"Error during shutdown: {e}")
 
     def shutdown(self) -> None:

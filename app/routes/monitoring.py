@@ -4,6 +4,8 @@ import time
 
 from flask import jsonify
 
+from app.services.service_errors import HTTP_SERVICE_ERRORS
+
 
 def create_monitoring_endpoints(bp, ollama_service):
     """Create monitoring and metrics endpoints.
@@ -26,7 +28,7 @@ def create_monitoring_endpoints(bp, ollama_service):
                 "success": True,
                 "performance_metrics": stats
             })
-        except Exception as e:
+        except HTTP_SERVICE_ERRORS as e:
             return jsonify({
                 "success": False,
                 "error": str(e)
@@ -45,7 +47,7 @@ def create_monitoring_endpoints(bp, ollama_service):
                 "success": True,
                 "rate_limits": limits
             })
-        except Exception as e:
+        except HTTP_SERVICE_ERRORS as e:
             return jsonify({
                 "success": False,
                 "error": str(e)
@@ -72,7 +74,7 @@ def create_monitoring_endpoints(bp, ollama_service):
                     "timestamp": time.time()
                 }
             })
-        except Exception as e:
+        except HTTP_SERVICE_ERRORS as e:
             return jsonify({
                 "success": False,
                 "error": str(e)

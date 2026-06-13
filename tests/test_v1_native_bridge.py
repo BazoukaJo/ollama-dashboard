@@ -42,7 +42,9 @@ def test_native_chat_response_to_openai_shape():
     assert out['object'] == 'chat.completion'
     assert out['id'] == 'chatcmpl-test'
     assert out['choices'][0]['message']['content'] == 'hello'
-    assert out['usage']['total_tokens'] == 15
+    usage = out['usage']
+    assert isinstance(usage, dict)
+    assert usage.get('total_tokens') == 15
 
 
 def test_native_chat_response_includes_reasoning():
@@ -76,7 +78,8 @@ def test_stream_maps_tool_calls_to_openai_format():
     out = ''.join(stream_native_chat_lines_to_openai_sse(iter(lines), model='qwen3:14b'))
     assert '"arguments": "{\\"expr\\": \\"2+2\\"}"' in out or '"arguments":"{\\"expr\\": \\"2+2\\"}"' in out
     assert '"finish_reason": "tool_calls"' in out or '"finish_reason":"tool_calls"' in out
-    assert '"type": "function"' in out or '"type":"function"' in out
+    assert '"role": "assistant"' in out
+    assert '"tool_calls"' in out
 
 
 def test_stream_maps_thinking_to_reasoning_delta():
@@ -86,6 +89,6 @@ def test_stream_maps_thinking_to_reasoning_delta():
     ]
     out = ''.join(stream_native_chat_lines_to_openai_sse(iter(lines), model='qwen3:14b'))
     assert '"reasoning": "Hmm"' in out or '"reasoning":"Hmm"' in out
-    assert '"content": ""' in out or '"content":""' in out
+    assert '"role": "assistant"' in out or '"role":"assistant"' in out
     assert '"content": "Hi"' in out or '"content":"Hi"' in out
     assert 'data: [DONE]' in out

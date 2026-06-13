@@ -10,7 +10,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import requests
 
@@ -534,7 +534,7 @@ class OllamaServiceControl:
         # Fallback to False if no earlier branch returned
         return False
 
-    def start_service(self):
+    def start_service(self) -> Dict[str, Any]:
         """Start the Ollama service"""
         try:
             # Check if already running (with error handling)

@@ -8,7 +8,7 @@
 - Core logic in `OllamaService` (`app/services/ollama.py`): handles HTTP to Ollama, caching, capability detection, per-model settings, atomic JSON persistence, health reporting.
 - Background thread updates system stats cache (~1s), health ping (~15s), and related caches. Model lists are not polled on a background interval; they refresh from the UI. Restart the process after service/capability/JS edits when caches might be stale.
 - API routes: input validation -> service method -> standardized JSON response.
-- **Windows production**: Waitress WSGI server via `start_app.bat`.
+- **Windows production**: Waitress WSGI server via `start.bat`.
 - **Docker/Linux production**: Gunicorn via `wsgi.py`.
 - **Development**: `python OllamaDashboard.py` (Flask dev server).
 
@@ -62,11 +62,11 @@
 - Avoid: direct Ollama HTTP in routes/JS, extra threads in request handlers, bypassing warm start logic, non-atomic JSON writes.
 
 ## Quick Commands
-- Install & run (Windows): `pip install -r requirements.txt` then `start_app.bat`
+- Install & run (Windows): `pip install -r requirements.txt` then `start.bat` (or `start_dev.bat` for debug)
 - Install & run (dev): `pip install -r requirements.txt` then `python OllamaDashboard.py`
 - Docker: `docker-compose up -d`
 
 **Entrypoints:**
-- Windows production: `start_app.bat` (Waitress)
+- Windows production: `start.bat` (Waitress)
 - Docker/Linux production: `wsgi.py` (Gunicorn)
 - Development: `OllamaDashboard.py` (Flask dev server)

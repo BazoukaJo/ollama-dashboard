@@ -13,7 +13,7 @@ echo.
 echo PREREQUISITE (one-time setup): the real Ollama must already be
 echo relocated off port 11434 - set a persistent OLLAMA_HOST env var
 echo to "host:port" (e.g. 127.0.0.1:11436) in the environment that
-echo launches Ollama, then restart Ollama. See README.md, section
+echo launches Ollama, then restart Ollama. See docs\GUIDE.md, section
 echo "Per-Model Settings: scope and limitations", for the full guide.
 echo.
 

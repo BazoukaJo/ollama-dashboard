@@ -19,8 +19,8 @@ python -m venv .venv
 # Install dependencies
 pip install -r requirements.txt
 
-# Run (production, uses Waitress)
-start_app.bat
+# Run (release — Waitress, no debug)
+start.bat
 
 # Open in browser
 # http://localhost:5000
@@ -41,16 +41,17 @@ python OllamaDashboard.py
 
 | Script | Purpose |
 |--------|---------|
-| `start_app.bat` | Start the dashboard with Waitress (production WSGI server) |
-| `stop_app.bat` | Stop the dashboard (kills process on port 5000) |
-| `restart_app.bat` | Stop then start the dashboard in a new window |
+| `start.bat` | Start the dashboard with Waitress (release, no debug) |
+| `start_dev.bat` | Start with Flask dev server and debug reloader |
+| `stop_app.bat` | Stop the dashboard (kills process on port 5000; shows last dev/release mode) |
+| `restart_app.bat` | Stop then restart in the same mode as last `start.bat` / `start_dev.bat` |
 
 The PowerShell monitor script (`scripts/ollama-dashboard-monitor.ps1`) can auto-start the dashboard when Ollama is detected and stop it when Ollama shuts down.
 
 > `start_proxy_takeover.bat` is a related but separate script: it runs the *optional*
 > settings-injecting companion proxy (`server_with_proxy.js`) in "port takeover" mode — not
 > the dashboard itself, and not required to use the dashboard. See the README's
-> [Per-Model Settings: scope and limitations](../README.md#per-model-settings-scope-and-limitations)
+> [Per-Model Settings: scope and limitations](GUIDE.md#per-model-settings-scope-and-limitations)
 > for what it does and when you'd want it.
 
 ---
@@ -164,7 +165,7 @@ server {
 | Issue | Solution |
 |-------|----------|
 | Dashboard can't connect to Ollama | Check `OLLAMA_HOST` env var; ensure Ollama API is accessible |
-| `start_app.bat` window closes immediately | Run from an existing terminal to see errors; ensure `.venv` exists with `waitress` installed |
+| `start.bat` window closes immediately | Run from an existing terminal to see errors; ensure `.venv` exists with `waitress` installed |
 | Settings changes not saving | Check file permissions; ensure disk space available |
 | Port 5000 already in use | Run `stop_app.bat` first, or check `netstat -aon \| findstr :5000` |
 

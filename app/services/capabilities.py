@@ -200,7 +200,7 @@ def ensure_capability_flags(model: dict, prefer_heuristics_on_conflict: bool = F
         model['has_vision'] = get_flag('has_vision')
         model['has_tools'] = get_flag('has_tools')
         model['has_reasoning'] = get_flag('has_reasoning')
-    except Exception:
+    except (AttributeError, KeyError, TypeError, ValueError):
         model.setdefault('has_vision', None)
         model.setdefault('has_tools', None)
         model.setdefault('has_reasoning', None)

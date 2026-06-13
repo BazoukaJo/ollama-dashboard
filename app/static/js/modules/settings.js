@@ -17,6 +17,7 @@
       }
       const data = gr.data;
       const settings = data.settings || {};
+      const client = data.client || data.copilot || {};
       const modalHtml = `
       <div class="modal fade" id="modelSettingsModal" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered modal-md">
@@ -42,6 +43,25 @@
                 <div class="mb-3">
                   <label class="form-label">Context (num_ctx)</label>
                   <input type="number" class="form-control" id="ms-num-ctx" value="${settings.num_ctx ?? 4096}">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">External client system prompt</label>
+                  <select class="form-select" id="ms-client-preset">
+                    <option value="none" ${(client.system_prompt_preset||'none')==='none'?'selected':''}>None</option>
+                    <option value="coding_assistant" ${client.system_prompt_preset==='coding_assistant'?'selected':''}>Coding assistant</option>
+                    <option value="explain_only" ${client.system_prompt_preset==='explain_only'?'selected':''}>Explain only</option>
+                    <option value="test_writer" ${client.system_prompt_preset==='test_writer'?'selected':''}>Test writer</option>
+                    <option value="reviewer" ${client.system_prompt_preset==='reviewer'?'selected':''}>Code reviewer</option>
+                  </select>
+                  <div class="form-text text-muted">Injected for apps using the <code>/ollama</code> API proxy (OpenAI / Ollama-compatible clients).</div>
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Custom system prompt (optional)</label>
+                  <textarea class="form-control" id="ms-client-custom" rows="2">${escapeHtml(client.system_prompt_custom||'')}</textarea>
+                </div>
+                <div class="form-check mb-3">
+                  <input class="form-check-input" type="checkbox" id="ms-client-trim" ${client.context_trim_enabled !== false ? 'checked' : ''}>
+                  <label class="form-check-label" for="ms-client-trim">Auto-trim long prompts to fit context (proxy)</label>
                 </div>
                 <div class="mb-3">
                   <label class="form-label">Seed</label>
@@ -83,7 +103,7 @@
                   </div>
                   <div class="d-flex align-items-start gap-2 mb-1">
                     <span class="badge bg-info text-dark flex-shrink-0" style="min-width:5em;text-align:center">Proxy</span>
-                    <span class="text-muted">GitHub Copilot / VS Code at <code>:5000/ollama</code> — saved settings (including <code>num_ctx</code>) merge into <code>/v1/chat/completions</code>. Save here to override defaults.</span>
+                    <span class="text-muted">External apps at <code>:5000/ollama</code> — VS Code, Claude Code, Continue, OpenAI SDKs. Saved settings merge on each request.</span>
                   </div>
                   <div class="d-flex align-items-start gap-2">
                     <span class="badge bg-warning text-dark flex-shrink-0" style="min-width:5em;text-align:center">Baked</span>
@@ -165,6 +185,9 @@
     const stopRaw = stopEl && stopEl.value ? stopEl.value.trim() : '';
     const stopArr = !stopRaw ? [] : stopRaw.split(',').map(s=>s.trim()).filter(s=>s).slice(0,10);
     const penalizeEl = g('ms-penalize-newline');
+    const presetEl = g('ms-client-preset');
+    const customEl = g('ms-client-custom');
+    const trimEl = g('ms-client-trim');
     return {
       temperature: safeFloat('ms-temperature', 0.75),
       top_k: safeInt('ms-top-k', 40),
@@ -182,7 +205,12 @@
       mirostat_tau: safeFloat('ms-mirostat-tau', 5),
       mirostat_eta: safeFloat('ms-mirostat-eta', 0.1),
       penalize_newline: penalizeEl ? !!penalizeEl.checked : false,
-      stop: stopArr
+      stop: stopArr,
+      client: {
+        system_prompt_preset: presetEl ? presetEl.value : 'none',
+        system_prompt_custom: customEl ? customEl.value.trim() : '',
+        context_trim_enabled: trimEl ? !!trimEl.checked : true,
+      },
     };
   }
 

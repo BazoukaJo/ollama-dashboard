@@ -75,6 +75,48 @@ select = ["E4", "E7", "E9", "F", "W", "I"]
 # Flask registers routes by importing the module; imports follow Blueprint creation by design.
 "app/routes/__init__.py" = ["E402"]
 
+# Pylint (IDE Problems panel): align with ruff — style/doc/complexity noise off; ruff + pytest cover the rest.
+[tool.pylint.main]
+py-version = "3.8"
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pylint.messages_control]
+disable = [
+  "missing-module-docstring",
+  "missing-class-docstring",
+  "missing-function-docstring",
+  "line-too-long",
+  "redefined-outer-name",
+  "protected-access",
+  "unused-argument",
+  "import-outside-toplevel",
+  "too-few-public-methods",
+  "too-many-branches",
+  "too-many-return-statements",
+  "too-many-statements",
+  "too-many-locals",
+  "too-many-arguments",
+  "duplicate-code",
+  "unnecessary-pass",
+  "no-else-return",
+  "consider-using-with",
+  "useless-return",
+  "too-many-nested-blocks",
+  "too-many-positional-arguments",
+  "broad-exception-caught",
+  "global-statement",
+  "raising-bad-type",
+]
+
+[tool.pylint.design]
+max-args = 12
+max-branches = 20
+max-locals = 20
+max-returns = 10
+max-statements = 80
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]

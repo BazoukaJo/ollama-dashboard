@@ -1,9 +1,0 @@
-{
-    "gpt-oss": {
-        "num_ctx": 131072
-    },
-    "deepseek-r1": {
-        "num_ctx": 131072,
-        "temperature": 0.6
-    }
-}

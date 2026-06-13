@@ -42,6 +42,45 @@ def test_chat_uses_per_model_settings(tmp_path):
         assert posted['options']['top_k'] == 77
 
 
+def test_chat_forwards_image_attachments(tmp_path):
+    app = create_app()
+    client = app.test_client()
+    from app.routes.main import ollama_service as route_ollama_service
+    route_ollama_service.init_app(app)
+    app.config['MODEL_SETTINGS_FILE'] = str(tmp_path / 'model_settings.json')
+
+    png_b64 = (
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+    )
+    called = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {'response': 'ok'}
+
+    def fake_post(url, json=None, **kwargs):
+        called['json'] = json
+        return FakeResponse()
+
+    model = {'name': 'llava', 'has_vision': True}
+    with patch('app.routes.main.ollama_service._session') as mock_session:
+        mock_session.post.side_effect = fake_post
+        with patch('app.routes.main.ollama_service.get_model_info_cached', return_value=model):
+            resp = client.post(
+                '/api/chat',
+                json={
+                    'model': 'llava',
+                    'prompt': 'Describe',
+                    'attachments': [{'type': 'image', 'name': 'x.png', 'content': png_b64}],
+                },
+            )
+    assert resp.status_code == 200
+    assert 'images' in called['json']
+    assert len(called['json']['images']) == 1
+
+
 def test_chat_stream_returns_generator_response(tmp_path):
     """Streaming /api/chat must yield chunks incrementally, not buffer the whole body."""
     app = create_app()

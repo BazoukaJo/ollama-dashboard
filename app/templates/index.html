@@ -65,7 +65,7 @@
     </div>
     {%- endmacro %}
 
-    <div class="container px-3 pb-3 pt-0 dashboard-page-wide" id="dashboard-page">
+    <div class="container pt-0 dashboard-page-wide" id="dashboard-page">
         <header class="dashboard-header-banner" role="banner">
             <div class="dashboard-header-bar w-100">
                 <div class="dashboard-header-start">
@@ -94,35 +94,43 @@
                         </div>
                     </div>
                 </div>
-                <div class="dashboard-header-version-status" aria-label="Dashboard version, API address, and refresh status">
-                    <div class="dashboard-header-versions">
-                        <p class="dashboard-header-version-line mb-0" data-dashboard-tooltip="Dashboard app version, Ollama server version when known, and API host:port.">
-                            <span class="dashboard-header-meta-chip" data-dashboard-tooltip="Version of this dashboard web app.">Dashboard v{{ dashboard_version|default('1.0003') }}</span>
-                            {% if ollama_version != 'Unknown' %}
-                            <span class="dashboard-header-meta-chip" data-dashboard-tooltip="Ollama server version returned by the API at this host:port.">Ollama v{{ ollama_version }}</span>
-                            <span class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint font-monospace dashboard-meta-host" data-dashboard-tooltip="Ollama API (OLLAMA_HOST:OLLAMA_PORT)">{{ ollama_public_host }}:{{ ollama_public_port }}</span>
-                            {% elif not ollama_installed %}
-                            <span class="dashboard-header-meta-chip dashboard-header-meta-chip--warn" data-dashboard-tooltip="No Ollama install found on this machine, or the service is not reachable at the target host:port.">Ollama not detected</span>
-                            <span class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint font-monospace dashboard-meta-host" data-dashboard-tooltip="Target Ollama API (OLLAMA_HOST:OLLAMA_PORT)">{{ ollama_public_host }}:{{ ollama_public_port }}</span>
-                            {% else %}
-                            <span class="dashboard-header-meta-chip">Ollama</span>
-                            <span class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint font-monospace dashboard-meta-host" data-dashboard-tooltip="Ollama API (OLLAMA_HOST:OLLAMA_PORT)">{{ ollama_public_host }}:{{ ollama_public_port }}</span>
-                            {% endif %}
-                        </p>
+
+                <div class="dashboard-header-meta-group" aria-label="Dashboard and API proxy info" data-model-poll-interval="10">
+                <div class="dashboard-header-info-panel" id="dashboardInfoPanel">
+                    <div class="dashboard-header-panel-full">
+                    <div class="dashboard-header-info-row dashboard-header-info-row--ollama">
+                        <span class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint font-monospace dashboard-meta-host dashboard-header-endpoint-copy" role="button" tabindex="0" title="{{ ollama_api_base }}" data-copy-value="{{ ollama_api_base }}" data-dashboard-tooltip="Ollama backend URL — click to copy" aria-label="Copy Ollama backend URL">{{ ollama_host_port_label }}</span>
+                        <span class="dashboard-header-meta-chip" data-dashboard-tooltip="Version of this dashboard web app.">Dashboard v{{ dashboard_version|default('1.0003') }}</span>
+                        {% if ollama_version != 'Unknown' %}
+                        <span class="dashboard-header-meta-chip" data-dashboard-tooltip="Ollama server version returned by the API at this host:port.">Ollama v{{ ollama_version }}</span>
+                        {% elif not ollama_installed %}
+                        <span class="dashboard-header-meta-chip dashboard-header-meta-chip--warn" data-dashboard-tooltip="No Ollama install found on this machine, or the service is not reachable at the target host:port.">Ollama not detected</span>
+                        {% else %}
+                        <span class="dashboard-header-meta-chip">Ollama</span>
+                        {% endif %}
+                        <span id="ollamaBackendStatusBadge" class="dashboard-header-meta-chip api-proxy-status-badge badge bg-secondary dashboard-header-status-badge" data-dashboard-tooltip="Whether the Ollama HTTP API responds at the backend address.">
+                            <span class="ollama-backend-status-text">checking…</span>
+                        </span>
                     </div>
-                    <div class="dashboard-header-meta">
-                        <div class="refresh-indicator {% if error %}error{% endif %}" data-timezone="{{ timezone }}" data-poll-interval="10" data-dashboard-tooltip="Green dot: last update succeeded. Time is local. Countdown is seconds until the next automatic refresh (stats + model lists). Use the button to refresh immediately.">
-                            <div class="refresh-indicator-cluster">
-                                <div class="refresh-indicator-state">
-                                    <div class="dot" aria-hidden="true"></div>
-                                    <p class="dashboard-header-status-line mb-0">Updated <span id="lastUpdate"></span><span class="refresh-poll-sep" aria-hidden="true"> · </span>next poll <span id="nextRefresh">10</span>s</p>
-                                </div>
-                                <button type="button" class="btn btn-sm btn-outline-secondary btn-refresh" id="refreshDashboardBtn" data-dashboard-tooltip="Fetch latest system stats and model lists now (same as waiting for the countdown)." onclick="refreshDashboardData()" aria-label="Refresh dashboard">
-                                    <i class="fas fa-sync-alt"></i>
-                                </button>
-                            </div>
-                        </div>
+                    <div class="dashboard-header-info-row dashboard-header-info-row--proxy">
+                        <code class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint dashboard-header-proxy-url dashboard-header-endpoint-copy user-select-all" id="apiProxyEndpoint" role="button" tabindex="0" title="{{ proxy_endpoint }}" data-copy-value="{{ proxy_endpoint }}" data-dashboard-tooltip="API proxy URL — click to copy" aria-label="Copy API proxy URL">{{ proxy_endpoint_label }}</code>
+                        <span class="dashboard-header-meta-chip dashboard-header-proxy-label" data-dashboard-tooltip="Use this address in VS Code, Claude Code, Continue, OpenAI SDKs, and any Ollama-compatible app instead of {{ ollama_api_base }}">
+                            <i class="fas fa-exchange-alt me-1" aria-hidden="true"></i>API proxy
+                        </span>
+                        <span id="apiProxyStatusBadge" class="dashboard-header-meta-chip api-proxy-status-badge badge bg-secondary dashboard-header-status-badge" data-dashboard-tooltip="Recent activity through the settings-injecting proxy">
+                            <span class="api-proxy-status-text">checking…</span>
+                        </span>
+                        <button type="button" class="btn btn-sm btn-outline-info dashboard-header-proxy-connect flex-shrink-0" onclick="apiProxyUI.openWizard()" data-dashboard-tooltip="Verify proxy and copy setup URL for external apps" aria-label="Connect external app">
+                            <i class="fas fa-plug" aria-hidden="true"></i>
+                            <span class="dashboard-header-proxy-connect-label">Connect</span>
+                        </button>
                     </div>
+                    </div>
+                    <div class="dashboard-header-panel-compact" data-dashboard-tooltip="Ollama backend and API proxy URLs — click to copy">
+                        <span class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint font-monospace dashboard-meta-host dashboard-header-endpoint-copy" role="button" tabindex="0" title="{{ ollama_api_base }}" data-copy-value="{{ ollama_api_base }}" data-dashboard-tooltip="Ollama backend URL — click to copy" aria-label="Copy Ollama backend URL">{{ ollama_host_port_label }}</span>
+                        <code class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint dashboard-header-proxy-url dashboard-header-endpoint-copy user-select-all" role="button" tabindex="0" title="{{ proxy_endpoint }}" data-copy-value="{{ proxy_endpoint }}" data-dashboard-tooltip="API proxy URL — click to copy" aria-label="Copy API proxy URL">{{ proxy_endpoint_label }}</code>
+                    </div>
+                </div>
                 </div>
                 <button type="button" id="themeToggleBtn" class="theme-toggle-btn dashboard-header-theme-toggle flex-shrink-0" data-dashboard-tooltip="Switch to light mode" aria-label="Switch to light mode">
                     <i class="fas fa-sun theme-toggle-icon theme-toggle-icon--sun" aria-hidden="true"></i>
@@ -132,9 +140,9 @@
 
             <!-- System resources: lives in header so it stays visible while model lists scroll -->
             <div class="dashboard-header-resources-strip w-100">
-                <div class="compact-system-resources mb-0" data-stats-poll-interval="1">
-                    <div class="d-flex justify-content-between align-items-center mb-0 compact-resources-head">
-                        <div class="d-flex align-items-center gap-1" data-dashboard-tooltip="Live usage on this computer: CPU, RAM, GPU memory (if any), GPU 3D engine, and SSD/disk activity. Sparklines show recent history.">
+                <div class="compact-system-resources" data-stats-poll-interval="1">
+                    <div class="d-flex justify-content-between align-items-center compact-resources-head">
+                        <div class="d-flex align-items-center dashboard-inline-gap-sm" data-dashboard-tooltip="Live usage on this computer: CPU, RAM, GPU memory (if any), GPU 3D engine, and SSD/disk activity. Sparklines show recent history.">
                             <i class="fas fa-server text-primary section-icon"></i>
                             <span class="fw-semibold text-light section-title-text">System Resources</span>
                         </div>
@@ -216,142 +224,20 @@
             {% endif %}
         </header>
 
-        <!-- Restart confirmation modal -->
-        <div class="modal fade" id="restartConfirmModal" tabindex="-1" aria-labelledby="restartConfirmModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content bg-dark text-light">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="restartConfirmModalLabel">Confirm Restart</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p>Restarting Ollama force-kills the service and reloads it. All models are unloaded from memory and ongoing requests are interrupted. Use this if a model is stuck and normal Stop does not work.</p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button id="confirmRestartBtn" type="button" class="btn btn-warning">Restart Ollama</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {% if not ollama_installed %}
-        <div class="modal fade" id="installOllamaModal" tabindex="-1" aria-labelledby="installOllamaModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content bg-dark text-light">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="installOllamaModalLabel">Install Ollama</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p>This will run the platform installer (e.g. <code class="text-info">winget install Ollama.Ollama</code>, Chocolatey, a silent download of <a href="https://ollama.com/download/windows" target="_blank" rel="noopener" class="text-info">OllamaSetup.exe</a> on Windows if package managers are missing, Homebrew cask, or the <a href="https://ollama.com/download" target="_blank" rel="noopener" class="text-info">official install script</a> on Linux), then start the Ollama service. It can take several minutes.</p>
-                        <p class="text-muted small mb-0">Windows may show a UAC or installer prompt. You can still use <strong>Start</strong>, <strong>Stop</strong>, and <strong>Restart</strong> next to the health badge after Ollama is installed.</p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button id="confirmInstallOllamaBtn" type="button" class="btn btn-success">Install now</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if ollama_update_available %}
-        <!-- Update Ollama confirmation modal (only when startup check found a newer release) -->
-        <div class="modal fade" id="updateOllamaModal" tabindex="-1" aria-labelledby="updateOllamaModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content bg-dark text-light">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="updateOllamaModalLabel">Update Ollama</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        {% if ollama_update_latest_version %}
-                        <p class="text-info small">Newer release available: <strong>{{ ollama_update_latest_version }}</strong> (you have v{{ ollama_version }}).</p>
-                        {% endif %}
-                        <p>This will stop the Ollama service, run the platform updater (winget, Chocolatey, official Windows installer when needed, Homebrew, or the Linux install script), then start Ollama again. Running models and in-flight requests will be interrupted. The step can take several minutes.</p>
-                        <p class="text-muted small mb-0">On Windows, elevation may be required if the updater prompts for administrator approval.</p>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button id="confirmUpdateOllamaBtn" type="button" class="btn btn-info">Update now</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- Ask model modal -->
-        <div class="modal fade" id="askModelModal" tabindex="-1" aria-labelledby="askModelModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-centered">
-                <div class="modal-content bg-dark text-light">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="askModelModalLabel">Ask <span id="askModelModalName" class="text-success"></span></h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <textarea id="askModelInput" class="form-control bg-dark text-light border-secondary" rows="3" placeholder="Type your question and press Enter (or click Send)..." aria-label="Question for the model"></textarea>
-                        </div>
-                        <div id="askModelResponseWrap" style="display:none;">
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <span class="text-muted small">Response</span>
-                                <div id="askModelSpinner" class="spinner-border spinner-border-sm text-success" role="status" style="display:none;">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                            </div>
-                            <div id="askModelResponse" class="ask-model-response-area p-3 border border-secondary rounded" style="white-space:pre-wrap; max-height:400px; overflow-y:auto; font-size:0.9rem; background:#1a1a1a;"></div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-                        <button id="askModelSendBtn" type="button" class="btn btn-success" onclick="sendAskModelQuestion()">
-                            <i class="fas fa-paper-plane me-1"></i>Send
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Find Model modal -->
-        <div class="modal fade" id="findModelModal" tabindex="-1" aria-labelledby="findModelModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-lg modal-dialog-centered">
-                <div class="modal-content bg-dark text-light">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="findModelModalLabel">Find & Download Model</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <p class="text-muted mb-3">Enter a model name from the <a href="https://ollama.com/library" target="_blank" rel="noopener" class="text-info">Ollama library</a> to download it.</p>
-                        <div class="input-group input-group-lg find-model-input-group">
-                            <span class="input-group-text bg-secondary border-secondary text-light"><i class="fas fa-cube"></i></span>
-                            <input type="text" class="form-control form-control-lg bg-dark text-light border-secondary" id="findModelInput" placeholder="e.g. llama3, mistral, gemma2:2b" autocomplete="off" data-dashboard-tooltip="Use the exact tag from the library (include variant, e.g. llama3.2:3b). Pull runs in the background.">
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                        <button id="confirmFindModelBtn" type="button" class="btn btn-info" onclick="confirmFindModel()">
-                            <i class="fas fa-download me-1"></i>Download
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Models Management Section -->
         <div class="models-section">
                 <!-- Models Management Section -->
-                <div class="models-management mt-4">
-                    <!-- Running Models: section must always be present so JS can fill #runningModelsContainer after Start (no full reload). -->
-                    <div class="mb-4">
-                        <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
-                            <div class="d-flex align-items-center gap-2">
+                <div class="models-management dashboard-section-stack">
+                    <div class="dashboard-section-block models-section-shell" id="runningModelsSection">
+                        <div class="d-flex align-items-center flex-wrap dashboard-block-header models-section-header">
+                            <div class="d-flex align-items-center dashboard-inline-gap">
                                 <i class="fas fa-play-circle text-success section-icon"></i>
                                 <span class="fw-semibold text-light section-title-text" data-dashboard-tooltip="Models with a context loaded in memory / on the GPU (equivalent to the ollama ps command).">Running Models</span>
                                 <span class="badge bg-primary text-white ms-2" id="runningModelsCount" data-dashboard-tooltip="Number of models currently loaded.">{{ models|default([])|length }}</span>
                             </div>
                         </div>
-                        <div class="row g-3 model-cards-row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5" id="runningModelsContainer">
+                        <div class="models-section-body">
+                        <div class="row g-3 model-cards-row" id="runningModelsContainer">
                             {% if models %}
                             {% for model in models %}
                             <div class="col">
@@ -481,13 +367,14 @@
                             {% endfor %}
                             {% endif %}
                         </div>
+                        </div>
                     </div>
 
                     <!-- Available Models: show when Ollama is installed so JS can fill the grid even if SSR list is empty. -->
                     {% if ollama_installed %}
-                    <div class="mb-4 models-section-shell available-section-shell" id="availableModelsSection">
-                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 models-mgmt-toolbar models-section-header available-section-header" id="availableSectionHeader">
-                            <div class="d-flex align-items-center gap-2 flex-wrap models-mgmt-toolbar-primary">
+                    <div class="dashboard-section-block models-section-shell available-section-shell" id="availableModelsSection">
+                        <div class="d-flex align-items-center justify-content-between dashboard-inline-gap models-mgmt-toolbar models-section-header available-section-header" id="availableSectionHeader">
+                            <div class="d-flex align-items-center dashboard-inline-gap models-mgmt-toolbar-primary">
                                 <button type="button" class="btn btn-sm btn-outline-secondary" id="refreshModelsBtn" data-dashboard-tooltip="Reload installed model list from Ollama without a full page refresh." onclick="refreshDashboardData()" aria-label="Refresh models">
                                     <i class="fas fa-sync-alt"></i>
                                 </button>
@@ -495,7 +382,7 @@
                                 <span class="fw-semibold text-light section-title-text" data-dashboard-tooltip="Models on disk that you can start (`ollama list`). Not all are loaded into memory.">Available Models</span>
                                 <span class="badge bg-primary text-white ms-2" id="availableModelsCount" data-dashboard-tooltip="Count of installed models.">{{ available_models|length }}</span>
                             </div>
-                            <div class="d-flex align-items-center gap-2 gap-md-3 flex-wrap models-mgmt-toolbar-secondary justify-content-md-end">
+                            <div class="d-flex align-items-center dashboard-inline-gap-lg models-mgmt-toolbar-secondary">
                                 <div class="capability-filters d-flex align-items-center gap-1" id="availableModelsFilters">
                                     <span class="text-muted small me-2" data-dashboard-tooltip="Click an icon to hide models that lack that capability (per Ollama metadata). Active = filter on.">Filters</span>
                                     <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" data-dashboard-tooltip="Filter by reasoning / thinking support (metadata)." title="Toggle reasoning models" aria-label="Toggle reasoning models" onclick="toggleCapabilityFilter('reasoning')">
@@ -514,10 +401,10 @@
                             </div>
                         </div>
                         <div id="availableModelsBody" class="models-section-body available-section-body">
-                        <div class="row g-3 model-cards-row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5" id="availableModelsContainer">
+                        <div class="row g-3 model-cards-row" id="availableModelsContainer">
                             {% for model in available_models %}
                             <div class="col">
-                                <div class="model-card h-100" data-model-name="{{ model.name|e }}">
+                                <div class="model-card h-100" data-model-name="{{ model.name|e }}"{% if model.has_vision is true %} data-has-vision="true"{% elif model.has_vision is false %} data-has-vision="false"{% endif %}>
                                     <div class="model-header model-card-head">
                                         <div class="model-icon-wrapper">
                                             <i class="fas fa-box model-icon-main"></i>
@@ -628,26 +515,28 @@
                     {% endif %}
 
                     <!-- Baked Settings Models (populated by JS; hidden when empty) -->
-                    <div class="mb-4 models-section-shell" id="derivedModelsSection" style="display:none">
-                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 models-mgmt-toolbar models-section-header">
-                            <div class="d-flex align-items-center gap-2 models-mgmt-toolbar-primary">
+                    <div class="dashboard-section-block models-section-shell" id="derivedModelsSection" style="display:none">
+                        <div class="d-flex align-items-center justify-content-between dashboard-inline-gap models-mgmt-toolbar models-section-header">
+                            <div class="d-flex align-items-center dashboard-inline-gap models-mgmt-toolbar-primary">
                                 <i class="fas fa-layer-group text-warning section-icon"></i>
                                 <span class="fw-semibold text-light section-title-text" data-dashboard-tooltip="Models created via 'Bake into Model' — your saved settings are built into their Modelfile so any Ollama client gets them automatically, without the proxy. Delete when no longer needed.">Baked Settings Models</span>
                                 <span class="badge bg-warning text-dark ms-1" id="derivedModelsCount">0</span>
                             </div>
                             <span class="text-muted small">Delete when no longer needed to keep your model list tidy.</span>
                         </div>
-                        <div class="row g-3 model-cards-row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5" id="derivedModelsContainer"></div>
+                        <div class="models-section-body">
+                        <div class="row g-3 model-cards-row" id="derivedModelsContainer"></div>
+                        </div>
                     </div>
 
                     <!-- Downloadable Models -->
-                    <div class="mb-4 models-section-shell downloadable-section-shell" id="downloadableModelsSection">
-                        <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2 models-mgmt-toolbar models-section-header downloadable-section-header" id="downloadableSectionHeader">
-                            <div class="d-flex align-items-center gap-2 models-mgmt-toolbar-primary">
+                    <div class="dashboard-section-block models-section-shell downloadable-section-shell" id="downloadableModelsSection">
+                        <div class="d-flex align-items-center justify-content-between dashboard-inline-gap models-mgmt-toolbar models-section-header downloadable-section-header" id="downloadableSectionHeader">
+                            <div class="d-flex align-items-center dashboard-inline-gap models-mgmt-toolbar-primary">
                                 <i class="fas fa-star text-warning section-icon"></i>
                                 <span class="fw-semibold text-light section-title-text" data-dashboard-tooltip="Curated suggestions you can pull with Ollama. Use Find Model or CLI for any tag from the full library.">Downloadable Models</span>
                             </div>
-                            <div class="d-flex align-items-center gap-2 gap-md-3 flex-wrap models-mgmt-toolbar-secondary justify-content-md-end">
+                            <div class="d-flex align-items-center dashboard-inline-gap-lg models-mgmt-toolbar-secondary">
                                 <div class="capability-filters d-flex align-items-center gap-1" id="bestModelsFilters">
                                     <span class="text-muted small me-2" data-dashboard-tooltip="Same as Available: filter the list by capability flags in model metadata.">Filters</span>
                                     <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" data-dashboard-tooltip="Filter by reasoning / thinking support (metadata)." title="Toggle reasoning models" aria-label="Toggle reasoning models" onclick="toggleCapabilityFilter('reasoning')">
@@ -670,7 +559,7 @@
                             </div>
                         </div>
                         <div id="downloadableModelsBody" class="models-section-body downloadable-section-body">
-                        <div class="row g-3 model-cards-row model-cards-row--downloadable row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xl-4 row-cols-xxl-5" id="downloadableModelsContainer">
+                        <div class="row g-3 model-cards-row model-cards-row--downloadable" id="downloadableModelsContainer">
                             <div class="col-12 text-center py-4">
                                 <div class="spinner-border text-secondary" role="status">
                                     <span class="visually-hidden">Loading...</span>
@@ -695,6 +584,155 @@
                     {% endif %}
                 </div>
         </div>
+    </div>
+
+    <!-- Modals live on body (outside .container + ui zoom) for correct viewport width -->
+    <div class="modal fade" id="restartConfirmModal" tabindex="-1" aria-labelledby="restartConfirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="restartConfirmModalLabel">Confirm Restart</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Restarting Ollama force-kills the service and reloads it. All models are unloaded from memory and ongoing requests are interrupted. Use this if a model is stuck and normal Stop does not work.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button id="confirmRestartBtn" type="button" class="btn btn-warning">Restart Ollama</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not ollama_installed %}
+    <div class="modal fade" id="installOllamaModal" tabindex="-1" aria-labelledby="installOllamaModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="installOllamaModalLabel">Install Ollama</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>This will run the platform installer (e.g. <code class="text-info">winget install Ollama.Ollama</code>, Chocolatey, a silent download of <a href="https://ollama.com/download/windows" target="_blank" rel="noopener" class="text-info">OllamaSetup.exe</a> on Windows if package managers are missing, Homebrew cask, or the <a href="https://ollama.com/download" target="_blank" rel="noopener" class="text-info">official install script</a> on Linux), then start the Ollama service. It can take several minutes.</p>
+                    <p class="text-muted small mb-0">Windows may show a UAC or installer prompt. You can still use <strong>Start</strong>, <strong>Stop</strong>, and <strong>Restart</strong> next to the health badge after Ollama is installed.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button id="confirmInstallOllamaBtn" type="button" class="btn btn-success">Install now</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if ollama_update_available %}
+    <div class="modal fade" id="updateOllamaModal" tabindex="-1" aria-labelledby="updateOllamaModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="updateOllamaModalLabel">Update Ollama</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    {% if ollama_update_latest_version %}
+                    <p class="text-info small">Newer release available: <strong>{{ ollama_update_latest_version }}</strong> (you have v{{ ollama_version }}).</p>
+                    {% endif %}
+                    <p>This will stop the Ollama service, run the platform updater (winget, Chocolatey, official Windows installer when needed, Homebrew, or the Linux install script), then start Ollama again. Running models and in-flight requests will be interrupted. The step can take several minutes.</p>
+                    <p class="text-muted small mb-0">On Windows, elevation may be required if the updater prompts for administrator approval.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button id="confirmUpdateOllamaBtn" type="button" class="btn btn-info">Update now</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="modal fade" id="askModelModal" tabindex="-1" aria-labelledby="askModelModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="askModelModalLabel">Ask <span id="askModelModalName" class="text-success"></span></h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="askModelCapabilitiesHint" class="small text-muted mb-2"></p>
+                    <div class="ask-attachments-toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
+                        <input type="file" id="askImageInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
+                        <input type="file" id="askPdfInput" class="d-none" accept=".pdf,application/pdf">
+                        <input type="file" id="askDocInput" class="d-none" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+                        <button type="button" id="askAttachImageBtn" class="btn btn-sm btn-outline-info">
+                            <i class="fas fa-image me-1" aria-hidden="true"></i>Image
+                        </button>
+                        <button type="button" id="askAttachPdfBtn" class="btn btn-sm btn-outline-info">
+                            <i class="fas fa-file-pdf me-1" aria-hidden="true"></i>PDF
+                        </button>
+                        <button type="button" id="askAttachDocBtn" class="btn btn-sm btn-outline-info">
+                            <i class="fas fa-file-word me-1" aria-hidden="true"></i>Word
+                        </button>
+                        <button type="button" id="askAttachCodeBtn" class="btn btn-sm btn-outline-info">
+                            <i class="fas fa-code me-1" aria-hidden="true"></i>Code
+                        </button>
+                    </div>
+                    <div id="askAttachmentsList" class="ask-attachments-list mb-2" style="display:none;"></div>
+                    <div id="askCodeSnippetWrap" class="ask-code-snippet-wrap mb-3 p-2 border border-secondary rounded" style="display:none;">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <label class="small text-muted mb-0" for="askCodeLanguage">Language</label>
+                            <select id="askCodeLanguage" class="form-select form-select-sm ask-model-input" style="width:auto; min-width:8rem;"></select>
+                            <button type="button" id="askCodeConfirmBtn" class="btn btn-sm btn-success ms-auto">
+                                <i class="fas fa-plus me-1" aria-hidden="true"></i>Add snippet
+                            </button>
+                        </div>
+                        <textarea id="askCodeInput" class="form-control form-control-sm ask-model-input font-monospace" rows="5" placeholder="Paste code here…" aria-label="Code snippet"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <textarea id="askModelInput" class="form-control ask-model-input" rows="3" placeholder="Type your question and press Enter (or click Send)…" aria-label="Question for the model"></textarea>
+                    </div>
+                    <div id="askModelResponseWrap" style="display:none;">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <span class="text-muted small">Response</span>
+                            <div id="askModelSpinner" class="spinner-border spinner-border-sm text-success" role="status" style="display:none;">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <div id="askModelResponse" class="ask-model-response-area p-3 border border-secondary rounded" style="white-space:pre-wrap; max-height:400px; overflow-y:auto; font-size:0.9rem; background:#1a1a1a;"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button id="askModelSendBtn" type="button" class="btn btn-success" onclick="sendAskModelQuestion()">
+                        <i class="fas fa-paper-plane me-1"></i>Send
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="findModelModal" tabindex="-1" aria-labelledby="findModelModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content bg-dark text-light">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="findModelModalLabel">Find & Download Model</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">Enter a model name from the <a href="https://ollama.com/library" target="_blank" rel="noopener" class="text-info">Ollama library</a> to download it.</p>
+                    <div class="input-group input-group-lg find-model-input-group">
+                        <span class="input-group-text bg-secondary border-secondary text-light"><i class="fas fa-cube"></i></span>
+                        <input type="text" class="form-control form-control-lg bg-dark text-light border-secondary" id="findModelInput" placeholder="e.g. llama3, mistral, gemma2:2b" autocomplete="off" data-dashboard-tooltip="Use the exact tag from the library (include variant, e.g. llama3.2:3b). Pull runs in the background.">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button id="confirmFindModelBtn" type="button" class="btn btn-info" onclick="confirmFindModel()">
+                        <i class="fas fa-download me-1"></i>Download
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     {% if error %}
     <div class="alert alert-danger dashboard-error-popup" role="alert" aria-live="assertive">
@@ -718,6 +756,8 @@
     <script src="{{ url_for('static', filename='js/modules/modelCards.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/serviceControl.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/settings.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/api_proxy.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/askModal.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/bootstrap.js') }}?v={{ timestamp }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

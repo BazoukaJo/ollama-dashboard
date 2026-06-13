@@ -143,6 +143,13 @@ class TestCSSLayoutRules:
         assert css_path.exists(), "styles.css not found"
         return css_path.read_text(encoding="utf-8")
 
+    def test_dashboard_page_uses_full_width_not_centered_column(self, css_content):
+        assert "--dashboard-content-max" in css_content
+        assert "max-width: var(--dashboard-content-max)" in css_content
+        assert "margin-inline: auto" in css_content
+        assert "@container dashboard-page" in css_content
+        assert "justify-content: center" in css_content
+
     def test_spec_row_has_flex_display(self, css_content):
         assert "display: flex" in css_content
         assert ".spec-row" in css_content or "spec-row" in css_content

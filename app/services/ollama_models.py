@@ -1,8 +1,8 @@
 """Model management functionality for OllamaService: model operations, info retrieval, and capabilities."""
 
+import concurrent.futures
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Protocol, Tuple
 
 import requests
@@ -15,6 +15,7 @@ from app.services.model_helpers import (
     normalize_available_model_entry,
 )
 from app.services.model_settings_helpers import lookup_settings_entry
+from app.services.service_errors import HTTP_SERVICE_ERRORS
 from app.services.system_stats import collect_system_stats, get_disk_info, get_vram_info, models_memory_usage
 
 
@@ -104,7 +105,7 @@ class OllamaServiceModels:
         try:
             host, port = self._ollama_core.get_ollama_host_port()
             return f"http://{host}:{port}/api/ps"
-        except Exception as exc:
+        except HTTP_SERVICE_ERRORS as exc:
             raise ConnectionError(
                 f"Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct. ({exc})"
             ) from exc
@@ -125,7 +126,7 @@ class OllamaServiceModels:
             version = data.get('version', 'Unknown')
             self._set_cached('ollama_version', version)
             return version
-        except Exception:
+        except HTTP_SERVICE_ERRORS:
             return 'Unknown'
 
     def get_system_stats(self):
@@ -213,7 +214,7 @@ class OllamaServiceModels:
                 **data,
                 **capabilities,
             }
-        except Exception as exc:
+        except HTTP_SERVICE_ERRORS as exc:
             self.logger.debug("Detailed info fetch failed for %s: %s", model_name, exc)
             return None
 
@@ -233,7 +234,7 @@ class OllamaServiceModels:
             if isinstance(caps_list, list):
                 return name, ctx, caps_list
             return name, ctx, None
-        except Exception:
+        except HTTP_SERVICE_ERRORS:
             return name, None, None
 
     def get_available_models(self, force_refresh=False):
@@ -254,7 +255,7 @@ class OllamaServiceModels:
                 try:
                     curated = self.get_all_downloadable_models()
                     normalized = [self._normalize_available_model_entry(entry) for entry in curated]
-                except Exception:
+                except HTTP_SERVICE_ERRORS:
                     normalized = []
 
             # Enrich with context_length and capabilities from /api/show (parallel, non-blocking).
@@ -279,9 +280,9 @@ class OllamaServiceModels:
                 if m.get('name') and (m['name'] not in ctx_by_name or m['name'] not in caps_by_name)
             ]
             try:
-                with ThreadPoolExecutor(max_workers=min(3, len(need_enrich) or 1)) as ex:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(3, len(need_enrich) or 1)) as ex:
                     futures = {ex.submit(self._enrich_model_from_show, m): m for m in need_enrich}
-                    for future in as_completed(futures, timeout=15):
+                    for future in concurrent.futures.as_completed(futures, timeout=15):
                         try:
                             name, ctx, caps_list = future.result()
                             if name and ctx is not None:
@@ -290,9 +291,9 @@ class OllamaServiceModels:
                                 caps_by_name[name] = caps_list
                             if name:
                                 self._set_cached(f"show:{name}", (ctx, caps_list))
-                        except Exception:
+                        except HTTP_SERVICE_ERRORS:
                             pass
-            except Exception:
+            except HTTP_SERVICE_ERRORS:
                 pass
 
             for m in normalized:
@@ -311,13 +312,13 @@ class OllamaServiceModels:
                         len(normalized),
                         [m.get('name') for m in normalized],
                     )
-            except Exception:
+            except HTTP_SERVICE_ERRORS:
                 # Logging must never break the main code path
                 pass
 
             self._set_cached('available_models', normalized)
             return normalized
-        except Exception as exc:
+        except HTTP_SERVICE_ERRORS as exc:
             self.logger.debug("Error fetching available models: %s", exc)
             return []
 
@@ -397,7 +398,7 @@ class OllamaServiceModels:
                             entry[key] = src[key]
                         elif key in src:
                             entry[key] = src[key]  # allow None for "unknown"
-            except Exception:
+            except HTTP_SERVICE_ERRORS:
                 # Metadata enrichment is best-effort only
                 pass
 
@@ -410,7 +411,7 @@ class OllamaServiceModels:
                         [m.get('name') for m in current_models],
                         force_refresh,
                     )
-            except Exception:
+            except HTTP_SERVICE_ERRORS:
                 # Logging must never break the main code path
                 pass
             if current_models:
@@ -426,7 +427,7 @@ class OllamaServiceModels:
             raise OllamaConnectionError(
                 "Connection to Ollama server timed out. Please check your network connection."
             ) from exc
-        except Exception as exc:
+        except HTTP_SERVICE_ERRORS as exc:
             raise OllamaConnectionError(f"Error fetching models: {exc}") from exc
 
     def get_model_info_cached(self, model_name):
@@ -441,7 +442,7 @@ class OllamaServiceModels:
                 if model.get('name') == model_name:
                     return model
             return None
-        except Exception as exc:
+        except HTTP_SERVICE_ERRORS as exc:
             self.logger.exception("Error getting model info_cached for %s: %s", model_name, exc)
             return None
 
@@ -473,7 +474,7 @@ class OllamaServiceModels:
                     return False
                 # Legacy JSON often omitted ``source``; treat persisted settings as custom
                 return bool(entry.get('settings'))
-        except Exception:
+        except HTTP_SERVICE_ERRORS:
             return False
 
     def has_custom_model_settings(self, model_name):
@@ -485,7 +486,7 @@ class OllamaServiceModels:
         try:
             running_models = self.get_running_models()
             return models_memory_usage(running_models)
-        except Exception as exc:
+        except HTTP_SERVICE_ERRORS as exc:
             self.logger.exception("Error getting models memory usage: %s", exc)
             return {
                 'system_ram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0},

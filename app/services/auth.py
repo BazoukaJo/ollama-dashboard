@@ -189,7 +189,7 @@ class AuthService:
             with open(self.audit_log_file, 'a', encoding='utf-8') as f:
                 import json
                 f.write(json.dumps(log_entry) + '\n')
-        except Exception as e:
+        except OSError as e:
             logger.error(f"Failed to write audit log: {e}")
 
 
@@ -204,9 +204,7 @@ def require_auth(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        from flask import request
-
-        from app import current_app
+        from flask import current_app, request
 
         auth_service = current_app.config.get('AUTH_SERVICE')
         if not auth_service:
@@ -235,9 +233,7 @@ def require_role(required_role: str):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            from flask import request
-
-            from app import current_app
+            from flask import current_app, request
 
             auth_service = current_app.config.get('AUTH_SERVICE')
             if not auth_service:

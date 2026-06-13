@@ -16,7 +16,7 @@ def start_service_windows(get_status):
             time.sleep(5)
             if get_status():
                 return {"success": True, "message": "Ollama service started successfully via Windows service"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         methods_tried.append('installation path')
@@ -31,12 +31,12 @@ def start_service_windows(get_status):
                     subprocess.Popen([ep, 'serve'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                      creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
                                      close_fds=True, cwd=os.path.dirname(ep))
-                except Exception:
+                except (OSError, subprocess.SubprocessError):
                     pass
                 time.sleep(5)
                 if get_status():
                     return {"success": True, "message": f"Ollama service started successfully from {ep}"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         methods_tried.append('direct execution')
@@ -45,12 +45,12 @@ def start_service_windows(get_status):
             try:
                 subprocess.Popen(['ollama', 'serve'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                  creationflags=subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS, close_fds=True)
-            except Exception:
+            except (OSError, subprocess.SubprocessError):
                 pass
             time.sleep(5)
             if get_status():
                 return {"success": True, "message": "Ollama service started successfully via direct execution"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     return None, methods_tried
 
@@ -65,7 +65,7 @@ def start_service_unix(get_status):
             time.sleep(5)
             if get_status():
                 return {"success": True, "message": "Ollama service started successfully via systemctl"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         methods_tried.append('service command')
@@ -74,7 +74,7 @@ def start_service_unix(get_status):
             time.sleep(5)
             if get_status():
                 return {"success": True, "message": "Ollama service started successfully via service command"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         methods_tried.append('direct execution')
@@ -82,12 +82,12 @@ def start_service_unix(get_status):
         if check.returncode == 0:
             try:
                 subprocess.Popen(['ollama', 'serve'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except Exception:
+            except (OSError, subprocess.SubprocessError):
                 pass
             time.sleep(5)
             if get_status():
                 return {"success": True, "message": "Ollama service started successfully via direct execution"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     return None, methods_tried
 
@@ -102,7 +102,7 @@ def stop_service_windows(get_status):
             time.sleep(5)
             if not get_status():
                 return {"success": True, "message": "Ollama service stopped successfully via Windows service"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         methods_tried.append('process termination')
@@ -110,7 +110,7 @@ def stop_service_windows(get_status):
         time.sleep(5)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via graceful termination"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         methods_tried.append('force kill')
@@ -118,7 +118,7 @@ def stop_service_windows(get_status):
         time.sleep(5)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via force kill"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     return None, methods_tried
 
@@ -133,7 +133,7 @@ def stop_service_unix(get_status):
             time.sleep(5)
             if not get_status():
                 return {"success": True, "message": "Ollama service stopped successfully via systemctl"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         methods_tried.append('service command')
@@ -142,7 +142,7 @@ def stop_service_unix(get_status):
             time.sleep(5)
             if not get_status():
                 return {"success": True, "message": "Ollama service stopped successfully via service command"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         methods_tried.append('pkill graceful')
@@ -150,7 +150,7 @@ def stop_service_unix(get_status):
         time.sleep(3)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via graceful pkill"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         methods_tried.append('pkill force')
@@ -158,7 +158,7 @@ def stop_service_unix(get_status):
         time.sleep(3)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via force pkill"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     try:
         methods_tried.append('killall')
@@ -166,6 +166,6 @@ def stop_service_unix(get_status):
         time.sleep(3)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via killall"}, methods_tried
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         pass
     return None, methods_tried

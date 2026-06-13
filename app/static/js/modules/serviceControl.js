@@ -103,6 +103,21 @@
     }
   }
 
+  function setBackendStatusBadge(badge, ok, text, tooltip) {
+    if (!badge) return;
+    badge.classList.remove("bg-success", "bg-warning", "bg-secondary", "bg-danger");
+    if (ok === true) badge.classList.add("bg-success");
+    else if (ok === false) badge.classList.add("bg-warning");
+    else badge.classList.add("bg-secondary");
+    const span = badge.querySelector(".ollama-backend-status-text");
+    if (span) span.textContent = text;
+    const tip = tooltip || text;
+    if (tip) {
+      badge.setAttribute("data-dashboard-tooltip", tip);
+      badge.setAttribute("title", tip);
+    }
+  }
+
   async function updateHealthStatus() {
     try {
       const [healthResp, serviceRunning] = await Promise.all([
@@ -116,6 +131,7 @@
           : { status: "unhealthy", error: hr.message || "Invalid response" };
       const healthBadge = document.getElementById("healthStatus");
       const healthText = document.getElementById("healthText");
+      const backendBadge = document.getElementById("ollamaBackendStatusBadge");
       if (!healthBadge || !healthText) return;
 
       const ollamaRunning =
@@ -133,33 +149,43 @@
         const uptimeHr = Math.floor(uptimeMin / 60);
         const uptimeDisplay =
           uptimeHr > 0 ? `${uptimeHr}h ${uptimeMin % 60}m` : `${uptimeMin}m`;
-        healthText.textContent = `Healthy • Uptime: ${uptimeDisplay}`;
+        healthText.textContent = "Healthy";
+        healthBadge.setAttribute(
+          "data-dashboard-tooltip",
+          `Ollama API healthy • Uptime: ${uptimeDisplay}`,
+        );
+        setBackendStatusBadge(backendBadge, true, "ready");
         updateServiceControlButtons(true);
       } else if (!ollamaRunning || health.status === "stopped") {
         healthBadge.className =
           "badge bg-warning health-status-badge dashboard-header-health";
         healthText.textContent = "Stopped";
+        setBackendStatusBadge(backendBadge, false, "stopped");
         updateServiceControlButtons(false);
       } else if (health.status === "degraded") {
         healthBadge.className =
           "badge bg-warning health-status-badge dashboard-header-health";
         healthText.textContent = "Degraded";
+        setBackendStatusBadge(backendBadge, false, "degraded");
         updateServiceControlButtons(ollamaRunning);
       } else {
         healthBadge.className =
           "badge bg-danger health-status-badge dashboard-header-health";
         healthText.textContent = "Unreachable";
+        setBackendStatusBadge(backendBadge, false, "offline");
         updateServiceControlButtons(ollamaRunning);
       }
     } catch (err) {
       const healthBadge = document.getElementById("healthStatus");
       const healthText = document.getElementById("healthText");
+      const backendBadge = document.getElementById("ollamaBackendStatusBadge");
       if (healthBadge && healthText) {
         healthBadge.className =
           "badge bg-danger health-status-badge dashboard-header-health";
         healthBadge.style.padding = "";
         healthBadge.style.fontSize = "";
         healthText.textContent = "Health check failed";
+        setBackendStatusBadge(backendBadge, false, "offline");
         updateServiceControlButtons(false);
       }
     }

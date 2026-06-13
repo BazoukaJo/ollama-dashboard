@@ -1,0 +1,33 @@
+---
+description: Restart Flask app after backend/template changes; tell user to refresh browser
+alwaysApply: true
+---
+
+# App restart workflow (ollama-dashboard)
+
+When you change code that affects the running server, **restart the app yourself** — do not ask the user to restart it.
+
+## Restart required
+
+- Python under `app/` (routes, services, `__init__.py`, config)
+- Jinja templates under `app/templates/`
+- Environment or startup behavior (`wsgi.py`, `ollama_dashboard_cli.py`)
+
+## Usually no restart (still tell user to hard-refresh)
+
+- Static assets only (`app/static/css`, `app/static/js`, images) — Flask serves them on each request, but the browser may cache them.
+
+## How to restart (Windows, this repo)
+
+1. Stop any process on port 5000 if already running.
+2. From repo root with venv active:
+   - Release: `start.bat` (Waitress, production config)
+   - Development: `start_dev.bat` (Flask debug reloader)
+   - Or: `python ollama_dashboard_cli.py`
+3. Run in background when continuing other work.
+
+Default URL: http://127.0.0.1:5000
+
+## After restart or static/CSS/JS changes
+
+Tell the user to **refresh the web page** (hard refresh `Ctrl+F5` if CSS/JS looks stale) so visuals and client-side code update.

@@ -1,5 +1,6 @@
 """Model formatting helpers extracted from OllamaService."""
 from app.services.capabilities import ensure_capability_flags
+from app.services.service_errors import SERVICE_ERRORS
 
 
 def format_context_length(ctx):
@@ -119,7 +120,7 @@ def request_context_length_from_settings(service, model_name):
         if nctx is None:
             return None
         return format_context_length(nctx)
-    except Exception:
+    except SERVICE_ERRORS:
         return None
 
 
@@ -180,7 +181,7 @@ def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflic
     if isinstance(model.get('size'), (int, float)):
         try:
             model['formatted_size'] = service.format_size(model['size'])
-        except Exception:
+        except SERVICE_ERRORS:
             pass
     try:
         model = ensure_capability_flags(model, prefer_heuristics_on_conflict=prefer_heuristics_on_conflict)
@@ -236,12 +237,12 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
         if entry.get('size_vram') is not None:
             try:
                 entry['formatted_size_vram'] = service.format_size(entry['size_vram'])
-            except Exception:
+            except SERVICE_ERRORS:
                 entry['formatted_size_vram'] = str(entry['size_vram'])
 
         try:
             entry = ensure_capability_flags(entry, prefer_heuristics_on_conflict=prefer_heuristics_on_conflict)
-        except Exception:
+        except SERVICE_ERRORS:
             entry.setdefault('has_vision', False)
             entry.setdefault('has_tools', False)
             entry.setdefault('has_reasoning', False)
@@ -249,10 +250,10 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
             try:
                 ms = service.get_model_settings(entry['name']) or {}
                 entry['has_custom_settings'] = bool(ms.get('source') == 'user')
-            except Exception:
+            except SERVICE_ERRORS:
                 entry['has_custom_settings'] = False
         attach_request_context_to_model(service, entry)
         attach_last_token_usage_to_model(service, entry)
         return entry
-    except Exception:
+    except SERVICE_ERRORS:
         return {'name': str(model), 'running': False, 'has_vision': False, 'has_tools': False, 'has_reasoning': False}

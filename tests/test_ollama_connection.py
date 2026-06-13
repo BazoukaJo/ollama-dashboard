@@ -22,6 +22,13 @@ def service_with_app():
     return svc
 
 
+@pytest.fixture
+def client():
+    app = create_app()
+    app.config['TESTING'] = True
+    return app.test_client()
+
+
 class TestGetOllamaHostPort:
     """Unit-test _get_ollama_host_port() in every config scenario."""
 
@@ -117,4 +124,55 @@ class TestAppConfig:
         assert app.config.get('OLLAMA_HOST') == '192.168.1.100'
         assert app.config.get('OLLAMA_PORT') == 11500
 
+
+class TestOllamaApiBaseFormatting:
+    def test_format_ollama_api_base_includes_scheme(self):
+        from app.routes.main import _format_ollama_api_base, _format_ollama_host_port_label
+
+        assert _format_ollama_host_port_label('localhost', 11434) == 'localhost:11434'
+        assert _format_ollama_api_base('localhost', 11434) == 'http://localhost:11434'
+
+    def test_format_ollama_api_base_brackets_ipv6(self):
+        from app.routes.main import _format_ollama_api_base, _format_ollama_host_port_label
+
+        assert _format_ollama_host_port_label('::1', 11434) == '[::1]:11434'
+        assert _format_ollama_api_base('::1', 11434) == 'http://[::1]:11434'
+
+    def test_format_proxy_endpoint_label_strips_scheme(self):
+        from app.routes.main import _format_proxy_endpoint_label
+
+        assert _format_proxy_endpoint_label('http://localhost:5000/ollama') == 'localhost:5000/ollama'
+        assert _format_proxy_endpoint_label('https://127.0.0.1:5000/ollama') == '127.0.0.1:5000/ollama'
+        assert _format_proxy_endpoint_label('localhost:5000/ollama') == 'localhost:5000/ollama'
+
+    def test_index_header_endpoint_display_omits_scheme(self, client):
+        """Header chips show host:port (no http://); copy attributes keep full URL."""
+        from unittest.mock import patch
+
+        from app.routes import main
+
+        stats = {
+            'cpu_percent': 0,
+            'memory': {'percent': 0, 'total': 0, 'available': 0, 'used': 0},
+            'vram': {'percent': 0, 'total': 0, 'used': 0, 'free': 0, 'gpu_3d': 0},
+            'disk': {'percent': 0},
+        }
+        with patch.object(main.ollama_service, 'is_ollama_installed', return_value=True), patch(
+            'app.routes.main.run_startup_ollama_update_check',
+            return_value={'update_available': False, 'current_version': '0.17.0'},
+        ), patch.object(main.ollama_service, 'get_running_models', return_value=[]), patch.object(
+            main.ollama_service, 'get_available_models', return_value=[]
+        ), patch.object(main.ollama_service, 'get_system_stats', return_value=stats), patch.object(
+            main.ollama_service, 'get_ollama_version', return_value='0.17.0'
+        ):
+            html = client.get('/').get_data(as_text=True)
+
+        assert 'id="apiProxyEndpoint"' in html
+        assert 'data-copy-value="http://localhost/ollama"' in html or '/ollama"' in html
+        assert '>localhost' in html or '>127.0.0.1' in html
+        proxy_start = html.find('id="apiProxyEndpoint"')
+        proxy_tag = html[proxy_start : html.find('</code>', proxy_start)]
+        assert 'http://' not in proxy_tag.split('>', 1)[-1]
+        assert 'data-copy-value="http://' in html
+        assert 'localhost:11434' in html
 

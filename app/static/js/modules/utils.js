@@ -88,8 +88,26 @@ function modelActionUrl(action, modelName, extraQuery) {
   return `/api/models/${action}?${q.toString()}`;
 }
 
+/**
+ * fetch with AbortController timeout — prevents hung UI when API is slow.
+ */
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const ms = timeoutMs || 15000;
+  const controller = new AbortController();
+  const timer = setTimeout(function () {
+    controller.abort();
+  }, ms);
+  const opts = Object.assign({}, options || {}, { signal: controller.signal });
+  try {
+    return await fetch(url, opts);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Expose on window for inline handlers and other scripts.
 window.escapeHtml = escapeHtml;
 window.cssEscape = cssEscape;
 window.readApiJson = readApiJson;
 window.modelActionUrl = modelActionUrl;
+window.fetchWithTimeout = fetchWithTimeout;

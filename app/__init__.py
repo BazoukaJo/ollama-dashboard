@@ -32,6 +32,10 @@ def create_app(config_name='development'):
         - Registers blueprints and middleware
         - Sets up CORS and security headers
     """
+    env_config = os.getenv('OLLAMA_DASHBOARD_CONFIG', '').strip().lower()
+    if env_config in ('development', 'production'):
+        config_name = env_config
+
     _log_name = os.getenv("LOG_LEVEL", "INFO").strip().upper()
     _log_level = getattr(logging, _log_name, logging.INFO)
     if isinstance(_log_level, int):

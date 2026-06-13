@@ -28,7 +28,7 @@ def main() -> None:
         app.run(host=host, port=port, debug=False, threaded=True)
     except KeyboardInterrupt:
         sys.exit(0)
-    except Exception as e:
+    except (OSError, ImportError, RuntimeError, TypeError, ValueError) as e:
         logger.exception("Failed to start: %s", e)
         sys.exit(1)
 

@@ -78,6 +78,7 @@ def test_openai_error_sse_lines():
 
 def test_apply_all_skips_user_saved_models(tmp_path):
     from unittest.mock import patch
+
     from app import create_app
 
     app = create_app()
@@ -100,5 +101,7 @@ def test_apply_all_skips_user_saved_models(tmp_path):
     assert data['success'] is True
     assert data.get('skipped') == 1
     loaded = svc.load_model_settings()
-    assert loaded['user-model']['settings']['num_ctx'] == 99999
+    user_entry = loaded.get('user-model')
+    assert isinstance(user_entry, dict)
+    assert user_entry.get('settings', {}).get('num_ctx') == 99999
     assert 'fresh-model' in loaded

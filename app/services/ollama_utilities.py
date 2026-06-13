@@ -20,11 +20,9 @@ from app.services.model_recommendation_profiles import (
     resolve_num_ctx_for_model,
 )
 from app.services.model_settings_helpers import (
-    compute_fresh_recommended_settings_entry,
     delete_model_settings_entry,
     ensure_model_settings_exists,
     get_default_settings_template,
-    get_existing_model_settings_entry,
     get_model_settings_with_fallback_entry,
     load_model_settings,
     model_settings_file_path,
@@ -32,6 +30,7 @@ from app.services.model_settings_helpers import (
     normalize_setting_value,
     write_model_settings_file,
 )
+from app.services.service_errors import HTTP_SERVICE_ERRORS
 
 
 class OllamaServiceUtilities:
@@ -166,12 +165,12 @@ class OllamaServiceUtilities:
                 # Try parsing with optional fractional seconds removed
                 try:
                     dt = datetime.fromisoformat(v)
-                except Exception:
+                except (ValueError, TypeError):
                     if '.' in v:
                         base = v.split('.')[0]
                         try:
                             dt = datetime.fromisoformat(base)
-                        except Exception:
+                        except HTTP_SERVICE_ERRORS:
                             return value
                     else:
                         return value
@@ -189,7 +188,7 @@ class OllamaServiceUtilities:
             month_abbr = local_dt.strftime('%b')
             day = str(int(local_dt.strftime('%d')))
             return f"{month_abbr} {day}, {hour}:{minute} {ampm} {tz_abbr}"
-        except Exception:
+        except HTTP_SERVICE_ERRORS:
             return str(value)
 
     def format_time_ago(self, value):
@@ -213,7 +212,7 @@ class OllamaServiceUtilities:
                 return f"{int(minutes)} {'minute' if int(minutes) == 1 else 'minutes'}"
             else:
                 return "less than a minute"
-        except Exception:
+        except HTTP_SERVICE_ERRORS:
             return str(value)
 
     def get_chat_history(self):
@@ -226,7 +225,7 @@ class OllamaServiceUtilities:
                 with open(chat_history_file, encoding='utf-8') as f:
                     return json.load(f)
             return []
-        except Exception as e:
+        except HTTP_SERVICE_ERRORS as e:
             self.logger.exception("Error loading chat history: %s", e)
             return []
 
@@ -249,7 +248,7 @@ class OllamaServiceUtilities:
 
             with open(chat_history_file, 'w', encoding='utf-8') as f:
                 json.dump(history, f, indent=2)
-        except Exception as e:
+        except HTTP_SERVICE_ERRORS as e:
             self.logger.exception("Error saving chat session: %s", e)
 
     def get_model_performance(self, model_name):
@@ -299,7 +298,7 @@ class OllamaServiceUtilities:
                     "error": f"HTTP {response.status_code}: {response.text}"
                 }
 
-        except Exception as e:
+        except HTTP_SERVICE_ERRORS as e:
             return {
                 "model": model_name,
                 "status": "error",
@@ -339,7 +338,7 @@ class OllamaServiceUtilities:
 
             return history
 
-        except Exception as e:
+        except HTTP_SERVICE_ERRORS as e:
             self.logger.exception("Error getting system stats history: %s", e)
             return []
 
@@ -347,7 +346,7 @@ class OllamaServiceUtilities:
         """Get the path to the model settings file."""
         return model_settings_file_path(self)
 
-    def load_model_settings(self):
+    def load_model_settings(self) -> dict:
         """Load per-model settings from file."""
         return load_model_settings(self)
 
@@ -390,12 +389,17 @@ class OllamaServiceUtilities:
         """Get model settings with fallback entry."""
         return get_model_settings_with_fallback_entry(self, model_name)
 
-    def save_model_settings(self, model_name, settings, source='user'):
+    def save_model_settings(self, model_name, settings, source='user', copilot=None):
         """Save settings for a specific model (normalized, persisted)."""
         template = get_default_settings_template()
         normalized = {}
+        settings_dict = dict(settings or {})
+        if copilot is None and isinstance(settings_dict.get('client'), dict):
+            copilot = settings_dict.pop('client')
+        if copilot is None and isinstance(settings_dict.get('copilot'), dict):
+            copilot = settings_dict.pop('copilot')
         for key, default_val in template.items():
-            incoming = settings.get(key, default_val) if isinstance(settings, dict) else default_val
+            incoming = settings_dict.get(key, default_val)
             normalized[key] = normalize_setting_value(key, incoming, default_val)
 
         entry = {
@@ -403,6 +407,16 @@ class OllamaServiceUtilities:
             "source": source,
             "last_updated": datetime.now(timezone.utc).isoformat(),
         }
+        if copilot is not None:
+            from app.services.copilot_extras import normalize_client_extras
+            entry['client'] = normalize_client_extras(copilot)
+        else:
+            existing = getattr(self, '_model_settings', {}).get(normalize_model_settings_key(model_name))
+            if isinstance(existing, dict):
+                if existing.get('client'):
+                    entry['client'] = existing['client']
+                elif existing.get('copilot'):
+                    entry['client'] = existing['copilot']
 
         canon_key = normalize_model_settings_key(model_name)
         if not canon_key:
@@ -417,6 +431,32 @@ class OllamaServiceUtilities:
                 return self._write_model_settings_file(self._model_settings)
         else:
             return self._write_model_settings_file(self._model_settings)
+
+    def save_model_client_extras(self, model_name, client_extras):
+        """Update the ``client`` proxy options block for a model."""
+        from app.services.copilot_extras import normalize_client_extras
+        canon_key = normalize_model_settings_key(model_name)
+        if not canon_key:
+            return False
+        self._model_settings = getattr(self, '_model_settings', {})
+        entry = self._model_settings.get(canon_key)
+        if not isinstance(entry, dict):
+            entry = {
+                'settings': get_default_settings_template(),
+                'source': 'user',
+                'last_updated': datetime.now(timezone.utc).isoformat(),
+            }
+        entry['client'] = normalize_client_extras(client_extras)
+        entry.pop('copilot', None)  # migrate legacy key on write
+        entry['last_updated'] = datetime.now(timezone.utc).isoformat()
+        self._model_settings[canon_key] = entry
+        lock = getattr(self, '_model_settings_lock', None)
+        if lock is not None:
+            with lock:
+                return self._write_model_settings_file(self._model_settings)
+        return self._write_model_settings_file(self._model_settings)
+
+    save_model_copilot_extras = save_model_client_extras
 
     def delete_model_settings(self, model_name):
         """Delete settings for a specific model."""
@@ -488,7 +528,7 @@ class OllamaServiceUtilities:
                                f"Use '{target_name}' in VS Code or other external clients to get these defaults.",
                 }
             return {"success": False, "message": f"Failed to create {target_name}: {response.text}"}
-        except Exception as e:
+        except HTTP_SERVICE_ERRORS as e:
             return {"success": False, "message": str(e)}
 
     def _ensure_model_settings_exists(self, model_info):
@@ -531,7 +571,7 @@ class OllamaServiceUtilities:
                     num_match = re.match(r'^(\d+(?:\.\d+)?)B$', s)
                     if num_match:
                         return float(num_match.group(1))
-            except Exception:
+            except HTTP_SERVICE_ERRORS:
                 return None
             return None
 
@@ -543,7 +583,7 @@ class OllamaServiceUtilities:
             """
             try:
                 stats = self.get_system_stats() if hasattr(self, 'get_system_stats') else {}
-            except Exception:
+            except HTTP_SERVICE_ERRORS:
                 stats = {}
 
             mem = stats.get('memory', {}) if isinstance(stats, dict) else {}
@@ -644,7 +684,7 @@ class OllamaServiceUtilities:
             return models
         try:
             available = self.get_available_models()
-        except Exception:
+        except HTTP_SERVICE_ERRORS:
             available = []
         by_name = {m.get('name'): m for m in available if isinstance(m, dict) and m.get('name')}
         for entry in models:
@@ -676,7 +716,7 @@ class OllamaServiceUtilities:
             else:
                 return {"success": False, "message": f"Failed to pull model: {response.text}"}
 
-        except Exception as e:
+        except HTTP_SERVICE_ERRORS as e:
             return {"success": False, "message": str(e)}
 
     def pull_model_stream(self, model_name):
@@ -705,7 +745,7 @@ class OllamaServiceUtilities:
 
                     try:
                         payload = json.loads(line.decode("utf-8"))
-                    except Exception:
+                    except HTTP_SERVICE_ERRORS:
                         yield {"event": "status", "message": line.decode("utf-8", errors="ignore")}
                         continue
 
@@ -734,5 +774,5 @@ class OllamaServiceUtilities:
                 # Fallback completion event when stream ends without explicit done
                 yield {"event": "done", "success": True, "message": f"Model {model_name} pulled successfully"}
 
-        except Exception as e:
+        except HTTP_SERVICE_ERRORS as e:
             yield {"event": "error", "message": str(e)}

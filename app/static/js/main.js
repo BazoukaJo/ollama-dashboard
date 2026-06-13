@@ -2,10 +2,10 @@
  * Main JavaScript functionality for Ollama Dashboard
  */
 
-// Model data poll interval (seconds) - read from DOM or default 5
+// Model data poll interval (seconds) - read from DOM or default 10
 function getPollIntervalSec() {
-  const el = document.querySelector(".refresh-indicator");
-  const val = el && el.dataset.pollInterval;
+  const el = document.querySelector(".dashboard-header-meta-group[data-model-poll-interval]");
+  const val = el && el.dataset.modelPollInterval;
   const n = parseInt(val, 10);
   return Number.isFinite(n) && n > 0 ? n : 10;
 }
@@ -210,61 +210,24 @@ window.scheduleReloadUnlessDownloading = scheduleReloadUnlessDownloading;
 window.resumeActiveDownloads = resumeActiveDownloads;
 
 function resetRefreshCountdown() {
-  refreshCountdown = getPollIntervalSec();
-  const el = document.getElementById("nextRefresh");
-  if (el) el.textContent = String(refreshCountdown);
+  /* Header refresh countdown removed; model poll uses fixed interval. */
 }
 
-// Timer and UI update functions
+// Background model list refresh (no header countdown UI).
 function updateTimes() {
-  const refreshIndicator = document.querySelector(".refresh-indicator");
-  const tzAbbr = refreshIndicator ? refreshIndicator.dataset.timezone : "";
-  refreshCountdown = getPollIntervalSec();
-
-  const tick = () => {
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString(undefined, {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-    const displayText = tzAbbr ? `${timeStr} ${tzAbbr}` : timeStr;
-    const lastEl = document.getElementById("lastUpdate");
-    if (lastEl) lastEl.textContent = displayText;
-
-    const nextEl = document.getElementById("nextRefresh");
-    if (nextEl) {
-      refreshCountdown--;
-      if (refreshCountdown <= 0) {
-        refreshCountdown = getPollIntervalSec();
-        // Keep running models list in sync when models change outside this app (CLI, other UIs).
-        if (typeof updateModelData === "function") {
-          void updateModelData();
-        }
-      }
-      nextEl.textContent = String(refreshCountdown);
+  const intervalSec = getPollIntervalSec();
+  setInterval(function () {
+    if (typeof updateModelData === "function") {
+      void updateModelData();
     }
-  };
-
-  tick();
-  setInterval(tick, 1000);
-}
-
-function toggleSidebar() {
-  const sidebar = document.getElementById("sidebar");
-  const toggleButton = document.getElementById("toggleButton");
-  sidebar.classList.toggle("show");
-  toggleButton.innerHTML = sidebar.classList.contains("show") ? "✕" : "📋";
+  }, intervalSec * 1000);
 }
 
 // Model management functions
 
 /** Refresh all dashboard data (models + stats) without full page reload. */
 function refreshDashboardData() {
-  [
-    document.getElementById("refreshDashboardBtn"),
-    document.getElementById("refreshModelsBtn"),
-  ].forEach(function (btn) {
+  [document.getElementById("refreshModelsBtn")].forEach(function (btn) {
     if (btn) {
       const icon = btn.querySelector("i");
       if (icon) {
@@ -783,157 +746,7 @@ async function showModelInfo(modelName) {
   }
 }
 
-// ===== Ask? modal =====
-let _askModelName = null;
-let _askAbortController = null;
-
-function openAskModal(modelName) {
-  _askModelName = modelName;
-  _askAbortController = null;
-
-  const nameEl = document.getElementById("askModelModalName");
-  if (nameEl) nameEl.textContent = modelName;
-
-  const input = document.getElementById("askModelInput");
-  if (input) {
-    input.value = "";
-    input.onkeydown = function (e) {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendAskModelQuestion();
-      }
-    };
-  }
-
-  const responseWrap = document.getElementById("askModelResponseWrap");
-  if (responseWrap) responseWrap.style.display = "none";
-
-  const responseEl = document.getElementById("askModelResponse");
-  if (responseEl) responseEl.textContent = "";
-
-  const spinner = document.getElementById("askModelSpinner");
-  if (spinner) spinner.style.display = "none";
-
-  const sendBtn = document.getElementById("askModelSendBtn");
-  if (sendBtn) sendBtn.disabled = false;
-
-  const modalEl = document.getElementById("askModelModal");
-  if (!modalEl) return;
-  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-  modal.show();
-
-  // Focus textarea after modal is shown
-  modalEl.addEventListener("shown.bs.modal", function onShown() {
-    modalEl.removeEventListener("shown.bs.modal", onShown);
-    if (input) input.focus();
-  });
-
-  // Abort any in-flight request when modal is hidden
-  modalEl.addEventListener("hidden.bs.modal", function onHidden() {
-    modalEl.removeEventListener("hidden.bs.modal", onHidden);
-    if (_askAbortController) {
-      _askAbortController.abort();
-      _askAbortController = null;
-    }
-  });
-}
-
-async function sendAskModelQuestion() {
-  const question = (document.getElementById("askModelInput")?.value || "").trim();
-  if (!question) return;
-
-  const sendBtn = document.getElementById("askModelSendBtn");
-  const spinner = document.getElementById("askModelSpinner");
-  const responseWrap = document.getElementById("askModelResponseWrap");
-  const responseEl = document.getElementById("askModelResponse");
-
-  if (sendBtn) sendBtn.disabled = true;
-  if (responseWrap) responseWrap.style.display = "";
-  if (responseEl) responseEl.textContent = "";
-  if (spinner) spinner.style.display = "";
-
-  if (_askAbortController) _askAbortController.abort();
-  _askAbortController = new AbortController();
-
-  try {
-    const resp = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: _askModelName,
-        prompt: question,
-        stream: true,
-      }),
-      signal: _askAbortController.signal,
-    });
-
-    if (!resp.ok) {
-      let errMsg = `HTTP ${resp.status}`;
-      try {
-        const errJson = await resp.json();
-        errMsg = errJson.error || errMsg;
-      } catch (_) {}
-      if (responseEl) responseEl.textContent = "Error: " + errMsg;
-      if (spinner) spinner.style.display = "none";
-      if (sendBtn) sendBtn.disabled = false;
-      return;
-    }
-
-    if (spinner) spinner.style.display = "";
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let gotFirstToken = false;
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop(); // keep incomplete last line
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          const parsed = JSON.parse(trimmed);
-          if (parsed.response != null) {
-            if (!gotFirstToken) {
-              gotFirstToken = true;
-              if (spinner) spinner.style.display = "none";
-            }
-            if (responseEl) {
-              responseEl.textContent += parsed.response;
-              // auto-scroll
-              responseEl.scrollTop = responseEl.scrollHeight;
-            }
-          }
-        } catch (_) {
-          // skip non-JSON lines
-        }
-      }
-    }
-    // flush remaining buffer
-    if (buffer.trim()) {
-      try {
-        const parsed = JSON.parse(buffer.trim());
-        if (parsed.response != null && responseEl) {
-          responseEl.textContent += parsed.response;
-          responseEl.scrollTop = responseEl.scrollHeight;
-        }
-      } catch (_) {}
-    }
-  } catch (err) {
-    if (err.name !== "AbortError") {
-      if (responseEl) responseEl.textContent = "Error: " + err.message;
-    }
-  } finally {
-    if (spinner) spinner.style.display = "none";
-    if (sendBtn) sendBtn.disabled = false;
-    _askAbortController = null;
-  }
-}
-// ===== End Ask? modal =====
+// Ask? modal — see static/js/modules/askModal.js (openAskModal, sendAskModelQuestion)
 
 function buildModelSummary(info, details, modelName) {
   const summaryItems = [];
@@ -1065,10 +878,6 @@ function renderCapabilityBadges(info) {
 // Model settings related helper functions removed (submit/delete) now in settings.js
 
 // Health status & service control update functions extracted to serviceControl.js
-
-// Removed DOMContentLoaded initialization (moved to modules/bootstrap.js)
-// (Removed inline settings modal construction block; now provided by modules/settings.js)
-
 // submitModelSettings & deleteModelSettings moved to settings.js
 
 function jsonToTable(json, level = 0) {
@@ -1363,7 +1172,7 @@ const timelineData = {
 
 const MAX_TIMELINE_POINTS = 60; // 60 seconds of data
 
-// System Resources sparklines — same palette as Claude-Hybrid header-ui timelines
+// System Resources sparklines — CPU / memory / disk palette
 const TIMELINE_COLOR_CPU = "#3b82f6";
 const TIMELINE_COLOR_MEMORY = "#22c55e";
 const TIMELINE_COLOR_VRAM = "#06b6d4";
@@ -1440,7 +1249,8 @@ function drawTimeline(canvas, data, color) {
 // System stats update function
 async function updateSystemStats() {
   try {
-    const response = await fetch("/api/system/stats");
+    const fetchFn = typeof fetchWithTimeout === "function" ? fetchWithTimeout : fetch;
+    const response = await fetchFn("/api/system/stats", {}, 8000);
     const sr = await readApiJson(response);
     if (!sr.responseOk || !sr.data) {
       return;
@@ -1545,18 +1355,23 @@ async function updateSystemStats() {
 }
 
 let _versionPollCounter = 0;
+let _updateModelDataInFlight = false;
+const _API_TIMEOUT_MS = 15000;
 // Version fetch every N model polls (default poll interval 10s from data-poll-interval → ~120s).
 const VERSION_POLL_EVERY_N = 12;
 
 // Model data update function
 async function updateModelData() {
+  if (_updateModelDataInFlight) return;
+  _updateModelDataInFlight = true;
   let runningModels = null;
   let availableModels = null;
 
   try {
+    const fetchFn = typeof fetchWithTimeout === "function" ? fetchWithTimeout : fetch;
     const [runningResponse, availableResponse] = await Promise.all([
-      fetch("/api/models/running"),
-      fetch("/api/models/available"),
+      fetchFn("/api/models/running", {}, _API_TIMEOUT_MS),
+      fetchFn("/api/models/available", {}, _API_TIMEOUT_MS),
     ]);
 
     const runR = await readApiJson(runningResponse);
@@ -1579,6 +1394,8 @@ async function updateModelData() {
     }
   } catch (error) {
     console.log("Failed to update models:", error);
+  } finally {
+    _updateModelDataInFlight = false;
   }
 
   restoreAllDownloadUi();
@@ -1915,10 +1732,16 @@ function buildAvailableModelCardHTML(model) {
   const settingsBtnInner = getSettingsButtonInnerHtml(hasCustom);
 
   const contextInnerHtml = buildAvailableContextInnerHtml(model, contextStr);
+  const visionDataAttr =
+    model?.has_vision === true
+      ? ' data-has-vision="true"'
+      : model?.has_vision === false
+        ? ' data-has-vision="false"'
+        : "";
 
   return `
       <div class="col">
-        <div class="model-card h-100" data-model-name="${safeDataName}">
+        <div class="model-card h-100" data-model-name="${safeDataName}"${visionDataAttr}>
           <div class="model-header model-card-head">
             <div class="model-icon-wrapper">
               <i class="fas fa-box model-icon-main"></i>

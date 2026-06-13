@@ -44,10 +44,16 @@ def _openai_request_options(payload: dict[str, Any]) -> dict[str, Any]:
     return opts
 
 
-def merge_v1_payload_options(payload: dict[str, Any], dashboard_settings: dict[str, Any]) -> dict[str, Any]:
+def merge_v1_payload_options(
+    payload: dict[str, Any],
+    dashboard_settings: dict[str, Any],
+) -> dict[str, Any]:
     """Merge saved dashboard settings into a v1 request's effective Ollama options."""
     incoming = _openai_request_options(payload)
-    dashboard = {k: v for k, v in (dashboard_settings or {}).items() if k in _OPENAI_OPTION_KEYS or k == 'num_ctx'}
+    dashboard = {
+        k: v for k, v in (dashboard_settings or {}).items()
+        if k in _OPENAI_OPTION_KEYS or k == 'num_ctx'
+    }
     return merge_options_for_external_proxy(incoming, dashboard)
 
 
@@ -116,7 +122,10 @@ def _assistant_reasoning_piece(message: dict[str, Any]) -> str | None:
     return None
 
 
-def openai_chat_to_native(payload: dict[str, Any], dashboard_settings: dict[str, Any]) -> dict[str, Any]:
+def openai_chat_to_native(
+    payload: dict[str, Any],
+    dashboard_settings: dict[str, Any],
+) -> dict[str, Any]:
     """Build ``/api/chat`` JSON from an OpenAI chat-completions body."""
     merged_options = merge_v1_payload_options(payload, dashboard_settings)
     native: dict[str, Any] = {
@@ -148,7 +157,10 @@ def openai_chat_to_native(payload: dict[str, Any], dashboard_settings: dict[str,
     return native
 
 
-def openai_completion_to_native(payload: dict[str, Any], dashboard_settings: dict[str, Any]) -> dict[str, Any]:
+def openai_completion_to_native(
+    payload: dict[str, Any],
+    dashboard_settings: dict[str, Any],
+) -> dict[str, Any]:
     """Build ``/api/generate`` JSON from an OpenAI completions body."""
     merged_options = merge_v1_payload_options(payload, dashboard_settings)
     native: dict[str, Any] = {
@@ -172,7 +184,10 @@ def _created_ts() -> int:
     return int(time.time())
 
 
-def native_chat_response_to_openai(native: dict[str, Any], completion_id: str | None = None) -> dict[str, Any]:
+def native_chat_response_to_openai(
+    native: dict[str, Any],
+    completion_id: str | None = None,
+) -> dict[str, Any]:
     """Convert a non-streaming ``/api/chat`` response to OpenAI chat.completion JSON."""
     cid = completion_id or _completion_id()
     message = native.get('message') if isinstance(native.get('message'), dict) else {}
@@ -212,7 +227,10 @@ def native_chat_response_to_openai(native: dict[str, Any], completion_id: str | 
     }
 
 
-def native_generate_response_to_openai(native: dict[str, Any], completion_id: str | None = None) -> dict[str, Any]:
+def native_generate_response_to_openai(
+    native: dict[str, Any],
+    completion_id: str | None = None,
+) -> dict[str, Any]:
     """Convert a non-streaming ``/api/generate`` response to OpenAI completion JSON."""
     cid = completion_id or _completion_id()
     return {
@@ -228,6 +246,34 @@ def native_generate_response_to_openai(native: dict[str, Any], completion_id: st
     }
 
 
+def _openai_chat_delta_from_native_message(msg: dict[str, Any]) -> dict[str, Any]:
+    """Build one OpenAI SSE delta from a native ``/api/chat`` message (matches Ollama /v1)."""
+    delta: dict[str, Any] = {
+        'role': msg.get('role') or 'assistant',
+    }
+    content = msg.get('content')
+    reasoning = _assistant_reasoning_piece(msg)
+    if reasoning:
+        delta['reasoning'] = reasoning
+        delta['reasoning_content'] = reasoning
+        delta['content'] = content if content else ''
+    elif content:
+        delta['content'] = content
+    else:
+        delta['content'] = ''
+    if msg.get('tool_calls'):
+        converted = _native_tool_calls_to_openai(msg['tool_calls'])
+        if converted:
+            delta['tool_calls'] = converted
+            delta['content'] = content if content else ''
+    return delta
+
+
+def _openai_chat_finish_delta() -> dict[str, Any]:
+    """Terminal delta before ``finish_reason`` (matches Ollama /v1)."""
+    return {'role': 'assistant', 'content': ''}
+
+
 def _openai_chat_chunk(
     completion_id: str,
     model: str,
@@ -241,6 +287,7 @@ def _openai_chat_chunk(
         'object': 'chat.completion.chunk',
         'created': _created_ts(),
         'model': model,
+        'system_fingerprint': 'fp_ollama',
         'choices': [{
             'index': 0,
             'delta': delta,
@@ -261,7 +308,6 @@ def stream_native_chat_lines_to_openai_sse(
 ) -> Iterator[str]:
     """Convert NDJSON ``/api/chat`` stream lines to OpenAI SSE chunks."""
     cid = completion_id or _completion_id()
-    sent_role = False
     seen_tool_calls = False
     last_native: dict[str, Any] | None = None
 
@@ -276,27 +322,11 @@ def stream_native_chat_lines_to_openai_sse(
             continue
         last_native = native
         msg = native.get('message') if isinstance(native.get('message'), dict) else {}
-        delta: dict[str, Any] = {}
-        if not sent_role:
-            delta['role'] = msg.get('role') or 'assistant'
-            sent_role = True
-        content = msg.get('content')
-        reasoning = _assistant_reasoning_piece(msg)
-        if reasoning:
-            # Match Ollama /v1: reasoning tokens with empty content until answer text.
-            delta['reasoning'] = reasoning
-            delta['reasoning_content'] = reasoning
-            if not content:
-                delta['content'] = ''
-        elif content:
-            delta['content'] = content
-        if msg.get('tool_calls'):
-            converted = _native_tool_calls_to_openai(msg['tool_calls'])
-            if converted:
-                seen_tool_calls = True
-                delta['tool_calls'] = converted
-                delta.setdefault('content', '')
-        if delta:
+        delta = _openai_chat_delta_from_native_message(msg)
+        if delta.get('tool_calls'):
+            seen_tool_calls = True
+        # Skip empty heartbeats (no thinking/content/tools in this native line).
+        if delta.get('reasoning') or delta.get('content') or delta.get('tool_calls'):
             yield _openai_chat_chunk(cid, model, delta)
         if native.get('done'):
             finish = 'tool_calls' if seen_tool_calls else 'stop'
@@ -308,12 +338,18 @@ def stream_native_chat_lines_to_openai_sse(
                 if native.get('eval_count') is not None:
                     usage['completion_tokens'] = native['eval_count']
                 if usage:
-                    usage['total_tokens'] = usage.get('prompt_tokens', 0) + usage.get('completion_tokens', 0)
-            yield _openai_chat_chunk(cid, model, {}, finish_reason=finish, usage=usage)
+                    prompt = usage.get('prompt_tokens', 0)
+                    completion = usage.get('completion_tokens', 0)
+                    usage['total_tokens'] = prompt + completion
+            yield _openai_chat_chunk(
+                cid, model, _openai_chat_finish_delta(), finish_reason=finish, usage=usage,
+            )
 
     if last_native is None:
-        yield _openai_chat_chunk(cid, model, {'role': 'assistant', 'content': ''})
-        yield _openai_chat_chunk(cid, model, {}, finish_reason='stop')
+        yield _openai_chat_chunk(cid, model, _openai_chat_finish_delta())
+        yield _openai_chat_chunk(
+            cid, model, _openai_chat_finish_delta(), finish_reason='stop',
+        )
     yield 'data: [DONE]\n\n'
 
 

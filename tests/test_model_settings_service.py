@@ -89,7 +89,8 @@ def test_save_and_load_model_settings(tmp_path):
 
     loaded = svc.load_model_settings()
     assert 'test-model' in loaded
-    entry = loaded['test-model']
+    entry = loaded.get('test-model')
+    assert isinstance(entry, dict)
     assert entry['settings']['temperature'] == 0.55
     assert entry['source'] == 'user'
 

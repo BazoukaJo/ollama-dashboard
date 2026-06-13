@@ -8,6 +8,8 @@ import os
 import tempfile
 from datetime import datetime, timezone
 
+from app.services.service_errors import SERVICE_ERRORS
+
 # Remove unused and invalid imports; _recommend_settings_for_model should be accessed via the service instance
 
 # Default template retained from service logic
@@ -82,7 +84,7 @@ def model_settings_file_path(service):
         return service.app.config.get('MODEL_SETTINGS_FILE', 'model_settings.json')
     return os.getenv('MODEL_SETTINGS_FILE', 'model_settings.json')
 
-def load_model_settings(service):
+def load_model_settings(service) -> dict:
     path = model_settings_file_path(service)
     if not os.path.exists(path):
         return {}
@@ -121,6 +123,11 @@ def write_model_settings_file(service, model_settings_dict):
         os.replace(tmp_path, abs_path)
         tmp_path = None
         try:
+            from app.services.settings_cache import invalidate_settings_cache
+            invalidate_settings_cache()
+        except ImportError:
+            pass
+        try:
             service._model_settings_disk_mtime = os.path.getmtime(abs_path)
         except OSError:
             service._model_settings_disk_mtime = None
@@ -153,7 +160,7 @@ def merge_model_info_for_recommendation(service, model_name, hint=None):
         merged.update(hint)
     try:
         cached = service.get_model_info_cached(name)
-    except Exception:
+    except SERVICE_ERRORS:
         cached = None
     if isinstance(cached, dict):
         merged = {**cached, **merged, "name": name}
@@ -161,7 +168,7 @@ def merge_model_info_for_recommendation(service, model_name, hint=None):
         merged.setdefault("name", name)
     try:
         detailed = service.get_detailed_model_info(name)
-    except Exception:
+    except SERVICE_ERRORS:
         detailed = None
     if isinstance(detailed, dict):
         merged = {**merged, **detailed, "name": name}
@@ -211,12 +218,12 @@ def normalize_setting_value(key, value, default_val):
             if isinstance(value, str):
                 try:
                     return float(value) if isinstance(default_val, float) else int(value)
-                except Exception:
+                except (ValueError, TypeError):
                     return default_val
         if isinstance(default_val, bool):
             return bool(value)
         return value if type(value) is type(default_val) else default_val
-    except Exception:
+    except SERVICE_ERRORS:
         return default_val
 
 def ensure_model_settings_exists(service, model_info):
@@ -239,7 +246,7 @@ def ensure_model_settings_exists(service, model_info):
             service._model_settings[model_name] = entry
             write_model_settings_file(service, service._model_settings)
         return entry
-    except Exception as e:
+    except SERVICE_ERRORS as e:
         service.logger.exception(f"Error getting model settings for {model_name}: {e}")
         return None
 
@@ -262,7 +269,7 @@ def get_model_settings_with_fallback_entry(service, model_name):
             service._model_settings[model_name] = entry
             write_model_settings_file(service, service._model_settings)
         return entry
-    except Exception as e:
+    except SERVICE_ERRORS as e:
         service.logger.exception(f"Error getting model settings with fallback for {model_name}: {e}")
     return {
         'settings': get_default_settings_template(),
@@ -288,6 +295,6 @@ def delete_model_settings_entry(service, model_name):
                     write_model_settings_file(service, service._model_settings)
                     return True
         return False
-    except Exception as e:
+    except SERVICE_ERRORS as e:
         service.logger.exception(f"Error deleting model settings for {model_name}: {e}")
         return False

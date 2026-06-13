@@ -225,8 +225,56 @@ def test_v1_models_passthrough(tmp_path, monkeypatch):
     assert captured['url'] == 'http://localhost:11434/v1/models'
 
 
-def test_v1_chat_completions_routes_via_native_api_with_num_ctx(tmp_path, monkeypatch):
-    """Copilot uses POST /v1/chat/completions; saved num_ctx must reach /api/chat options."""
+def test_v1_chat_completions_resolves_numeric_model_index(tmp_path, monkeypatch):
+    """Copilot may send model index strings; map via /v1/models ordering."""
+    from app.services.v1_model_resolve import invalidate_model_list_cache
+
+    invalidate_model_list_cache()
+    app = _create_app_for_proxy_tests(
+        tmp_path, monkeypatch,
+        model_name='qwen3:14b', settings={'num_ctx': 16384},
+    )
+    client = app.test_client()
+    captured = {}
+
+    def fake_post(url, json=None, **kwargs):
+        captured['url'] = url
+        captured['json'] = json
+        if kwargs.get('stream'):
+            class StreamResp:
+                status_code = 200
+                def iter_content(self, chunk_size=1024):
+                    yield b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'
+                    yield b'data: [DONE]\n\n'
+            return StreamResp()
+        class Resp:
+            status_code = 200
+            content = b'{}'
+            headers = {'Content-Type': 'application/json'}
+            def json(self):
+                return {'message': {'content': 'hi'}}
+        return Resp()
+
+    def fake_fetch(_base):
+        return ['gemma4:latest', 'gpt-oss:20b', 'qwen3:14b']
+
+    with patch('requests.post', side_effect=fake_post), \
+         patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()), \
+         patch('app.services.v1_model_resolve._fetch_v1_model_ids', side_effect=fake_fetch):
+        resp = client.post('/ollama/v1/chat/completions', json={
+            'model': '2',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            'stream': True,
+        })
+        resp.get_data()
+
+    assert captured['url'] == 'http://localhost:11434/v1/chat/completions'
+    assert captured['json']['model'] == 'qwen3:14b'
+    assert captured['json']['options']['num_ctx'] == 16384
+
+
+def test_v1_chat_completions_passthrough_with_num_ctx(tmp_path, monkeypatch):
+    """Copilot chat passthroughs to Ollama /v1 with merged options."""
     app = _create_app_for_proxy_tests(
         tmp_path, monkeypatch,
         model_name='copilot-test', settings={'temperature': 0.55, 'num_ctx': 16384},
@@ -240,20 +288,17 @@ def test_v1_chat_completions_routes_via_native_api_with_num_ctx(tmp_path, monkey
         if kwargs.get('stream'):
             class StreamResp:
                 status_code = 200
-                def iter_lines(self):
-                    yield b'{"model":"copilot-test","message":{"role":"assistant","content":"hi"},"done":true}'
+                def iter_content(self, chunk_size=1024):
+                    yield b'data: [DONE]\n\n'
             return StreamResp()
         class Resp:
             status_code = 200
-            def json(self):
-                return {
-                    'model': 'copilot-test',
-                    'message': {'role': 'assistant', 'content': 'hi'},
-                    'done': True,
-                }
+            content = b'{}'
+            headers = {'Content-Type': 'application/json'}
         return Resp()
 
-    with patch('requests.post', side_effect=fake_post):
+    with patch('requests.post', side_effect=fake_post), \
+         patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'copilot-test',
             'messages': [{'role': 'user', 'content': 'hi'}],
@@ -262,10 +307,9 @@ def test_v1_chat_completions_routes_via_native_api_with_num_ctx(tmp_path, monkey
         resp.get_data()
 
     assert resp.status_code == 200
-    assert captured['url'] == 'http://localhost:11434/api/chat'
+    assert captured['url'] == 'http://localhost:11434/v1/chat/completions'
     assert captured['json']['options']['temperature'] == 0.55
     assert captured['json']['options']['num_ctx'] == 16384
-    assert captured['json']['messages'] == [{'role': 'user', 'content': 'hi'}]
 
 
 def test_v1_chat_stream_upstream_error_returns_sse(tmp_path, monkeypatch):

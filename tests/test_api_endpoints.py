@@ -38,7 +38,6 @@ def get_endpoints():
         ('GET', '/api/health'),
         ('GET', '/api/models/memory/usage'),
         ('GET', '/api/models/downloadable'),
-        ('GET', '/api/test-models-debug'),
         ('GET', '/admin/model-defaults'),
     ]
 

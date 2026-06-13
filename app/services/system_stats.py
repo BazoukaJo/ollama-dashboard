@@ -35,7 +35,7 @@ def _get_nvml_handle():
         atexit.register(_shutdown_nvml)
         _nvml_available = True
         return _nvml_handle
-    except Exception:
+    except (OSError, AttributeError, RuntimeError, ValueError):
         _nvml_available = False
         return None
 
@@ -44,7 +44,7 @@ def _shutdown_nvml():
     if _nvml_handle is not None:
         try:
             pynvml.nvmlShutdown()
-        except Exception:
+        except (OSError, AttributeError, RuntimeError, ValueError):
             pass
         _nvml_handle = None
 
@@ -233,11 +233,11 @@ def models_memory_usage(running_models):
                         info['size_bytes'] = int(float(size_str.replace('MB', '').strip()) * 1024 * 1024)
                     elif 'KB' in size_str:
                         info['size_bytes'] = int(float(size_str.replace('KB', '').strip()) * 1024)
-            except Exception:
+            except (ValueError, TypeError, AttributeError):
                 pass
             memory_usage['models'].append(info)
         return memory_usage
-    except Exception as e:
+    except (OSError, ValueError, AttributeError, TypeError) as e:
         return {
             'system_ram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0},
             'system_vram': {'total': 0, 'used': 0, 'free': 0, 'percent': 0},
@@ -262,5 +262,5 @@ def append_system_stats_history(history_file_path):
             import json
             json.dump(history, f, indent=2)
         return history
-    except Exception:
+    except (OSError, ValueError):
         return []

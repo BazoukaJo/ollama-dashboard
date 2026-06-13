@@ -16,3 +16,24 @@ def test_smoke_check_main_exits_zero():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert mod.main() == 0
+
+
+def test_proxy_smoke_check_main_exits_zero():
+    path = _ROOT / "scripts" / "proxy_smoke_test.py"
+    assert path.is_file()
+    spec = importlib.util.spec_from_file_location("_proxy_smoke_exec", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.main() == 0
+
+
+def test_legacy_copilot_smoke_still_runs():
+    path = _ROOT / "scripts" / "copilot_smoke_test.py"
+    if not path.is_file():
+        return
+    spec = importlib.util.spec_from_file_location("_copilot_smoke_exec", path)
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.main() == 0

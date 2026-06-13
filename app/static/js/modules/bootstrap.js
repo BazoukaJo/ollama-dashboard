@@ -28,6 +28,9 @@
     if (typeof loadDownloadableModels === "function") loadDownloadableModels();
     if (typeof updateModelData === "function") updateModelData();
     if (typeof resumeActiveDownloads === "function") resumeActiveDownloads();
+    if (window.apiProxyUI && typeof window.apiProxyUI.init === "function") {
+      window.apiProxyUI.init();
+    }
     if (window.modelCardActions) {
       setTimeout(function () {
         if (typeof modelCardActions.enhanceAllModelCards === "function") {

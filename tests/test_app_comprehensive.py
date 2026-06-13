@@ -442,7 +442,10 @@ class TestModelSettingsEndpoints:
         mock_fallback.return_value = payload
         q_resp = client.get('/api/models/settings?model=' + quote(name, safe=''))
         assert q_resp.status_code == 200
-        assert q_resp.get_json() == payload
+        body = q_resp.get_json()
+        assert body['settings'] == payload['settings']
+        assert body['source'] == payload['source']
+        assert 'client' in body
         mock_fallback.assert_called_once_with(name)
 
     @patch('app.routes.main.ollama_service.get_model_settings_with_fallback')
@@ -472,7 +475,9 @@ class TestErrorHandling:
     @patch('app.routes.main.ollama_service.get_running_models')
     def test_service_error_handling(self, mock_running, client):
         """Service errors should return error response."""
-        mock_running.side_effect = Exception("Ollama connection failed")
+        from app.services.ollama_models import OllamaConnectionError
+
+        mock_running.side_effect = OllamaConnectionError("Ollama connection failed")
         response = client.get('/api/models/running')
         # Should still return a response (500 or handled gracefully)
         assert response.status_code in [200, 500, 503]

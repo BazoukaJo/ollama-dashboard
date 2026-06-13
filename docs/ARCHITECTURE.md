@@ -102,7 +102,7 @@ OllamaService.__mro__ = (
 #### OllamaServiceCore
 - Service initialization with Flask app
 - TTL-based caching (`_get_cached`, `_set_cached`)
-- Background thread management (runs ~2s, ~10s, ~30s, ~300s cycles)
+- Background thread: system stats every 1s, health ping every ~15s
 - Health component tracking
 - History/settings loading
 
@@ -187,7 +187,7 @@ service: ollama_service.save_model_settings(model_name, settings)
 > `/ollama/v1/models` (passthrough, no settings).
 >
 > Three mechanisms for external clients (README
-> [Per-Model Settings: scope and limitations](../README.md#per-model-settings-scope-and-limitations)):
+> [Per-Model Settings: scope and limitations](GUIDE.md#per-model-settings-scope-and-limitations)):
 > 1. **Built-in proxy at `/ollama/...`** (`app/routes/proxy.py`) — merge via
 >    `lookup_settings_entry()` + `merge_options_for_external_proxy()`; saved values win.
 >    Native API; OpenAI `/v1/chat/completions` passthrough with merged `options` (Copilot);
@@ -201,14 +201,15 @@ service: ollama_service.save_model_settings(model_name, settings)
 
 ## Caching Strategy
 
-| Data | TTL | Refresh Frequency | Purpose |
-|------|-----|------------------|---------|
-| Running models | 10s | Every ~10s in background | Keep accurate; avoid stale data |
-| Available models | 30s | Every ~30s in background | Cache Ollama tags response |
-| System stats | 5s | On-demand + ~2s background | Real-time performance visibility |
-| Model info | 300s | On-demand | Reduce repeated /api/show calls |
+| Data | TTL | Refresh | Purpose |
+|------|-----|---------|---------|
+| System stats | 1s | Background thread every 1s | CPU, RAM, VRAM for `/api/system/stats` |
+| Health ping | — | Background thread every ~15s | Lightweight Ollama version check for recovery |
+| Running models | On demand | Page load / Refresh button | Not polled in background |
+| Available models | On demand | Page load / Refresh button | Not polled in background |
+| Model info | 300s | On demand | Reduce repeated `/api/show` calls |
 | Model settings | ∞ | On write | Persistent storage in JSON |
-| Version | 300s | On-demand | Ollama version rarely changes |
+| Version | 300s | On demand | Ollama version rarely changes |
 
 ---
 
@@ -216,7 +217,8 @@ service: ollama_service.save_model_settings(model_name, settings)
 
 ### Background Thread
 - **Runs in daemon mode** (exits when main thread exits)
-- **Updates cycle**: Sleeps 2s, checks at ~10s/~30s/~300s intervals
+- **Updates cycle**: System stats every 1s; Ollama health ping every ~15s
+- **Model lists**: Fetched on page load or manual refresh only
 - **Lock-free reads**: Cache reads don't lock; stale data acceptable
 - **Locked writes**: Cache writes use `_cache_lock`
 - **Settings mutations**: Protected by `_model_settings_lock`
@@ -288,7 +290,7 @@ health = ollama_service.get_component_health()
 
 **Windows (production):**
 ```bash
-start_app.bat
+start.bat
 # Uses waitress-serve on port 5000
 ```
 
@@ -311,8 +313,8 @@ export OLLAMA_PORT=11434
 # OLLAMA_HOST may also be the combined "host:port" form — Ollama's own convention for
 # this variable (an embedded port wins over OLLAMA_PORT). The dashboard, its built-in
 # /ollama/api/... proxy, and server_with_proxy.js all split it out the same way, so one
-# value configures everything consistently — see the README's "Per-Model Settings: scope
-# and limitations" for the port-takeover deployment this enables:
+# value configures everything consistently — see [GUIDE.md](GUIDE.md#per-model-settings-scope-and-limitations)
+# for the port-takeover deployment this enables:
 export OLLAMA_HOST=127.0.0.1:11436
 ```
 

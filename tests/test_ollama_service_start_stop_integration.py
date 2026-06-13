@@ -30,7 +30,7 @@ class TestOllamaServiceStartStopIntegration(unittest.TestCase):
 
         svc = OllamaService()
         res = svc.start_service()
-        self.assertTrue(res['success'])
+        self.assertTrue(res.get('success'))
 
     @patch('subprocess.run')
     @patch('platform.system')
@@ -50,7 +50,7 @@ class TestOllamaServiceStartStopIntegration(unittest.TestCase):
 
         svc = OllamaService()
         res = svc.start_service()
-        self.assertTrue(res['success'])
+        self.assertTrue(res.get('success'))
 
     @patch('subprocess.run')
     @patch('platform.system')

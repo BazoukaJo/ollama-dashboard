@@ -1,5 +1,5 @@
 /**
- * Light / dark theme — localStorage key "theme" (matches BlueprintAssist layout.tsx).
+ * Light / dark theme — persisted in localStorage under key "theme".
  */
 (function () {
   var KEY = "theme";

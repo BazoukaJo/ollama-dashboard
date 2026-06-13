@@ -231,7 +231,7 @@ def fetch_library_models(timeout: int = 15) -> List[Dict]:
             _cached_library_models = models
             _fetched = True
             return models
-        except Exception as exc:
+        except requests.RequestException as exc:
             logger.warning("⚠️  Could not fetch Ollama library (will use static catalog): %s", exc)
             _cached_library_models = []
             _fetched = True

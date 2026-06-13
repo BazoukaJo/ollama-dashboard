@@ -1,7 +1,46 @@
 /**
- * Light / dark themes — tokens aligned with BlueprintAssist (globals.css :root / .dark).
- * html gets class "light" or "dark"; localStorage key "theme" (same as BlueprintAssist).
+ * Light / dark theme tokens. html gets class "light" or "dark".
  */
+
+/*
+ * Compact UI density (~80% browser zoom): scales page content together.
+ * Modals/backdrop counter-zoom so they stay viewport-sized and centered.
+ */
+:root {
+  --ui-density: 0.8;
+}
+
+html {
+  zoom: var(--ui-density);
+  color-scheme: dark light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
+}
+
+@supports not (zoom: 0.8) {
+  html {
+    font-size: 80%;
+  }
+}
+
+.modal,
+.modal-backdrop {
+  zoom: calc(1 / var(--ui-density));
+}
+
+@supports not (zoom: 0.8) {
+  .modal,
+  .modal-backdrop {
+    zoom: 1;
+    font-size: 125%;
+  }
+}
 
 /* --- Dark (default dashboard look): greyscale surfaces; no blue in chrome/popups --- */
 html.dark {
@@ -74,79 +113,121 @@ html.dark {
   --header-meta-chip-border: rgba(255, 255, 255, 0.11);
   --header-meta-chip-endpoint-bg: rgba(255, 255, 255, 0.06);
   --header-meta-chip-endpoint-fg: #cfd4dc;
+  /* Restrained accent (links, support note) — not electric blue in dark chrome */
+  --accent-primary: hsl(220, 12%, 72%);
+  --section-shell-bg: rgba(255, 255, 255, 0.02);
+  --section-shell-header-bg: rgba(255, 255, 255, 0.02);
+  --compact-metric-bg: rgba(255, 255, 255, 0.01);
+  --compact-metric-border: rgba(255, 255, 255, 0.03);
+  --compact-metric-hover-bg: rgba(255, 255, 255, 0.02);
+  --compact-metric-hover-border: rgba(255, 255, 255, 0.06);
+  --timeline-bg: rgba(255, 255, 255, 0.05);
+  --timeline-border: rgba(255, 255, 255, 0.1);
+  --model-card-hover-bg: rgba(255, 255, 255, 0.04);
+  --model-card-hover-border: rgba(255, 255, 255, 0.1);
+  --model-card-hover-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  --model-card-rim: rgba(255, 255, 255, 0.06);
+  --model-card-rim-hover: rgba(255, 255, 255, 0.14);
+  --model-card-rim-focus: rgba(255, 255, 255, 0.2);
+  --model-card-rim-focus-hover: rgba(255, 255, 255, 0.28);
 }
 
 /* --- Light: neutral canvas, strong body contrast, restrained accents --- */
 html.light {
-  --primary-bg: hsl(210, 8%, 96%);
+  --primary-bg: hsl(210, 10%, 95%);
   --secondary-bg: hsl(0, 0%, 100%);
-  --tertiary-bg: hsl(210, 7%, 94%);
-  --accent-bg: hsl(210, 6%, 92%);
-  --border-color: hsl(210, 10%, 86%);
-  --border-hover: hsl(210, 8%, 74%);
+  --tertiary-bg: hsl(210, 9%, 93%);
+  --accent-bg: hsl(210, 8%, 90%);
+  --border-color: hsl(210, 12%, 84%);
+  --border-hover: hsl(210, 10%, 72%);
   /* Typography: darker mid-tones for readability on pale greys */
-  --text-primary: hsl(220, 18%, 9%);
-  --text-secondary: hsl(220, 14%, 20%);
-  --text-muted: hsl(220, 10%, 36%);
-  --text-accent: hsl(220, 12%, 28%);
-  --text-reading: hsl(220, 16%, 11%);
+  --text-primary: hsl(220, 20%, 10%);
+  --text-secondary: hsl(220, 14%, 22%);
+  --text-muted: hsl(220, 10%, 38%);
+  --text-accent: hsl(220, 12%, 30%);
+  --text-reading: hsl(220, 16%, 12%);
   /* Links / focus: deep blue-grey, not electric blue */
-  --accent-subtle: hsl(222, 35%, 32%);
-  --success-color: hsl(152, 69%, 26%);
-  --warning-color: hsl(32, 95%, 35%);
-  --danger-color: hsl(355, 78%, 42%);
-  /* Inline “info” links / code — dark blue-grey, not bright cyan */
-  --info-color: hsl(222, 32%, 30%);
+  --accent-subtle: hsl(222, 38%, 30%);
+  --accent-primary: hsl(222, 48%, 38%);
+  --success-color: hsl(152, 62%, 28%);
+  --warning-color: hsl(32, 92%, 34%);
+  --danger-color: hsl(355, 72%, 40%);
+  /* Inline “info” links / code / proxy URL — dark blue-grey, not bright cyan */
+  --info-color: hsl(222, 36%, 28%);
   /* Shadows: slate-tinted (reads softer than pure black) */
-  --shadow-light: rgba(0, 0, 0, 0.06);
-  --shadow-medium: rgba(0, 0, 0, 0.1);
-  --shadow-strong: rgba(0, 0, 0, 0.16);
+  --shadow-light: rgba(15, 23, 42, 0.06);
+  --shadow-medium: rgba(15, 23, 42, 0.1);
+  --shadow-strong: rgba(15, 23, 42, 0.16);
   --surface-compact: hsl(0, 0%, 100%);
   --model-card-bg: hsl(0, 0%, 100%);
-  --model-card-border: hsl(210, 10%, 88%);
-  --model-card-hover-bg: hsl(210, 20%, 99%);
-  --model-card-hover-border: hsl(210, 8%, 82%);
-  --model-card-hover-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
-  --spec-tile-bg: rgba(0, 0, 0, 0.035);
-  --spec-tile-border: rgba(0, 0, 0, 0.08);
-  --spec-tile-hover-bg: rgba(0, 0, 0, 0.05);
-  --spec-tile-hover-border: rgba(0, 0, 0, 0.12);
-  --spec-label-color: hsl(220, 10%, 32%);
-  --spec-value-color: hsl(220, 18%, 11%);
-  --spec-icon-color: hsl(220, 8%, 38%);
-  --model-title-color: hsl(220, 18%, 9%);
-  --model-title-tag-bg: rgba(0, 0, 0, 0.06);
-  --model-title-tag-fg: hsl(220, 14%, 22%);
-  --model-title-tag-border: rgba(0, 0, 0, 0.12);
-  --model-title-scope-color: hsl(220, 8%, 38%);
+  --model-card-border: hsl(210, 12%, 86%);
+  --model-card-hover-bg: hsl(210, 22%, 99%);
+  --model-card-hover-border: hsl(210, 10%, 80%);
+  --model-card-hover-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  --spec-tile-bg: hsl(210, 10%, 97%);
+  --spec-tile-border: hsl(210, 10%, 88%);
+  --spec-tile-hover-bg: hsl(210, 12%, 95%);
+  --spec-tile-hover-border: hsl(210, 10%, 82%);
+  --spec-label-color: hsl(220, 10%, 34%);
+  --spec-value-color: hsl(220, 18%, 12%);
+  --spec-icon-color: hsl(220, 8%, 40%);
+  --model-title-color: hsl(220, 18%, 10%);
+  --model-title-tag-bg: hsl(210, 10%, 96%);
+  --model-title-tag-fg: hsl(220, 14%, 24%);
+  --model-title-tag-border: hsl(210, 10%, 86%);
+  --model-title-scope-color: hsl(220, 8%, 40%);
   --model-title-scope-opacity: 1;
-  --model-saved-settings-badge-bg: rgba(217, 119, 6, 0.16);
-  --model-saved-settings-badge-fg: hsl(28, 78%, 28%);
-  --model-saved-settings-badge-border: rgba(180, 83, 9, 0.38);
+  --model-saved-settings-badge-bg: hsl(38, 92%, 94%);
+  --model-saved-settings-badge-fg: hsl(28, 72%, 28%);
+  --model-saved-settings-badge-border: hsl(32, 70%, 78%);
   --modal-surface: hsl(0, 0%, 100%);
-  --modal-surface-elevated: hsl(210, 8%, 97%);
-  --modal-border: hsl(210, 10%, 88%);
-  --modal-text: hsl(220, 18%, 9%);
+  --modal-surface-elevated: hsl(210, 10%, 97%);
+  --modal-border: hsl(210, 12%, 86%);
+  --modal-text: hsl(220, 18%, 10%);
   --input-bg: hsl(0, 0%, 100%);
-  --input-border: hsl(218, 14%, 82%);
-  --theme-toggle-border: hsl(218, 16%, 88%);
+  --input-border: hsl(210, 14%, 80%);
+  --theme-toggle-border: hsl(210, 14%, 84%);
   --theme-toggle-bg: hsl(0, 0%, 100%);
-  --theme-toggle-bg-hover: hsl(220, 18%, 96%);
-  --theme-toggle-fg: hsl(222, 47%, 11%);
-  --header-backdrop: rgba(248, 249, 250, 0.94);
+  --theme-toggle-bg-hover: hsl(210, 12%, 96%);
+  --theme-toggle-fg: hsl(222, 47%, 12%);
+  --header-backdrop: hsla(210, 10%, 95%, 0.92);
   --tooltip-bg: hsl(0, 0%, 100%);
   --tooltip-fg: hsl(220, 18%, 11%);
-  --tooltip-border: hsl(210, 10%, 85%);
-  --tooltip-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --tooltip-border: hsl(210, 12%, 84%);
+  --tooltip-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
   --health-service-hit: calc(0.5rem + 0.8125rem * 1.25);
-  --header-meta-panel-bg: hsl(210, 8%, 98%);
-  --header-meta-panel-border: hsl(210, 10%, 90%);
-  --header-meta-panel-shadow: none;
-  --header-meta-divider: hsl(210, 8%, 88%);
-  --header-meta-chip-bg: hsl(0, 0%, 100%);
-  --header-meta-chip-border: hsl(210, 10%, 88%);
-  --header-meta-chip-endpoint-bg: hsl(210, 8%, 96%);
-  --header-meta-chip-endpoint-fg: hsl(220, 14%, 22%);
+  /* Header panels: white cards on grey canvas */
+  --header-meta-panel-bg: hsl(0, 0%, 100%);
+  --header-meta-panel-border: hsl(210, 12%, 84%);
+  --header-meta-panel-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --header-meta-divider: hsl(210, 10%, 88%);
+  --header-meta-chip-bg: hsl(210, 10%, 96%);
+  --header-meta-chip-border: hsl(210, 12%, 88%);
+  --header-meta-chip-endpoint-bg: hsl(210, 12%, 94%);
+  --header-meta-chip-endpoint-fg: hsl(220, 14%, 24%);
+  /* Bootstrap semantic remapping (restrained, readable on white) */
+  --bs-primary: hsl(222, 48%, 38%);
+  --bs-info: hsl(222, 36%, 28%);
+  --bs-link-color: hsl(222, 42%, 32%);
+  --bs-link-hover-color: hsl(222, 42%, 24%);
+  --bs-success: hsl(152, 62%, 28%);
+  --bs-warning: hsl(32, 92%, 34%);
+  --bs-danger: hsl(355, 72%, 40%);
+  --bs-secondary: hsl(220, 10%, 38%);
+  --bs-body-color: hsl(220, 14%, 22%);
+  --bs-border-color: hsl(210, 12%, 84%);
+  --section-shell-bg: var(--secondary-bg);
+  --section-shell-header-bg: var(--tertiary-bg);
+  --compact-metric-bg: hsl(210, 10%, 97%);
+  --compact-metric-border: hsl(210, 10%, 88%);
+  --compact-metric-hover-bg: hsl(210, 12%, 95%);
+  --compact-metric-hover-border: hsl(210, 10%, 82%);
+  --timeline-bg: hsl(210, 10%, 94%);
+  --timeline-border: hsl(210, 10%, 86%);
+  --model-card-rim: rgba(15, 23, 42, 0.08);
+  --model-card-rim-hover: rgba(15, 23, 42, 0.14);
+  --model-card-rim-focus: hsl(222, 48%, 38%);
+  --model-card-rim-focus-hover: hsl(222, 48%, 32%);
 }
 
 /* Header bar: sticky strip (logo, health, service controls, theme) */
@@ -177,7 +258,7 @@ html:has(#dashboard-body) {
   scrollbar-gutter: stable;
 }
 
-/* Phones: tighter header rhythm; health pill may wrap (grid layout lives in styles.css) */
+/* Phones: tighter header rhythm (single-row Ollama controls in styles.css) */
 @media (max-width: 575.98px) {
   .dashboard-header-bar {
     gap: 0.3rem;
@@ -185,13 +266,6 @@ html:has(#dashboard-body) {
 
   .dashboard-header-banner .dashboard-header-status-line {
     max-width: 100%;
-  }
-
-  .dashboard-header-banner .dashboard-header-health.health-status-badge {
-    max-width: 100%;
-    white-space: normal;
-    text-overflow: unset;
-    overflow: visible;
   }
 }
 
@@ -268,7 +342,30 @@ html.light .theme-toggle-icon--moon {
 /* --- Light mode: Bootstrap + dashboard overrides --- */
 html.light body {
   background: var(--primary-bg);
-  color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+html.dark body,
+body {
+  background: var(--primary-bg);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.light .dropdown-menu-dark {
+  background-color: var(--secondary-bg);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+html.light .dropdown-menu-dark .dropdown-item {
+  color: var(--text-primary);
+}
+
+html.light .dropdown-menu-dark .dropdown-item:hover,
+html.light .dropdown-menu-dark .dropdown-item:focus {
+  background-color: var(--tertiary-bg);
+  color: var(--text-primary);
 }
 
 html.light .text-light {
@@ -379,18 +476,27 @@ html.light .compact-system-resources {
   border-color: var(--border-color);
 }
 
+html.light .models-section-shell {
+  background: var(--section-shell-bg);
+  border-color: var(--border-color);
+}
+
+html.light .models-section-header {
+  background: var(--section-shell-header-bg);
+}
+
 html.light .compact-metric {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.08);
+  background: var(--compact-metric-bg);
+  border-color: var(--compact-metric-border);
+}
+
+html.light .timeline-canvas {
+  background: var(--timeline-bg);
+  border-color: var(--timeline-border);
 }
 
 html.light .metric-value-compact {
   color: var(--text-primary);
-}
-
-html.light .timeline-canvas {
-  background: rgba(0, 0, 0, 0.04);
-  border-color: rgba(0, 0, 0, 0.1);
 }
 
 html.light .refresh-indicator {
@@ -399,21 +505,21 @@ html.light .refresh-indicator {
 
 /* Semantic colors in light mode (JS swaps bg-success / warning / danger; SSR starts bg-secondary) */
 html.light .health-status-badge.bg-success {
-  background: hsl(142, 62%, 92%) !important;
-  color: hsl(152, 69%, 24%) !important;
-  border: 1px solid hsl(142, 45%, 76%);
+  background: hsl(142, 58%, 91%) !important;
+  color: hsl(152, 62%, 24%) !important;
+  border: 1px solid hsl(142, 42%, 74%);
 }
 
 html.light .health-status-badge.bg-warning {
-  background: hsl(45, 100%, 94%) !important;
-  color: hsl(32, 95%, 28%) !important;
-  border: 1px solid hsl(45, 88%, 78%);
+  background: hsl(45, 96%, 93%) !important;
+  color: hsl(32, 92%, 28%) !important;
+  border: 1px solid hsl(45, 84%, 76%);
 }
 
 html.light .health-status-badge.bg-danger {
-  background: hsl(0, 86%, 97%) !important;
-  color: hsl(355, 78%, 32%) !important;
-  border: 1px solid hsl(355, 72%, 88%);
+  background: hsl(0, 82%, 96%) !important;
+  color: hsl(355, 72%, 34%) !important;
+  border: 1px solid hsl(355, 68%, 86%);
 }
 
 html.light .health-status-badge.bg-secondary {
@@ -432,7 +538,86 @@ html.light .page-title-minimal {
 }
 
 html.light code.text-info {
-  color: hsl(222, 32%, 26%) !important;
+  color: var(--info-color) !important;
+}
+
+html.light .text-info {
+  color: var(--info-color) !important;
+}
+
+html.light a.text-info {
+  color: var(--info-color) !important;
+}
+
+html.light a.text-info:hover {
+  color: hsl(222, 42%, 22%) !important;
+}
+
+html.light .text-primary {
+  color: var(--accent-primary) !important;
+}
+
+html.light .section-icon.text-primary {
+  color: var(--accent-primary) !important;
+}
+
+/* Header API proxy panel */
+html.light .dashboard-header-proxy-label {
+  color: var(--text-muted);
+}
+
+html.light .dashboard-header-proxy-url {
+  color: var(--info-color);
+}
+
+html.light .api-proxy-status-badge.bg-success {
+  background: hsl(142, 58%, 91%) !important;
+  color: hsl(152, 62%, 24%) !important;
+  border: 1px solid hsl(142, 42%, 74%);
+}
+
+html.light .api-proxy-status-badge.bg-warning {
+  background: hsl(45, 96%, 93%) !important;
+  color: hsl(32, 92%, 28%) !important;
+  border: 1px solid hsl(45, 84%, 76%);
+}
+
+html.light .api-proxy-status-badge.bg-secondary {
+  background: var(--header-meta-chip-bg) !important;
+  color: var(--text-muted) !important;
+  border-color: var(--header-meta-chip-border) !important;
+}
+
+html.light .btn-outline-info {
+  color: hsl(222, 42%, 32%);
+  border-color: hsl(222, 22%, 72%);
+  background: transparent;
+}
+
+html.light .btn-outline-info:hover,
+html.light .btn-outline-info:focus-visible {
+  color: hsl(222, 42%, 22%);
+  background: hsl(222, 30%, 95%);
+  border-color: hsl(222, 26%, 62%);
+}
+
+html.light .dashboard-header-proxy-connect.btn-outline-info {
+  color: hsl(222, 42%, 30%);
+  border-color: hsl(222, 20%, 74%);
+}
+
+html.light .dashboard-header-proxy-connect.btn-outline-info:hover {
+  color: hsl(222, 42%, 20%);
+  background: hsl(222, 28%, 94%);
+  border-color: hsl(222, 24%, 60%);
+}
+
+html.light .refresh-indicator .dot {
+  --status-color: hsl(152, 62%, 36%);
+}
+
+html.light .refresh-indicator.error .dot {
+  --status-color: hsl(355, 72%, 40%);
 }
 
 html.light .model-code-block {
@@ -482,6 +667,18 @@ html.light .model-card:hover {
   box-shadow: var(--model-card-hover-shadow);
 }
 
+html.light .model-card::after {
+  box-shadow: inset 0 0 0 1px var(--model-card-rim);
+}
+
+html.light .model-card:hover::after {
+  box-shadow: inset 0 0 0 1px var(--model-card-rim-hover);
+}
+
+html.light .model-card:focus-within::after {
+  box-shadow: inset 0 0 0 2px var(--model-card-rim-focus);
+}
+
 html.light .capability-icon:hover {
   background: rgba(0, 0, 0, 0.05);
 }
@@ -516,28 +713,139 @@ html.light .compact-system-resources:hover {
 }
 
 html.light .resource-icon-cpu {
-  color: #3b82f6;
+  color: hsl(222, 52%, 42%);
 }
 html.light .resource-icon-ram {
-  color: #22c55e;
+  color: hsl(152, 52%, 32%);
 }
 html.light .resource-icon-vram {
-  color: #06b6d4;
+  color: hsl(192, 48%, 32%);
 }
 html.light .resource-icon-gpu3d {
-  color: #f59e0b;
+  color: hsl(32, 82%, 38%);
 }
 html.light .resource-icon-gpu,
 html.light .resource-icon-disk {
   color: var(--spec-icon-color);
 }
 
+/* Capability filter chips — muted tints instead of neon Bootstrap blues */
+html.light .capability-filters .filter-btn.active {
+  background: hsl(220, 14%, 92%) !important;
+  border-color: hsl(220, 12%, 78%) !important;
+  color: var(--text-primary) !important;
+}
+
+html.light .capability-filters .filter-btn.active[data-capability="reasoning"] {
+  background: hsl(200, 40%, 92%) !important;
+  border-color: hsl(200, 32%, 72%) !important;
+  color: hsl(200, 50%, 26%) !important;
+}
+
+html.light .capability-filters .filter-btn.active[data-capability="vision"] {
+  background: hsl(222, 38%, 92%) !important;
+  border-color: hsl(222, 28%, 72%) !important;
+  color: hsl(222, 48%, 30%) !important;
+}
+
+html.light .capability-filters .filter-btn.active[data-capability="tools"] {
+  background: hsl(45, 88%, 92%) !important;
+  border-color: hsl(45, 72%, 74%) !important;
+  color: hsl(32, 82%, 28%) !important;
+}
+
+html.light .capability-icon.enabled {
+  color: hsl(152, 58%, 30%);
+  background: hsl(142, 45%, 93%);
+  border-color: hsl(142, 38%, 78%);
+}
+
+html.light .capability-icon.unknown {
+  background: hsl(45, 92%, 93%);
+  border-color: hsl(45, 78%, 76%);
+  color: hsl(32, 82%, 30%);
+}
+
+html.light .capability-icon.disabled {
+  background: hsl(220, 8%, 94%);
+  border-color: hsl(220, 8%, 84%);
+  color: hsl(220, 8%, 48%);
+}
+
+/* Modal JSON inspector (dark hardcoded defaults in styles.css) */
+html.light .json-table {
+  background: var(--modal-surface) !important;
+  border-color: var(--modal-border) !important;
+}
+
+html.light .json-table thead th {
+  background: var(--modal-surface-elevated) !important;
+  border-bottom-color: var(--modal-border) !important;
+  color: var(--text-primary) !important;
+}
+
+html.light .json-table tbody td {
+  border-bottom-color: var(--border-color) !important;
+  color: var(--text-reading) !important;
+}
+
+html.light .json-table tbody tr:nth-child(odd) {
+  background: hsl(210, 12%, 98%) !important;
+}
+
+html.light .json-table tbody tr:hover {
+  background: hsl(210, 12%, 96%) !important;
+}
+
+html.light .json-key-cell {
+  color: var(--text-primary) !important;
+  border-right-color: var(--border-color) !important;
+}
+
+html.light .json-value-cell {
+  color: var(--text-reading) !important;
+}
+
+html.light .capability-pill {
+  border-color: var(--border-color);
+  background: var(--tertiary-bg);
+  color: var(--text-secondary);
+}
+
+html.light .capability-pill.enabled {
+  border-color: hsl(142, 38%, 72%);
+  color: hsl(152, 58%, 26%);
+  background: hsl(142, 45%, 93%);
+}
+
+html.light .capability-pill.disabled {
+  border-color: var(--border-color);
+  background: hsl(220, 8%, 94%);
+  color: var(--text-muted);
+}
+
+html.light .capability-pill.unknown {
+  border-color: hsl(45, 78%, 76%);
+  background: hsl(45, 92%, 93%);
+  color: hsl(32, 82%, 30%);
+}
+
+html.light .array-container,
+html.light .array-item {
+  background: var(--tertiary-bg);
+  border-color: var(--border-color);
+}
+
+html.light .array-meta {
+  color: var(--text-muted);
+}
+
 html.light .table-dark {
   --bs-table-bg: var(--secondary-bg);
   --bs-table-color: var(--text-primary);
   --bs-table-border-color: var(--border-color);
-  --bs-table-striped-bg: rgba(0, 0, 0, 0.03);
-  --bs-table-hover-bg: rgba(0, 0, 0, 0.05);
+  --bs-table-striped-bg: hsl(210, 12%, 98%);
+  --bs-table-hover-bg: hsl(210, 12%, 96%);
 }
 
 /* Dark: dialogs / dropdowns — keep links and emphasis neutral (greyscale) */
@@ -595,6 +903,22 @@ html.light .model-card:focus-within::after {
 
 html.light .model-card:hover:focus-within::after {
   box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.18);
+}
+
+html.light .model-actions .btn-primary {
+  background: hsl(222, 48%, 38%) !important;
+  border: 1px solid hsl(222, 40%, 32%) !important;
+  color: hsl(0, 0%, 100%) !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+html.light .model-actions .btn-primary:hover {
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+}
+
+html.light .model-actions .btn-success {
+  border: 1px solid hsl(152, 50%, 28%) !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
 }
 
 /* ----- Dashboard tooltips: body-mounted layer (see tooltips.js); no ::after ----- */

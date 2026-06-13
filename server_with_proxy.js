@@ -37,7 +37,7 @@
 //      (e.g. 127.0.0.1:11436) in the environment that *launches Ollama*, and restart it.
 //   2. Run this proxy with PROXY_PORT=11434 (Ollama's now-vacated default) and
 //      OLLAMA_HOST/OLLAMA_PORT pointed at the relocated address from step 1.
-// See README.md > "Per-Model Settings: scope and limitations" for the full walkthrough.
+// See docs/GUIDE.md > "Per-Model Settings: scope and limitations" for the full walkthrough.
 
 const express = require('express');
 const { createProxyMiddleware, fixRequestBody } = require('http-proxy-middleware');

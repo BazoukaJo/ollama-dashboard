@@ -5,9 +5,9 @@ This is the proper entrypoint for running the Ollama Dashboard application.
 Usage: python OllamaDashboard.py
 """
 
+import logging
 import os
 import sys
-import logging
 from pathlib import Path
 
 # Setup logging
@@ -55,7 +55,7 @@ def main():
         logger.info("\n✅ Stopped")
         sys.exit(0)
 
-    except Exception as e:
+    except (OSError, ImportError, RuntimeError, TypeError, ValueError) as e:
         logger.error(f"❌ Error: {e}", exc_info=True)
         sys.exit(1)
 
