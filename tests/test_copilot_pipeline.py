@@ -38,3 +38,41 @@ def test_pipeline_respects_trim_disabled():
     }
     merged, meta = prepare_copilot_payload(payload, entry)
     assert 'context_trim' not in meta or not meta.get('context_trim', {}).get('trimmed')
+
+
+def test_pipeline_sanitizes_multimodal_before_trim():
+    b64 = 'abc123'
+    payload = {
+        'model': 'qwen3-vl:8b',
+        'messages': [{
+            'role': 'user',
+            'content': [
+                {'type': 'input_text', 'text': 'Describe'},
+                {'type': 'input_image', 'image_url': f'data:image/png;base64,{b64}'},
+            ],
+        }],
+        'stream': True,
+    }
+    merged, meta = prepare_copilot_payload(payload, {'settings': {'num_ctx': 8192}})
+    msg = merged['messages'][-1]
+    assert msg['images'] == [b64]
+    assert isinstance(msg['content'], str)
+    assert meta.get('sanitize') is not None
+
+
+def test_pipeline_caps_output_for_external_clients():
+    payload = {
+        'model': 'qwen-test',
+        'messages': [{'role': 'user', 'content': 'hi'}],
+        'max_completion_tokens': 100000,
+        'parallel_tool_calls': True,
+    }
+    entry = {
+        'settings': {'num_ctx': 4096, 'temperature': 0.2},
+        'client': {'context_trim_enabled': False},
+    }
+    merged, meta = prepare_copilot_payload(payload, entry)
+    assert merged['options']['num_predict'] == 4096
+    assert merged['max_tokens'] == 4096
+    assert 'parallel_tool_calls' not in merged
+    assert meta.get('client_compat', {}).get('num_predict_capped') == 4096

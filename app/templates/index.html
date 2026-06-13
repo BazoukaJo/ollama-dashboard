@@ -350,6 +350,9 @@
                                         <button type="button" class="btn btn-primary" data-model-action="restart" onclick="restartModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Reload this model and re-send your saved settings with the warm-up request. This only affects requests made through this dashboard — it does not change the model itself. Other clients (VS Code, ollama run, etc.) still see Ollama's defaults unless they go through the dashboard's /ollama proxy or you use 'Bake into model'.">
                                             <i class="fas fa-redo"></i> <span class="model-action-btn-label">Restart</span>
                                         </button>
+                                        <button type="button" class="btn btn-success" onclick="openAskModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Send a question to this running model (streams the response)." aria-label="Ask this model a question">
+                                            <i class="fas fa-comment-dots"></i> <span class="model-action-btn-label">Ask?</span>
+                                        </button>
                                         <button type="button" class="btn btn-warning" data-model-action="stop" onclick="stopModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Unload from VRAM (ollama stop). Model files stay installed.">
                                             <i class="fas fa-stop"></i> <span class="model-action-btn-label">Stop</span>
                                         </button>

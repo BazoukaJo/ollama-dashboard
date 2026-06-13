@@ -14,7 +14,7 @@ A simple web dashboard for **Ollama** — the tool that runs AI models on your c
 - **Watch your computer** — live CPU, RAM, GPU memory, and disk usage
 - **Save per-model settings** — temperature, context size, and more (stored in `model_settings.json`)
 - **Control Ollama** — start, stop, or restart the Ollama service from the header
-- **Connect other apps** — use the built-in **API proxy** URL in the header so VS Code, Copilot, Continue, and similar tools use your saved settings
+- **Connect other apps** — use the built-in **API proxy** URL in the header so VS Code, Copilot, Continue, and similar tools use your saved settings (with parameter sanitization and output caps for IDE clients)
 
 The dashboard works in **dark and light** themes and adapts to phone, tablet, and desktop screens.
 
@@ -41,6 +41,17 @@ start.bat
 Open **http://localhost:5000** in your browser.
 
 For development with auto-reload, use `start_dev.bat` instead of `start.bat`.
+
+**Manage the running instance (Windows):**
+
+| Script | Purpose |
+|--------|---------|
+| `start.bat` | Release server (Waitress, production) |
+| `start_dev.bat` | Development server (Flask debug + auto-reload) |
+| `stop_app.bat` | Stop the dashboard instance on port 5000 |
+| `restart_app.bat` | Restart in the same mode (or `restart_app.bat dev` / `release`) |
+
+Scripts detect **release**, **dev**, and **CLI** (`ollama_dashboard_cli.py`) processes for this repo. They stop only dashboard processes — not other apps on port 5000. Shared logic lives in `scripts/dashboard-process.ps1`.
 
 ### Linux / macOS
 
@@ -85,10 +96,12 @@ Click **Refresh** or wait for the countdown to update model lists. System stats 
 
 | Problem | What to try |
 |--------|-------------|
-| Page won't load | Is the dashboard running? Did you open `http://localhost:5000`? |
+| Page won't load | Is the dashboard running? Did you open `http://localhost:5000`? Run `start.bat` or check with `stop_app.bat` then restart |
+| Port 5000 already in use | Run `stop_app.bat`, or `restart_app.bat`. If another app owns the port, the stop script will refuse to kill it |
 | No models shown | Is Ollama running? Check `http://localhost:11434` or the Ollama URL in the header |
 | List looks wrong | Click **Refresh** in the header or reload the page |
 | Saved settings ignored by another app | That app may be talking to Ollama directly — use the dashboard **API proxy** URL instead. See [Complete Guide](docs/GUIDE.md) |
+| VS Code Copilot: "Response too long" | Point Copilot at `http://127.0.0.1:5000/ollama` (dashboard proxy). It caps output and strips bad parameters automatically |
 
 More help: **[Troubleshooting](docs/TROUBLESHOOTING.md)**
 
@@ -98,7 +111,7 @@ More help: **[Troubleshooting](docs/TROUBLESHOOTING.md)**
 
 | Guide | Contents |
 |-------|----------|
-| **[Complete Guide](docs/GUIDE.md)** | Proxy setup, per-model settings, configuration, development, detailed troubleshooting |
+| **[Complete Guide](docs/GUIDE.md)** | Proxy setup, Windows start/stop/restart, per-model settings, configuration, development |
 | **[Architecture](docs/ARCHITECTURE.md)** | How the app is built internally |
 | **[Deployment](docs/DEPLOYMENT.md)** | Docker, Gunicorn, Nginx, production tips |
 | **[Security](docs/SECURITY.md)** | CORS, validation, TLS |

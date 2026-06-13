@@ -16,3 +16,6 @@ To start Ollama Dashboard when Windows 11 starts:
 3. Paste (or drag) "Start Ollama Dashboard.bat" into that folder.
 
 Done. The dashboard will start at login (a console window will appear while it runs).
+
+To stop or restart later, use stop_app.bat or restart_app.bat in the project folder.
+See docs\GUIDE.md (section "Windows: start, stop, and restart") for details.

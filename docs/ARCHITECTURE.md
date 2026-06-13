@@ -181,16 +181,17 @@ service: ollama_service.save_model_settings(model_name, settings)
 > values unless repointed at `http://<dashboard>:5000/ollama` or port-takeover proxy.
 >
 > **VS Code / GitHub Copilot:** base URL `http://127.0.0.1:5000/ollama`; chat hits
-> `/ollama/v1/chat/completions`, which the proxy **passthroughs** to Ollama `/v1/chat/completions`
-> with saved settings merged into `options` (including `num_ctx`). Model load happens on that
-> inference request, not via dashboard Start. Model list uses `/ollama/api/tags` or
-> `/ollama/v1/models` (passthrough, no settings).
+> `/ollama/v1/chat/completions`, which the proxy **bridges** to native `/api/chat` via
+> `v1_native_bridge.py` with saved settings merged into `options` (including `num_ctx`).
+> `client_payload_compat.py` sanitizes IDE payloads and caps output length. Model load
+> happens on that inference request, not via dashboard Start. Model list uses
+> `/ollama/api/tags` or `/ollama/v1/models` (passthrough, no settings).
 >
 > Three mechanisms for external clients (README
 > [Per-Model Settings: scope and limitations](GUIDE.md#per-model-settings-scope-and-limitations)):
 > 1. **Built-in proxy at `/ollama/...`** (`app/routes/proxy.py`) — merge via
->    `lookup_settings_entry()` + `merge_options_for_external_proxy()`; saved values win.
->    Native API; OpenAI `/v1/chat/completions` passthrough with merged `options` (Copilot);
+>    `copilot_pipeline.py` + `client_payload_compat.py`; saved values win.
+>    Native API; OpenAI `/v1/chat/completions` bridged to `/api/chat` (Copilot);
 >    `/v1/completions` bridged via `v1_native_bridge.py`. Hop-by-hop upstream headers are
 >    stripped so Waitress does not 500 on `/ollama/api/tags`.
 > 2. **Bake into Model** — `OllamaServiceUtilities.bake_model_settings`.
@@ -294,10 +295,24 @@ start.bat
 # Uses waitress-serve on port 5000
 ```
 
-**Development:**
+**Windows (development):**
+```bash
+start_dev.bat
+# Flask debug reloader on port 5000
+```
+
+**Windows (stop / restart):**
+```bash
+stop_app.bat
+restart_app.bat          # same mode as running instance
+restart_app.bat dev      # force dev mode
+```
+
+**Development (Linux/macOS or pip install):**
 ```bash
 pip install -r requirements.txt
 python OllamaDashboard.py
+# or: ollama-dashboard
 ```
 
 **Docker (Linux, uses Gunicorn):**

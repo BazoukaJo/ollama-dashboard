@@ -64,7 +64,7 @@ runs the model for that request). Saved values **win** over whatever the client 
 |------------------------------|-----------------|-------------------|
 | `POST /ollama/api/chat` | `/api/chat` | Yes |
 | `POST /ollama/api/generate` | `/api/generate` | Yes |
-| `POST /ollama/v1/chat/completions` | `/v1/chat/completions` (passthrough + settings) | Yes (**OpenAI-compatible clients**) |
+| `POST /ollama/v1/chat/completions` | `/api/chat` (bridged) | Yes (**OpenAI-compatible clients**) |
 | `POST /ollama/v1/completions` | `/api/generate` (bridged) | Yes |
 | `GET /ollama/api/tags`, `GET /ollama/v1/models`, etc. | passthrough | No (list/show only) |
 
@@ -72,9 +72,10 @@ Ollama applies `options` **per request** — it does not remember them after unl
 apps do **not** use the dashboard **Start** button; the first chat message loads the model
 with your saved `num_ctx`, temperature, etc.
 
-**OpenAI `/v1` note:** On some Ollama releases, raw `/v1/chat/completions` may not honor
-every saved `options` field the same way as native `/api/chat`. The dashboard proxy merges
-your saved settings, trims oversized prompts when enabled, and forwards compatible traffic.
+**OpenAI `/v1` note:** OpenAI-compatible chat (VS Code Copilot, Continue, OpenAI SDKs) is
+**bridged to native `/api/chat`** so saved `num_ctx` and other `options` are honored. The
+proxy also sanitizes unsupported OpenAI fields, maps `max_completion_tokens` → `max_tokens`,
+caps output length for IDE clients, and auto-trims oversized prompts when enabled.
 
 #### Connect any external app (one address)
 
@@ -120,6 +121,16 @@ http://127.0.0.1:5000/ollama               → proxy health JSON
 ```
 
 Both model-list URLs should return JSON, not an HTML error page. Restart the dashboard after upgrades.
+
+**Proxy environment variables (optional):**
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OLLAMA_PROXY_MAX_PREDICT` | `4096` | Max output tokens for external clients |
+| `OLLAMA_PROXY_MAX_RESPONSE_CHARS` | `96000` | Max chars in non-streaming responses returned to IDEs |
+| `OLLAMA_V1_PASSTHROUGH` | `false` | Set `true` to forward `/v1/chat/completions` to Ollama `/v1` instead of bridging to `/api/chat` |
+| `CONTEXT_TRIM_ENABLED` | `true` | Auto-trim long prompts to fit `num_ctx` |
+| `OLLAMA_COPILOT_PRELOAD_CTX` | `true` | Preload model context before first v1 chat request |
 
 Original model names are kept. **Every** saved option in `options` is applied — including
 `presence_penalty`, `frequency_penalty`, `typical_p`, and `penalize_newline` (not valid in a
@@ -228,6 +239,51 @@ Create a `.env` file with your settings; defaults work out-of-the-box for local 
 
 ---
 
+## Windows: start, stop, and restart
+
+The dashboard ships batch scripts that share one process manager:
+`scripts/dashboard-process.ps1`. It detects dashboard processes by **command line and repo
+path**, not just "whatever is on port 5000".
+
+| Script | Mode | Server |
+|--------|------|--------|
+| `start.bat` | **release** | Waitress (`wsgi:app`) |
+| `start_dev.bat` | **dev** | Flask debug reloader |
+| `stop_app.bat` | — | Stops dashboard instance; refuses to kill foreign apps on port 5000 |
+| `restart_app.bat` | auto | Restarts in the **currently running** mode (or saved mode if stopped) |
+
+**Examples:**
+
+```bat
+start.bat                  REM production
+start_dev.bat              REM development with auto-reload
+stop_app.bat               REM stop whatever dashboard is running
+restart_app.bat            REM restart same mode
+restart_app.bat dev        REM force restart in dev mode
+restart_app.bat release    REM force restart in release mode
+```
+
+**Behavior:**
+
+- `start.bat` / `start_dev.bat` check port 5000 first. If the **same** mode is already
+  running, they report it and exit. If the **other** mode is running, they stop it and start
+  the requested mode.
+- `restart_app.bat` detects the live process mode (`release`, `dev`, or `cli` from
+  `ollama_dashboard_cli.py`) before choosing which start script to open.
+- `data\dashboard.run-mode` records the last started mode (`release` or `dev`) as a fallback
+  when nothing is running.
+
+**Check status manually:**
+
+```powershell
+powershell -File scripts\dashboard-process.ps1 -Action status
+```
+
+Exit code `0` = dashboard running; `1` = not running; `4` = port blocked by a non-dashboard
+process.
+
+---
+
 ## Background Updates
 
 The service runs a background thread for:
@@ -271,7 +327,7 @@ CI runs `pytest -q` on Ubuntu and Windows; smoke checks run inside pytest via `t
 ```bash
 # After editing service/routes/UI:
 1. python -m pytest -q
-2. Restart the app
+2. Restart the app (restart_app.bat on Windows, or stop + start)
 3. Test in browser: http://localhost:5000
 ```
 

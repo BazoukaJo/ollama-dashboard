@@ -68,6 +68,12 @@ def log_copilot_request(
         log_file.parent.mkdir(parents=True, exist_ok=True)
         if log_file.exists() and log_file.stat().st_size > _LOG_MAX_BYTES:
             log_file.write_text('', encoding='utf-8')
+        messages = payload.get('messages') or []
+        image_count = sum(
+            len(msg.get('images') or [])
+            for msg in messages
+            if isinstance(msg, dict) and isinstance(msg.get('images'), list)
+        )
         record: dict[str, Any] = {
             'ts': datetime.now(timezone.utc).isoformat(),
             'kind': 'chat',
@@ -75,8 +81,10 @@ def log_copilot_request(
             'model_in': payload.get('model'),
             'model_resolved': resolved_model,
             'stream': payload.get('stream'),
-            'message_count': len(payload.get('messages') or []),
+            'message_count': len(messages),
             'has_tools': bool(payload.get('tools')),
+            'has_images': image_count > 0,
+            'image_count': image_count,
             'options_num_ctx': (payload.get('options') or {}).get('num_ctx'),
         }
         if pipeline:

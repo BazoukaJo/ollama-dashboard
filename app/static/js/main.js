@@ -1657,6 +1657,9 @@ function updateRunningModelsDisplay(models) {
             <button type="button" class="btn btn-primary" data-model-action="restart" onclick="restartModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Reload this model in memory (applies updated settings from disk).">
               <i class="fas fa-redo"></i> <span class="model-action-btn-label">Restart</span>
             </button>
+            <button type="button" class="btn btn-success" onclick="openAskModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Send a question to this running model (streams the response)." aria-label="Ask this model a question">
+              <i class="fas fa-comment-dots"></i> <span class="model-action-btn-label">Ask?</span>
+            </button>
             <button type="button" class="btn btn-warning" data-model-action="stop" onclick="stopModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Unload from VRAM (ollama stop). Model files stay installed.">
               <i class="fas fa-stop"></i> <span class="model-action-btn-label">Stop</span>
             </button>

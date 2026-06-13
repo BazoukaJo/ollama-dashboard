@@ -7,6 +7,7 @@ from typing import Any
 
 _CHARS_PER_TOKEN = 4
 _DEFAULT_RESERVE_RATIO = 0.2
+_TOKENS_PER_IMAGE = 256
 
 
 def estimate_tokens(text: str) -> int:
@@ -37,6 +38,23 @@ def _message_text(message: dict[str, Any]) -> str:
     return ''
 
 
+def _image_token_cost(message: dict[str, Any]) -> int:
+    images = message.get('images')
+    if isinstance(images, list) and images:
+        return len(images) * _TOKENS_PER_IMAGE
+    content = message.get('content')
+    if isinstance(content, list):
+        count = sum(
+            1 for block in content
+            if isinstance(block, dict)
+            and str(block.get('type') or '').lower() in (
+                'image', 'image_url', 'input_image',
+            )
+        )
+        return count * _TOKENS_PER_IMAGE
+    return 0
+
+
 def estimate_messages_tokens(messages: list[Any]) -> int:
     total = 0
     for msg in messages or []:
@@ -44,6 +62,7 @@ def estimate_messages_tokens(messages: list[Any]) -> int:
             continue
         total += 4  # role/overhead
         total += estimate_tokens(_message_text(msg))
+        total += _image_token_cost(msg)
     return total
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from app.services.client_payload_compat import cap_num_predict, sanitize_v1_chat_payload
 from app.services.context_budget import trim_messages_to_budget
 from app.services.copilot_extras import get_client_extras
 from app.services.model_router import resolve_routed_model
@@ -42,14 +43,29 @@ def prepare_copilot_payload(
         except Exception as err:  # pylint: disable=broad-exception-caught
             meta['rag'] = {'error': str(err)}
 
+    # Normalize multimodal Copilot messages before context trim estimates image-bearing text.
+    merged, sanitize_meta = sanitize_v1_chat_payload(merged)
+    meta['sanitize'] = sanitize_meta
+
     trim_enabled = extras.get('context_trim_enabled', True)
     env_trim = os.getenv('CONTEXT_TRIM_ENABLED', 'true').strip().lower()
     if trim_enabled and env_trim not in ('0', 'false', 'no'):
-        num_ctx = int((merged.get('options') or {}).get('num_ctx') or 8192)
+        opts = merged.get('options') if isinstance(merged.get('options'), dict) else {}
+        raw_ctx = opts.get('num_ctx')
+        try:
+            num_ctx = int(raw_ctx) if raw_ctx is not None else 8192
+        except (TypeError, ValueError):
+            num_ctx = 8192
         trimmed_msgs, trim_meta = trim_messages_to_budget(merged.get('messages') or [], num_ctx)
         if trim_meta.get('trimmed'):
             merged['messages'] = trimmed_msgs
         meta['context_trim'] = trim_meta
 
     meta['num_ctx'] = (merged.get('options') or {}).get('num_ctx')
+
+    merged, cap_meta = cap_num_predict(
+        merged,
+        (settings_entry or {}).get('settings') or {},
+    )
+    meta['client_compat'] = {**sanitize_meta, **cap_meta}
     return merged, meta

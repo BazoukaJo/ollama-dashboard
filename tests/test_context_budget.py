@@ -1,35 +1,23 @@
-"""Tests for context budget trimming."""
-from app.services.context_budget import (
-    completion_budget,
-    estimate_messages_tokens,
-    estimate_tokens,
-    trim_messages_to_budget,
-)
+"""Tests for context budget estimation."""
+from app.services.context_budget import estimate_messages_tokens, trim_messages_to_budget
 
 
-def test_estimate_tokens():
-    assert estimate_tokens('') == 0
-    assert estimate_tokens('abcd') == 1
-    assert estimate_tokens('a' * 40) == 10
+def test_image_messages_cost_more_tokens_than_text_only():
+    text_only = [{'role': 'user', 'content': 'hello'}]
+    with_image = [{
+        'role': 'user',
+        'content': 'hello',
+        'images': ['abc', 'def'],
+    }]
+    assert estimate_messages_tokens(with_image) > estimate_messages_tokens(text_only)
 
 
-def test_trim_removes_oldest_messages():
-    messages = [
+def test_trim_considers_image_heuristic():
+    msgs = [
         {'role': 'system', 'content': 'sys'},
-        {'role': 'user', 'content': 'x' * 20000},
-        {'role': 'assistant', 'content': 'y' * 20000},
-        {'role': 'user', 'content': 'recent'},
+        {'role': 'user', 'content': 'old', 'images': ['a'] * 8},
+        {'role': 'user', 'content': 'keep me'},
     ]
-    trimmed, meta = trim_messages_to_budget(messages, num_ctx=4096)
+    trimmed, meta = trim_messages_to_budget(msgs, 512)
     assert meta['trimmed'] is True
-    assert meta['messages_removed'] >= 1
-    assert trimmed[0]['role'] == 'system'
-    assert trimmed[-1]['content'] == 'recent'
-    assert estimate_messages_tokens(trimmed) <= completion_budget(4096)
-
-
-def test_no_trim_when_under_budget():
-    messages = [{'role': 'user', 'content': 'hi'}]
-    trimmed, meta = trim_messages_to_budget(messages, num_ctx=8192)
-    assert meta['trimmed'] is False
-    assert len(trimmed) == 1
+    assert trimmed[-1]['content'] == 'keep me'

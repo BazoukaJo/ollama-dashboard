@@ -82,6 +82,16 @@ def test_stream_maps_tool_calls_to_openai_format():
     assert '"tool_calls"' in out
 
 
+def test_stream_emits_content_when_only_present_on_done_line():
+    lines = [
+        b'{"message":{"role":"assistant","content":""},"done":false}',
+        b'{"message":{"role":"assistant","content":"A cat on a mat."},"done":true}',
+    ]
+    out = ''.join(stream_native_chat_lines_to_openai_sse(iter(lines), model='qwen3-vl:8b'))
+    assert 'A cat on a mat.' in out
+    assert 'data: [DONE]' in out
+
+
 def test_stream_maps_thinking_to_reasoning_delta():
     lines = [
         b'{"message":{"role":"assistant","thinking":"Hmm","content":""},"done":false}',
@@ -89,6 +99,18 @@ def test_stream_maps_thinking_to_reasoning_delta():
     ]
     out = ''.join(stream_native_chat_lines_to_openai_sse(iter(lines), model='qwen3:14b'))
     assert '"reasoning": "Hmm"' in out or '"reasoning":"Hmm"' in out
+    assert '"content": "Hmm"' not in out and '"content":"Hmm"' not in out
     assert '"role": "assistant"' in out or '"role":"assistant"' in out
     assert '"content": "Hi"' in out or '"content":"Hi"' in out
+    assert 'data: [DONE]' in out
+
+
+def test_stream_flushes_thinking_to_content_when_no_answer():
+    """Copilot BYOK only renders delta.content — flush thinking on done when needed."""
+    lines = [
+        b'{"message":{"role":"assistant","thinking":"Only","content":""},"done":false}',
+        b'{"message":{"role":"assistant","thinking":" thinking","content":""},"done":true}',
+    ]
+    out = ''.join(stream_native_chat_lines_to_openai_sse(iter(lines), model='qwen3-vl:8b'))
+    assert 'Only thinking' in out
     assert 'data: [DONE]' in out

@@ -34,7 +34,7 @@ merges saved settings on **inference** routes:
 
 | Via dashboard | Settings? |
 |---------------|-----------|
-| `POST /ollama/v1/chat/completions` | Yes — OpenAI-compatible clients |
+| `POST /ollama/v1/chat/completions` | Yes — bridged to `/api/chat` (OpenAI-compatible clients) |
 | `POST /ollama/api/chat`, `/ollama/api/generate` | Yes |
 | `GET /ollama/api/tags`, `GET /ollama/v1/models` | No (model listing only) |
 
@@ -166,6 +166,62 @@ http://127.0.0.1:5000/ollama/v1/models
 
 returns JSON (not an HTML 404 page). Use base URL `http://127.0.0.1:5000/ollama` (no `/v1`
 suffix — most clients append `/v1/chat/completions` themselves).
+
+## VS Code Copilot: "Response too long" or bad-parameter errors
+
+Symptoms in VS Code / Copilot Chat:
+
+```text
+Sorry, your request failed. Please try again.
+Reason: Response too long.
+```
+
+or upstream 400s about unsupported parameters (`max_tokens`, `max_completion_tokens`, etc.).
+
+**Cause:** The Copilot extension rejects very large completions client-side, and some OpenAI
+fields it sends are not accepted by Ollama when clients talk to `:11434` directly.
+
+**Fix:**
+
+1. Point Copilot at the **dashboard proxy**, not raw Ollama:
+   `http://127.0.0.1:5000/ollama` (setting:
+   `github.copilot.chat.byok.ollamaEndpoint`).
+2. **Restart the dashboard** after upgrades (`restart_app.bat` on Windows).
+3. Start a **new Copilot chat** and retry.
+
+The proxy (`app/services/client_payload_compat.py`) strips unsupported fields, maps
+`max_completion_tokens`, caps output tokens (default **4096** via `OLLAMA_PROXY_MAX_PREDICT`),
+and bridges v1 chat to native `/api/chat` so saved settings apply.
+
+**Optional tuning:**
+
+```bat
+set OLLAMA_PROXY_MAX_PREDICT=8192
+restart_app.bat
+```
+
+**Debug recent proxy requests:**
+
+```text
+http://127.0.0.1:5000/ollama/copilot-debug
+```
+
+## Dashboard won't start or stop (Windows, port 5000)
+
+| Symptom | What to do |
+|---------|------------|
+| `start.bat` says already running | Expected — use `stop_app.bat` or `restart_app.bat` |
+| `stop_app.bat` refuses to stop | Another app (not this dashboard) owns port 5000 — check Task Manager or `netstat -aon \| findstr :5000` |
+| Wrong mode after restart | Use `restart_app.bat dev` or `restart_app.bat release` to force the mode |
+| Stale dev + release both running | Run `stop_app.bat` once; scripts kill all dashboard processes for this repo |
+
+Check status:
+
+```powershell
+powershell -File scripts\dashboard-process.ps1 -Action status
+```
+
+See [GUIDE.md — Windows: start, stop, and restart](GUIDE.md#windows-start-stop-and-restart).
 
 ## `model_settings.json` corrupted or empty
 

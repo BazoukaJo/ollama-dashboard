@@ -15,6 +15,7 @@ import time
 import uuid
 from typing import Any, Iterator
 
+from app.services.client_payload_compat import normalize_messages_for_ollama, proxy_max_response_chars
 from app.services.model_settings_helpers import merge_options_for_external_proxy
 
 _OPENAI_OPTION_KEYS = frozenset({
@@ -130,7 +131,7 @@ def openai_chat_to_native(
     merged_options = merge_v1_payload_options(payload, dashboard_settings)
     native: dict[str, Any] = {
         'model': payload.get('model'),
-        'messages': payload.get('messages') or [],
+        'messages': normalize_messages_for_ollama(payload.get('messages') or []),
         'stream': bool(payload.get('stream')),
         'options': merged_options,
     }
@@ -194,6 +195,10 @@ def native_chat_response_to_openai(
     content = message.get('content')
     if content is None:
         content = ''
+    if not str(content).strip():
+        reasoning = _assistant_reasoning_piece(message)
+        if reasoning:
+            content = reasoning
     choice: dict[str, Any] = {
         'index': 0,
         'message': {
@@ -246,26 +251,37 @@ def native_generate_response_to_openai(
     }
 
 
-def _openai_chat_delta_from_native_message(msg: dict[str, Any]) -> dict[str, Any]:
+def _openai_chat_delta_from_native_message(
+    msg: dict[str, Any],
+    *,
+    mirror_thinking_to_content: bool = False,
+) -> dict[str, Any]:
     """Build one OpenAI SSE delta from a native ``/api/chat`` message (matches Ollama /v1)."""
     delta: dict[str, Any] = {
         'role': msg.get('role') or 'assistant',
     }
     content = msg.get('content')
+    content_s = str(content) if content is not None else ''
     reasoning = _assistant_reasoning_piece(msg)
     if reasoning:
         delta['reasoning'] = reasoning
         delta['reasoning_content'] = reasoning
-        delta['content'] = content if content else ''
-    elif content:
-        delta['content'] = content
+        if content_s.strip():
+            delta['content'] = content_s
+        elif mirror_thinking_to_content:
+            delta['content'] = reasoning
+        else:
+            delta['content'] = ''
+    elif content is not None:
+        delta['content'] = content_s
     else:
         delta['content'] = ''
     if msg.get('tool_calls'):
         converted = _native_tool_calls_to_openai(msg['tool_calls'])
         if converted:
             delta['tool_calls'] = converted
-            delta['content'] = content if content else ''
+            if not delta.get('content'):
+                delta['content'] = content_s
     return delta
 
 
@@ -299,17 +315,50 @@ def _openai_chat_chunk(
     return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
 
+def _delta_has_substance(delta: dict[str, Any]) -> bool:
+    if delta.get('tool_calls'):
+        return True
+    if delta.get('reasoning') or delta.get('reasoning_content'):
+        return True
+    content = delta.get('content')
+    return isinstance(content, str) and bool(content.strip())
+
+
+def _truncate_delta_for_stream(delta: dict[str, Any], remaining: int) -> dict[str, Any]:
+    """Trim delta text fields so streamed SSE stays under the IDE char budget."""
+    if remaining <= 0:
+        return {'role': delta.get('role') or 'assistant', 'content': ''}
+    out = dict(delta)
+    for key in ('content', 'reasoning', 'reasoning_content'):
+        val = out.get(key)
+        if isinstance(val, str) and len(val) > remaining:
+            out[key] = val[:remaining]
+            remaining = 0
+            break
+        if isinstance(val, str):
+            remaining -= len(val)
+    return out
+
+
 def stream_native_chat_lines_to_openai_sse(
     line_iter: Iterator[bytes],
     *,
     model: str,
     completion_id: str | None = None,
     include_usage: bool = False,
+    max_stream_chars: int | None = None,
 ) -> Iterator[str]:
     """Convert NDJSON ``/api/chat`` stream lines to OpenAI SSE chunks."""
     cid = completion_id or _completion_id()
     seen_tool_calls = False
+    yielded_substance = False
+    yielded_content = False
     last_native: dict[str, Any] | None = None
+    sent_role = False
+    char_budget = max_stream_chars if max_stream_chars is not None else proxy_max_response_chars()
+    streamed_chars = 0
+    acc_content: list[str] = []
+    acc_thinking: list[str] = []
 
     for raw in line_iter:
         if not raw:
@@ -322,13 +371,56 @@ def stream_native_chat_lines_to_openai_sse(
             continue
         last_native = native
         msg = native.get('message') if isinstance(native.get('message'), dict) else {}
+        reasoning = _assistant_reasoning_piece(msg)
+        if reasoning:
+            acc_thinking.append(reasoning)
+        content_piece = msg.get('content')
+        if content_piece is not None and str(content_piece):
+            acc_content.append(str(content_piece))
+            if str(content_piece).strip():
+                yielded_content = True
+
         delta = _openai_chat_delta_from_native_message(msg)
         if delta.get('tool_calls'):
             seen_tool_calls = True
-        # Skip empty heartbeats (no thinking/content/tools in this native line).
-        if delta.get('reasoning') or delta.get('content') or delta.get('tool_calls'):
+        if not sent_role and delta.get('role'):
+            yield _openai_chat_chunk(cid, model, {'role': delta['role']})
+            sent_role = True
+        if _delta_has_substance(delta) and streamed_chars < char_budget:
+            piece_len = sum(
+                len(str(delta.get(k) or ''))
+                for k in ('content', 'reasoning', 'reasoning_content')
+            )
+            if streamed_chars + piece_len > char_budget:
+                delta = _truncate_delta_for_stream(delta, char_budget - streamed_chars)
             yield _openai_chat_chunk(cid, model, delta)
+            yielded_substance = True
+            streamed_chars += sum(
+                len(str(delta.get(k) or ''))
+                for k in ('content', 'reasoning', 'reasoning_content')
+            )
         if native.get('done'):
+            if not yielded_content:
+                final_text = ''.join(acc_content).strip() or ''.join(acc_thinking).strip()
+                if final_text and streamed_chars < char_budget:
+                    final_delta: dict[str, Any] = {
+                        'role': 'assistant',
+                        'content': final_text[: max(0, char_budget - streamed_chars)],
+                    }
+                    thinking_joined = ''.join(acc_thinking).strip()
+                    if thinking_joined:
+                        final_delta['reasoning'] = thinking_joined
+                        final_delta['reasoning_content'] = thinking_joined
+                    yield _openai_chat_chunk(cid, model, final_delta)
+                    yielded_substance = True
+                    yielded_content = True
+            elif not yielded_substance:
+                final_delta = _openai_chat_delta_from_native_message(
+                    msg, mirror_thinking_to_content=True,
+                )
+                if _delta_has_substance(final_delta):
+                    yield _openai_chat_chunk(cid, model, final_delta)
+                    yielded_substance = True
             finish = 'tool_calls' if seen_tool_calls else 'stop'
             usage = None
             if include_usage:
@@ -347,6 +439,16 @@ def stream_native_chat_lines_to_openai_sse(
 
     if last_native is None:
         yield _openai_chat_chunk(cid, model, _openai_chat_finish_delta())
+        yield _openai_chat_chunk(
+            cid, model, _openai_chat_finish_delta(), finish_reason='stop',
+        )
+    elif not yielded_substance:
+        msg = last_native.get('message') if isinstance(last_native.get('message'), dict) else {}
+        final_delta = _openai_chat_delta_from_native_message(
+            msg, mirror_thinking_to_content=True,
+        )
+        if _delta_has_substance(final_delta):
+            yield _openai_chat_chunk(cid, model, final_delta)
         yield _openai_chat_chunk(
             cid, model, _openai_chat_finish_delta(), finish_reason='stop',
         )
