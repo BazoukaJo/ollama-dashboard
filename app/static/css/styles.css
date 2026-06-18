@@ -1616,20 +1616,20 @@ canvas {
   justify-content: flex-start;
 }
 
-/* Title on the left; trail (status/caps) on the right — wraps when needed */
+/* Title on the left; trail (status/caps) on the right — always one row */
 .model-card-head-name-row {
   display: flex;
   flex-direction: row;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-start;
-  row-gap: var(--model-card-head-name-gap-y);
   column-gap: var(--model-card-head-name-gap-x);
   width: 100%;
   min-width: 0;
+  min-height: 1.28rem;
 }
 
-/* Trail: status + caps; stays on same row as title when space permits */
+/* Trail: status + caps; pinned to the right of the header row */
 .model-card-head-trail {
   display: flex;
   flex-direction: row;
@@ -1637,9 +1637,9 @@ canvas {
   align-items: center;
   justify-content: flex-end;
   gap: 0.32rem 0.4rem;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  flex-shrink: 0;
   min-width: 0;
-  max-width: 100%;
   margin-left: auto;
 }
 
@@ -1682,42 +1682,12 @@ canvas {
   flex-shrink: 0;
 }
 
-/* Only stack title above trail on very narrow cards (avoid premature column layout). */
-@container model-card (max-width: 12rem) {
-  .model-card-head-name-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .model-card-head-trail {
-    justify-content: flex-end;
-    width: 100%;
-    max-width: 100%;
-    margin-left: 0;
-  }
-}
-
-.model-card .model-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.35rem 0.55rem;
-  width: 100%;
-  min-width: 0;
-  margin-top: 0;
-  margin-bottom: 0;
-  padding-bottom: 0;
-  min-height: 0;
-  border-bottom: none;
-  line-height: 1.2;
-}
-
 .model-card .model-card-head-name-row > .model-title {
   flex: 1 1 auto;
   width: auto;
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
 }
 
 .model-card .model-specs {
@@ -1822,25 +1792,78 @@ canvas {
 
 .model-title-stack {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.14rem;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
   min-width: 0;
 }
 
-.model-card-head-body .model-title-stack {
-  align-items: flex-start;
-  text-align: start;
+.model-card .model-title {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem 0.55rem;
   width: 100%;
   min-width: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-bottom: 0;
+  min-height: 0;
+  border-bottom: none;
+  line-height: 1.2;
 }
 
 .model-card-head-body .model-title-display {
+  display: block;
   max-width: 100%;
   text-align: start;
+  overflow: hidden;
+}
+
+.model-card-head-body .model-title-display.is-marquee .model-title-stack {
+  will-change: transform;
+  animation: model-title-marquee var(--marquee-duration, 16s) ease-in-out infinite;
+}
+
+.model-card-head-body .model-title-display.is-marquee:hover .model-title-stack {
+  animation-play-state: paused;
+}
+
+@keyframes model-title-marquee {
+  0%,
+  16% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(var(--marquee-shift, 0));
+  }
+  84%,
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-card-head-body .model-title-display.is-marquee .model-title-stack {
+    animation: none;
+    transform: translateX(0);
+  }
+}
+
+.model-card-head-body .model-title-stack {
+  align-items: center;
+  text-align: start;
+  width: max-content;
+  min-width: 0;
+  max-width: none;
 }
 
 .model-title-scope-row {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
   min-width: 0;
 }
 
@@ -1852,25 +1875,21 @@ canvas {
   letter-spacing: 0.02em;
   color: var(--model-title-scope-color, var(--model-title-color, #ffffff));
   opacity: var(--model-title-scope-opacity, 0.66);
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: normal;
+  white-space: nowrap;
+  display: inline;
+  overflow: visible;
 }
 
 .model-title-name-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
   justify-content: flex-start;
   min-width: 0;
-  max-width: 100%;
+  width: max-content;
+  max-width: none;
   gap: 0;
+  line-height: 1.2;
 }
 
 /* Keep stem, colon, and tag together; only the base name may ellipsize so :tag stays adjacent */
@@ -1879,13 +1898,14 @@ canvas {
   flex-wrap: nowrap;
   align-items: center;
   min-width: 0;
-  max-width: 100%;
+  max-width: none;
+  flex-shrink: 0;
 }
 
 .model-card .model-title .model-title-name-core--full {
   min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
+  max-width: none;
+  overflow: visible;
 }
 
 .model-card .model-title .model-title-base {
@@ -1895,10 +1915,10 @@ canvas {
   color: var(--model-title-color, #ffffff);
   line-height: 1.2;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: unset;
   white-space: nowrap;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
 }
 
 .model-card .model-title .model-title-full {
@@ -1908,10 +1928,11 @@ canvas {
   color: var(--model-title-color, #ffffff);
   line-height: 1.2;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: unset;
   white-space: nowrap;
-  max-width: 100%;
+  max-width: none;
+  flex: 0 0 auto;
 }
 
 .model-card .model-title .model-title-name-core--full .model-title-full {
@@ -3632,21 +3653,7 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
     padding-right: 0.12rem !important;
   }
 
-  /* Long registry paths may wrap; name+tag stay in .model-title-name-core (chip never orphaned) */
-  .model-card .model-title-scope-row {
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-
-  .model-card .model-title-scope {
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    overflow: hidden;
-  }
-
+  /* Long names scroll horizontally in the card header (see .model-title-display) */
   .model-card .spec-value.text-nowrap {
     white-space: normal;
     overflow-wrap: anywhere;

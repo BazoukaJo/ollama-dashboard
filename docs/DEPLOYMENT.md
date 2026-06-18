@@ -78,7 +78,7 @@ OLLAMA_HOST=localhost
 OLLAMA_PORT=11434
 
 # Persistence
-HISTORY_FILE=history.json
+HISTORY_FILE=history.json          # model-list snapshots (not chat sessions)
 MODEL_SETTINGS_FILE=model_settings.json
 MAX_HISTORY=50
 
@@ -186,9 +186,10 @@ server {
 
 ### Backup
 ```bash
-# Backup settings and history
+# Backup settings and history (paths relative to repo root / working directory)
 tar czf ollama-dashboard-backup-$(date +%Y%m%d).tar.gz \
   model_settings.json \
+  history.json \
   chat_history.json \
   system_stats_history.json
 ```

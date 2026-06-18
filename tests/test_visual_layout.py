@@ -144,11 +144,13 @@ class TestCSSLayoutRules:
         return css_path.read_text(encoding="utf-8")
 
     def test_dashboard_page_uses_full_width_not_centered_column(self, css_content):
+        """Wide dashboard shell: capped at 5-card width, not Bootstrap's narrow column."""
         assert "--dashboard-content-max" in css_content
-        assert "max-width: var(--dashboard-content-max)" in css_content
+        assert "#dashboard-page.container.dashboard-page-wide" in css_content
+        assert "min(100%, var(--dashboard-content-max))" in css_content
         assert "margin-inline: auto" in css_content
+        assert "container-name: dashboard-page" in css_content
         assert "@container dashboard-page" in css_content
-        assert "justify-content: center" in css_content
 
     def test_spec_row_has_flex_display(self, css_content):
         assert "display: flex" in css_content

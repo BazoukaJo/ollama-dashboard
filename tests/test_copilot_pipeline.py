@@ -72,7 +72,7 @@ def test_pipeline_caps_output_for_external_clients():
         'client': {'context_trim_enabled': False},
     }
     merged, meta = prepare_copilot_payload(payload, entry)
-    assert merged['options']['num_predict'] == 4096
-    assert merged['max_tokens'] == 4096
+    assert merged['options']['num_predict'] == 16384
+    assert merged['max_tokens'] == 16384
     assert 'parallel_tool_calls' not in merged
-    assert meta.get('client_compat', {}).get('num_predict_capped') == 4096
+    assert meta.get('client_compat', {}).get('num_predict_capped') == 16384

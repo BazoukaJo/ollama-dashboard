@@ -17,6 +17,9 @@ class _FakeStream:
     def iter_content(self, chunk_size=1024):
         return iter([b'data: {"choices":[]}\n\n'])
 
+    def iter_lines(self):
+        return iter([b'{"message":{"role":"assistant","content":"ok"},"done":true}'])
+
 
 def main() -> int:
     from app import create_app

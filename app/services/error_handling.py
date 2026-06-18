@@ -39,6 +39,15 @@ class TransientErrorDetector:
     ]
 
     @staticmethod
+    def _normalize_error_text(error_text) -> str:
+        """Coerce arbitrary error values to a lowercase-safe string."""
+        if error_text is None:
+            return ''
+        if not isinstance(error_text, str):
+            error_text = str(error_text)
+        return error_text
+
+    @staticmethod
     def is_transient(error_text: str) -> bool:
         """Determine if error is transient and warrants retry.
 
@@ -48,6 +57,7 @@ class TransientErrorDetector:
         Returns:
             True if error is transient (connection, timeout); False if permanent
         """
+        error_text = TransientErrorDetector._normalize_error_text(error_text)
         if not error_text:
             return False
 
@@ -72,6 +82,7 @@ class TransientErrorDetector:
 
         Returns: 'transient', 'permanent', or 'unknown'
         """
+        error_text = TransientErrorDetector._normalize_error_text(error_text)
         if not error_text:
             return 'unknown'
 

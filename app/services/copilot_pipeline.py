@@ -1,8 +1,11 @@
 """Prepare Copilot/v1 chat payloads: settings, prompts, routing, context trim, RAG."""
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from app.services.client_payload_compat import cap_num_predict, sanitize_v1_chat_payload
 from app.services.context_budget import trim_messages_to_budget
@@ -41,6 +44,7 @@ def prepare_copilot_payload(
             merged['messages'], rag_meta = inject_rag_context(merged.get('messages') or [])
             meta['rag'] = rag_meta
         except Exception as err:  # pylint: disable=broad-exception-caught
+            logger.warning('RAG injection failed; continuing without RAG: %s', err)
             meta['rag'] = {'error': str(err)}
 
     # Normalize multimodal Copilot messages before context trim estimates image-bearing text.
@@ -55,10 +59,11 @@ def prepare_copilot_payload(
         try:
             num_ctx = int(raw_ctx) if raw_ctx is not None else 8192
         except (TypeError, ValueError):
+            logger.debug('Invalid num_ctx %r; using default 8192 for context trim', raw_ctx)
             num_ctx = 8192
+            meta['num_ctx_fallback'] = True
         trimmed_msgs, trim_meta = trim_messages_to_budget(merged.get('messages') or [], num_ctx)
-        if trim_meta.get('trimmed'):
-            merged['messages'] = trimmed_msgs
+        merged['messages'] = trimmed_msgs
         meta['context_trim'] = trim_meta
 
     meta['num_ctx'] = (merged.get('options') or {}).get('num_ctx')

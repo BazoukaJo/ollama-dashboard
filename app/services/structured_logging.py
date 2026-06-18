@@ -48,7 +48,11 @@ class StructuredFormatter(logging.Formatter):
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
 
-        return json.dumps(log_data)
+        try:
+            return json.dumps(log_data, default=str)
+        except (TypeError, ValueError):
+            log_data["context"] = str(getattr(record, 'context', ''))
+            return json.dumps(log_data, default=str)
 
 
 def create_structured_logger(name: str, log_file: Optional[str] = None) -> logging.Logger:
@@ -113,23 +117,9 @@ def log_operation(
     if error:
         context["error"] = error
 
-    # Create log record with context
-    record = logging.LogRecord(
-        name=logger.name,
-        level=logging.INFO if success else logging.WARNING,
-        pathname="",
-        lineno=0,
-        msg=f"{operation} {'completed' if success else 'failed'}",
-        args=(),
-        exc_info=None
-    )
-    record.context = context
-
-    # Log with appropriate level
-    if success:
-        logger.info(record.getMessage())
-    else:
-        logger.warning(record.getMessage())
+    message = f"{operation} {'completed' if success else 'failed'}"
+    level = logging.INFO if success else logging.WARNING
+    logger.log(level, message, extra={'context': context})
 
 
 def log_performance_alert(
@@ -161,18 +151,5 @@ def log_performance_alert(
         f"(threshold: {threshold_seconds:.2f}s)"
     )
 
-    record = logging.LogRecord(
-        name=logger.name,
-        level=logging.ERROR if severity == "critical" else logging.WARNING,
-        pathname="",
-        lineno=0,
-        msg=message,
-        args=(),
-        exc_info=None
-    )
-    record.context = context
-
-    if severity == "critical":
-        logger.error(message)
-    else:
-        logger.warning(message)
+    level = logging.ERROR if severity == "critical" else logging.WARNING
+    logger.log(level, message, extra={'context': context})

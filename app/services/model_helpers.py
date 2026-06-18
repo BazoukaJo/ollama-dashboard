@@ -1,5 +1,6 @@
 """Model formatting helpers extracted from OllamaService."""
 from app.services.capabilities import ensure_capability_flags
+from app.services.model_settings_helpers import get_existing_model_settings_entry
 from app.services.service_errors import SERVICE_ERRORS
 
 
@@ -108,14 +109,14 @@ def context_length_as_int(entry):
 
 
 def request_context_length_from_settings(service, model_name):
-    """Dashboard num_ctx (formatted) used when attaching options to generate/chat requests."""
+    """Dashboard num_ctx (formatted) from stored settings only (no live fallback)."""
     if not model_name or service is None:
         return None
     try:
-        data = service.get_model_settings_with_fallback(str(model_name))
-        if not isinstance(data, dict):
+        entry = get_existing_model_settings_entry(service, str(model_name))
+        if not isinstance(entry, dict):
             return None
-        settings = data.get("settings") or {}
+        settings = entry.get("settings") or {}
         nctx = settings.get("num_ctx")
         if nctx is None:
             return None
@@ -204,17 +205,24 @@ def _running_process_model_id(model):
 
 def format_running_model_entry(service, model, include_has_custom_settings=False, prefer_heuristics_on_conflict=False):
     try:
-        if isinstance(model, dict) and 'size' in model and 'formatted_size' not in model:
-            size_val = model.get('size')
-            if isinstance(size_val, (int, float)):
-                model['formatted_size'] = service.format_size(size_val)
+        formatted_size = None
+        if isinstance(model, dict):
+            if model.get('formatted_size') is not None:
+                formatted_size = model.get('formatted_size')
+            elif 'size' in model:
+                size_val = model.get('size')
+                if isinstance(size_val, (int, float)):
+                    try:
+                        formatted_size = service.format_size(size_val)
+                    except SERVICE_ERRORS:
+                        formatted_size = None
         entry = {
             'name': _running_process_model_id(model),
             'size': model.get('size') if isinstance(model, dict) else None,
             'details': model.get('details') if (isinstance(model, dict) and model.get('details') is not None) else {},
             'modified_at': model.get('modified_at') if isinstance(model, dict) else None,
             'expires_at': model.get('expires_at') if isinstance(model, dict) else None,
-            'formatted_size': model.get('formatted_size') if isinstance(model, dict) else None,
+            'formatted_size': formatted_size,
             'running': model.get('running', False) if isinstance(model, dict) else False,
             'last_request': model.get('last_request') if isinstance(model, dict) else None,
             'age': model.get('age') if isinstance(model, dict) else None,

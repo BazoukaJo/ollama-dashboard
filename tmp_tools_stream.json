@@ -1,1 +1,0 @@
-{"model":"qwen3:14b","messages":[{"role":"user","content":"What is 2+2? Reply with the number only."}],"stream":true,"tools":[{"type":"function","function":{"name":"test_tool","description":"test","parameters":{"type":"object","properties":{}}}]}

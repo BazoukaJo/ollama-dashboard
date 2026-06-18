@@ -15,8 +15,8 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-# VS Code Copilot rejects very large completions client-side; stay under a safe ceiling.
-_DEFAULT_MAX_PREDICT = 4096
+# VS Code Copilot rejects very large completions client-side; align with dashboard defaults.
+_DEFAULT_MAX_PREDICT = 8192
 _MAX_PREDICT_CEILING = 16384
 _MIN_PREDICT = 64
 
@@ -102,19 +102,25 @@ def cap_num_predict(
     dashboard_settings: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Apply a safe num_predict / max_tokens ceiling for external clients."""
-    ceiling = proxy_max_predict()
+    hard_ceiling = proxy_max_predict()
     requested = _resolve_requested_max_tokens(payload)
     saved = None
     if isinstance(dashboard_settings, dict):
         saved = _coerce_positive_int(dashboard_settings.get('num_predict'))
 
     if requested is not None:
-        effective = min(requested, ceiling)
+        basis = requested
     elif saved is not None:
-        effective = min(saved, ceiling)
+        basis = saved
     else:
-        effective = ceiling
+        basis = hard_ceiling
 
+    # Respect dashboard-saved limits above the env default, still bounded for IDE safety.
+    upper = min(
+        _MAX_PREDICT_CEILING,
+        max(hard_ceiling, saved or 0, requested or 0),
+    )
+    effective = min(basis, upper)
     effective = max(effective, _MIN_PREDICT)
     out = dict(payload)
     opts = dict(out.get('options') or {})
@@ -124,7 +130,7 @@ def cap_num_predict(
     meta = {
         'num_predict_capped': effective,
         'num_predict_requested': requested,
-        'num_predict_ceiling': ceiling,
+        'num_predict_ceiling': upper,
     }
     return out, meta
 
@@ -438,8 +444,8 @@ def cap_openai_chat_response(body: dict[str, Any]) -> tuple[dict[str, Any], dict
         if isinstance(tool_calls, list):
             try:
                 remaining = max(0, remaining - len(json.dumps(tool_calls, ensure_ascii=False)))
-            except (TypeError, ValueError):
-                pass
+            except (TypeError, ValueError) as err:
+                logger.debug('Could not estimate tool_calls size for response cap: %s', err)
         for key in ('reasoning', 'reasoning_content', 'content'):
             val = m.get(key)
             if not isinstance(val, str) or not val:

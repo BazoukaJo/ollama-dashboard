@@ -430,7 +430,11 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
         return _openai_error_response(response_data, model_name)
     try:
         native_body = response_data.json()
-    except ValueError:
+    except ValueError as err:
+        logger.warning(
+            'Upstream /api/chat returned non-JSON body (status=%s, model=%s): %s',
+            response_data.status_code, model_name, err,
+        )
         return _proxy_upstream_response(response_data)
     openai_body = native_chat_response_to_openai(native_body)
     openai_body, _trunc_meta = cap_openai_chat_response(openai_body)
@@ -485,7 +489,11 @@ def _forward_v1_via_native_api(native_payload, native_endpoint, _openai_payload)
         return _openai_error_response(response_data, model_name)
     try:
         native_body = response_data.json()
-    except ValueError:
+    except ValueError as err:
+        logger.warning(
+            'Upstream %s returned non-JSON body (status=%s, model=%s): %s',
+            native_endpoint, response_data.status_code, model_name, err,
+        )
         return _proxy_upstream_response(response_data)
     openai_body = native_generate_response_to_openai(native_body)
     response = Response(

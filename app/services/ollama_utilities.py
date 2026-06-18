@@ -26,6 +26,7 @@ from app.services.model_settings_helpers import (
     get_default_settings_template,
     get_model_settings_with_fallback_entry,
     load_model_settings,
+    lookup_settings_entry,
     model_settings_file_path,
     normalize_model_settings_key,
     normalize_setting_value,
@@ -475,7 +476,7 @@ class OllamaServiceUtilities:
             from app.services.copilot_extras import normalize_client_extras
             entry['client'] = normalize_client_extras(copilot)
         else:
-            existing = getattr(self, '_model_settings', {}).get(normalize_model_settings_key(model_name))
+            existing = lookup_settings_entry(getattr(self, '_model_settings', {}), model_name)
             if isinstance(existing, dict):
                 if existing.get('client'):
                     entry['client'] = existing['client']
@@ -503,7 +504,7 @@ class OllamaServiceUtilities:
         if not canon_key:
             return False
         self._model_settings = getattr(self, '_model_settings', {})
-        entry = self._model_settings.get(canon_key)
+        entry = lookup_settings_entry(self._model_settings, model_name)
         if not isinstance(entry, dict):
             entry = {
                 'settings': get_default_settings_template(),

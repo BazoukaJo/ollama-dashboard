@@ -29,9 +29,16 @@ def test_sanitize_strips_unsupported_openai_fields():
 def test_cap_num_predict_limits_client_and_dashboard():
     payload = {'max_tokens': 32000, 'options': {}}
     capped, meta = cap_num_predict(payload, {'num_predict': 8192})
-    assert capped['max_tokens'] == 4096
-    assert capped['options']['num_predict'] == 4096
-    assert meta['num_predict_ceiling'] == 4096
+    assert capped['max_tokens'] == 16384
+    assert capped['options']['num_predict'] == 16384
+    assert meta['num_predict_ceiling'] == 16384
+
+
+def test_cap_num_predict_uses_saved_without_client_request():
+    payload = {'options': {}}
+    capped, meta = cap_num_predict(payload, {'num_predict': 8192})
+    assert capped['options']['num_predict'] == 8192
+    assert meta['num_predict_ceiling'] == 8192
 
 
 def test_cap_num_predict_respects_lower_saved_value():
@@ -48,9 +55,9 @@ def test_prepare_external_v1_payload_sanitizes_and_caps():
         'metadata': {'trace': '1'},
     }
     out, meta = prepare_external_v1_payload(payload, None)
-    assert out['max_tokens'] == 4096
+    assert out['max_tokens'] == 16384
     assert 'metadata' not in out
-    assert meta['num_predict_capped'] == 4096
+    assert meta['num_predict_capped'] == 16384
 
 
 def test_sanitize_converts_multimodal_content_to_ollama_format():

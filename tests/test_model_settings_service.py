@@ -60,6 +60,33 @@ def test_has_custom_settings_finds_legacy_whitespace_key(tmp_path):
     assert svc.has_custom_model_settings("llama3:latest")
 
 
+def test_save_model_settings_preserves_client_from_legacy_whitespace_key(tmp_path):
+    """Updating settings must not drop client extras stored under a legacy key."""
+    app = create_app()
+    svc = OllamaService()
+    svc.init_app(app)
+    model_file = tmp_path / "model_settings.json"
+    app.config["MODEL_SETTINGS_FILE"] = str(model_file)
+    data = {
+        "llama3:latest ": {
+            "settings": {"temperature": 0.5},
+            "source": "user",
+            "client": {"context_trim_enabled": False},
+            "last_updated": "2020-01-01T00:00:00+00:00",
+        }
+    }
+    model_file.write_text(json.dumps(data), encoding="utf-8")
+    svc.refresh_model_settings_cache_from_disk()
+
+    assert svc.save_model_settings("llama3:latest", {"temperature": 0.6}, source="user")
+
+    loaded = svc.load_model_settings()
+    entry = loaded.get("llama3:latest")
+    assert isinstance(entry, dict)
+    assert entry["settings"]["temperature"] == 0.6
+    assert entry.get("client", {}).get("context_trim_enabled") is False
+
+
 def test_save_model_settings_uses_stripped_key(tmp_path):
     app = create_app()
     svc = OllamaService()

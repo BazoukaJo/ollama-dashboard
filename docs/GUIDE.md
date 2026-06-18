@@ -211,9 +211,9 @@ OLLAMA_HOST=localhost              # Ollama hostname
 OLLAMA_PORT=11434                  # Ollama port
 AUTO_START_OLLAMA=true             # Start Ollama automatically if not already running
 
-HISTORY_FILE=history.json          # Chat history file
+HISTORY_FILE=history.json          # Model-list snapshot history (not chat sessions)
 MODEL_SETTINGS_FILE=model_settings.json
-MAX_HISTORY=50                     # Max history entries
+MAX_HISTORY=50                     # Max model-list history entries
 
 LOG_LEVEL=INFO                     # Logging level
 ```
@@ -236,6 +236,15 @@ starts/stops the **dashboard** accordingly — see [Deployment Guide](DEPLOYMENT
 manager.
 
 Create a `.env` file with your settings; defaults work out-of-the-box for local use.
+
+**Persistence files** (written next to `HISTORY_FILE` unless paths are absolute):
+
+| File | Purpose |
+|------|---------|
+| `history.json` | Rolling model-list snapshots (`MAX_HISTORY`, default 50) |
+| `chat_history.json` | Ask? chat sessions (max 100) |
+| `model_settings.json` | Per-model saved settings |
+| `system_stats_history.json` | Sparkline data for system metrics |
 
 ---
 
@@ -374,6 +383,8 @@ waitress==3.0.2        # Production WSGI server (Windows)
 requests==2.31.0       # HTTP client
 psutil==5.9.6          # System stats
 pytz==2023.3           # Timezone support
+pypdf>=4.0.0           # PDF text extraction (Ask? attachments)
+python-docx>=1.1.0     # DOCX text extraction (Ask? attachments)
 ```
 
 Optional (for GPU monitoring):
