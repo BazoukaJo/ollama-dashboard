@@ -189,8 +189,9 @@ def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflic
         model.setdefault('has_vision', False)
         model.setdefault('has_tools', False)
         model.setdefault('has_reasoning', False)
-    attach_request_context_to_model(service, model)
-    attach_last_token_usage_to_model(service, model)
+    # Request context and token usage are attached after the list is built (see routes/main.py)
+    # to avoid recursion: attach_request_context -> get_model_settings_with_fallback ->
+    # get_model_info_cached -> get_available_models -> normalize_available_model_entry.
     return model
 
 def _running_process_model_id(model):
