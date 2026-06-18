@@ -3,11 +3,10 @@
  */
 
 /*
- * Compact UI density (~80% browser zoom): scales page content together.
- * Modals/backdrop counter-zoom so they stay viewport-sized and centered.
+ * UI density: 1 = native 100% (no page zoom). Modals use matching counter-zoom when density ≠ 1.
  */
 :root {
-  --ui-density: 0.8;
+  --ui-density: 1;
 }
 
 html {
@@ -23,9 +22,9 @@ html.light {
   color-scheme: light;
 }
 
-@supports not (zoom: 0.8) {
+@supports not (zoom: 1) {
   html {
-    font-size: 80%;
+    font-size: 100%;
   }
 }
 
@@ -34,11 +33,11 @@ html.light {
   zoom: calc(1 / var(--ui-density));
 }
 
-@supports not (zoom: 0.8) {
+@supports not (zoom: 1) {
   .modal,
   .modal-backdrop {
     zoom: 1;
-    font-size: 125%;
+    font-size: 100%;
   }
 }
 
