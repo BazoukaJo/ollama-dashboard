@@ -1430,7 +1430,31 @@ def save_chat_history():
         data = request.get_json()
         if data is None and request.get_data():
             return {"error": "Invalid JSON"}, 400
-        _get_ollama_service().save_chat_session(data or {})
+        session_id = _get_ollama_service().save_chat_session(data or {})
+        return {"success": True, "id": session_id}
+    except ValueError as e:
+        return {"error": str(e)}, 400
+    except _ROUTE_ERRORS as e:
+        return {"error": str(e)}, 500
+
+
+@bp.route('/api/chat/history/<session_id>', methods=['DELETE'])
+def delete_chat_history_entry(session_id):
+    """Delete one saved chat session."""
+    try:
+        removed = _get_ollama_service().delete_chat_session(session_id)
+        if not removed:
+            return {"error": "Session not found"}, 404
+        return {"success": True}
+    except _ROUTE_ERRORS as e:
+        return {"error": str(e)}, 500
+
+
+@bp.route('/api/chat/history', methods=['DELETE'])
+def clear_chat_history():
+    """Clear all saved chat sessions."""
+    try:
+        _get_ollama_service().clear_chat_history()
         return {"success": True}
     except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500

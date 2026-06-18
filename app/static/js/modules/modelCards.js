@@ -92,7 +92,7 @@ if (!window.getCapabilitiesHTML) {
     const status = hasCustomSettings
       ? `<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--saved" data-dashboard-tooltip="Custom per-model options saved for this dashboard (temperature, context, etc.)." aria-label="Saved custom defaults"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Saved</span></span>`
       : `<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--default" data-dashboard-tooltip="Using recommended or built-in defaults — nothing custom saved yet for this model." aria-label="Using default settings"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Default</span></span>`;
-    return `<span class="model-action-settings-inner"><i class="fas fa-cog" aria-hidden="true"></i><span class="model-action-btn-label">Settings</span>${status}</span>`;
+    return `<span class="model-action-settings-inner"><span class="model-action-settings-label-row"><i class="fas fa-cog" aria-hidden="true"></i><span class="model-action-btn-label">Settings</span></span>${status}</span>`;
   }
 
   function buildDownloadableModelCardHTML(model) {
@@ -107,7 +107,7 @@ if (!window.getCapabilitiesHTML) {
       "Unknown";
     return `
         <div class="col">
-          <div class="model-card h-100" data-model-name="${escapeHtml(model.name)}">
+          <div class="model-card h-100 model-card--downloadable" data-model-name="${escapeHtml(model.name)}">
                 <div class="model-header model-card-head">
                     <div class="model-icon-wrapper">
                         <i class="fas fa-cloud model-icon-main"></i>

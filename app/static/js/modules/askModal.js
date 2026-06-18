@@ -340,6 +340,58 @@
     }
     if (codeBtn) codeBtn.addEventListener("click", addCodeSnippet);
     if (codeConfirm) codeConfirm.addEventListener("click", confirmCodeSnippet);
+    var copyBtn = document.getElementById("askModelCopyBtn");
+    if (copyBtn) copyBtn.addEventListener("click", copyAskModelResponse);
+  }
+
+  function getAttachmentMetadata() {
+    return _askAttachments.map(function (att) {
+      return { type: att.type, name: att.name || att.type };
+    });
+  }
+
+  function getAskExchangeState() {
+    var question = (document.getElementById("askModelInput")?.value || "").trim();
+    var response = (document.getElementById("askModelResponse")?.textContent || "").trim();
+    return {
+      model: _askModelName,
+      prompt: question,
+      response: response,
+      attachments: getAttachmentMetadata(),
+    };
+  }
+
+  function setAskResponseActionsEnabled(enabled) {
+    var copyBtn = document.getElementById("askModelCopyBtn");
+    var saveBtn = document.getElementById("askModelSaveBtn");
+    if (copyBtn) copyBtn.disabled = !enabled;
+    if (saveBtn) saveBtn.disabled = !enabled;
+  }
+
+  function setAskCopyEnabled(enabled) {
+    setAskResponseActionsEnabled(enabled);
+  }
+
+  function activateAskTab() {
+    var askTabBtn = document.getElementById("askTabBtn");
+    if (askTabBtn && typeof bootstrap !== "undefined") {
+      bootstrap.Tab.getOrCreateInstance(askTabBtn).show();
+    }
+  }
+
+  async function copyAskModelResponse() {
+    var responseEl = document.getElementById("askModelResponse");
+    var text = (responseEl && responseEl.textContent ? responseEl.textContent : "").trim();
+    if (!text) {
+      if (window.showNotification) showNotification("Nothing to copy yet", "warning");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      if (window.showNotification) showNotification("Response copied to clipboard", "success");
+    } catch (err) {
+      if (window.showNotification) showNotification("Could not copy to clipboard", "error");
+    }
   }
 
   function ensureAskControlsBound() {
@@ -364,6 +416,7 @@
       return;
     }
     ensureAskControlsBound();
+    activateAskTab();
     _askModelName = modelName;
     _askAbortController = null;
     resetAskAttachments();
@@ -393,6 +446,7 @@
 
     var responseEl = document.getElementById("askModelResponse");
     if (responseEl) responseEl.textContent = "";
+    setAskCopyEnabled(false);
 
     var spinner = document.getElementById("askModelSpinner");
     if (spinner) spinner.style.display = "none";
@@ -436,6 +490,7 @@
     if (sendBtn) sendBtn.disabled = true;
     if (responseWrap) responseWrap.style.display = "";
     if (responseEl) responseEl.textContent = "";
+    setAskCopyEnabled(false);
     if (spinner) spinner.style.display = "";
 
     if (_askAbortController) _askAbortController.abort();
@@ -505,6 +560,7 @@
               if (responseEl) {
                 responseEl.textContent += parsed.response;
                 responseEl.scrollTop = responseEl.scrollHeight;
+                setAskCopyEnabled(true);
               }
             }
           } catch (_) {}
@@ -516,12 +572,14 @@
           if (last.response != null && responseEl) {
             responseEl.textContent += last.response;
             responseEl.scrollTop = responseEl.scrollHeight;
+            setAskCopyEnabled(true);
           }
         } catch (_) {}
       }
     } catch (err) {
       if (err.name !== "AbortError" && responseEl) {
         responseEl.textContent = "Error: " + err.message;
+        setAskCopyEnabled(true);
       }
     } finally {
       if (spinner) spinner.style.display = "none";
@@ -532,4 +590,5 @@
 
   window.openAskModal = openAskModal;
   window.sendAskModelQuestion = sendAskModelQuestion;
+  window.askModalGetState = getAskExchangeState;
 })();

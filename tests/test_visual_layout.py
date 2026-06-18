@@ -234,3 +234,4 @@ class TestSectionSpacing:
         assert spec_row_count == 3, (
             f"Running card must have 3 spec rows, found {spec_row_count}"
         )
+        assert "model-card--running" in snippet

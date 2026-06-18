@@ -17,24 +17,48 @@
   --space-section: var(--space-sm);
   --space-major: var(--space-md);
   --model-card-track: 21.19rem;
+  /* Model card internal spacing — shared across running / available / downloadable */
+  --model-card-pad-y: 0.58rem;
+  --model-card-pad-x: 0.68rem;
+  --model-card-section-gap: 0.5rem;
+  --model-card-head-pad-bottom: 0.3rem;
+  --model-card-head-name-gap-y: 0.22rem;
+  --model-card-head-name-gap-x: 0.4rem;
+  --model-card-specs-gap: 0.32rem;
+  --model-card-spec-item-pad-y: 0.24rem;
+  --model-card-spec-item-pad-x: 0.36rem;
+  --model-card-spec-item-min-h: 2.4rem;
+  --model-card-spec-item-min-h-tall: 3.05rem;
+  --model-card-actions-gap-y: 0.32rem;
+  --model-card-actions-gap-x: 0.3rem;
+  --model-card-settings-btn-pad-y: 0.26rem;
+  --model-pill-height: 14px;
   --model-card-gap-x: var(--space-md);
   --model-card-gap-y: var(--space-md);
-  --model-card-grid-max: calc(5 * var(--model-card-track) + 4 * var(--model-card-gap-x));
-  --dashboard-content-max: calc(
-    var(--model-card-grid-max) + 2 * var(--section-shell-pad-x) + 2 * var(--dashboard-page-pad-x)
+  --model-card-cols-max: 5;
+  --model-card-grid-max: calc(
+    var(--model-card-cols-max) * var(--model-card-track)
+      + (var(--model-card-cols-max) - 1) * var(--model-card-gap-x)
   );
   --dashboard-page-pad-x: var(--space-md);
   --dashboard-page-pad-bottom: var(--space-sm);
-  --dashboard-section-border-x: 3px;
-  --dashboard-panel-gutter: 0;
   --dashboard-panel-pad-x: var(--space-sm);
-  --dashboard-section-gap: var(--space-lg);
-  --dashboard-block-gap: var(--space-xs);
   --section-shell-pad-x: var(--dashboard-panel-pad-x);
   --section-shell-header-pad-y: var(--space-sm);
   --section-shell-body-pad-y: var(--space-sm);
+  /* Shell + page caps: card row + body padding + borders + slack (5 cols must not wrap to 4). */
+  --models-section-shell-max: calc(
+    var(--model-card-grid-max) + 2 * var(--section-shell-pad-x) + 4px + 0.5rem
+  );
+  --dashboard-content-max: calc(
+    var(--models-section-shell-max) + 2 * var(--dashboard-page-pad-x) + 0.5rem
+  );
   --compact-panel-pad-x: var(--dashboard-panel-pad-x);
   --compact-panel-pad-y: var(--space-xxs);
+  --dashboard-section-border-x: 3px;
+  --dashboard-panel-gutter: 0;
+  --dashboard-section-gap: var(--space-lg);
+  --dashboard-block-gap: var(--space-xs);
 }
 
 .dashboard-section-stack { margin-top: var(--dashboard-section-gap) !important; }
@@ -264,7 +288,7 @@ body {
   line-height: 1.4;
 }
 
-/* ===== Dashboard header: flex + container queries — no horizontal scroll; meta drops below when it would crowd primary row ===== */
+/* ===== Dashboard header: flex + container queries — single top row down to Chrome min width ===== */
 /* Sticky backdrop + border: see theme.css .dashboard-header-banner */
 .dashboard-header-banner {
   min-width: 0;
@@ -314,7 +338,7 @@ html.light .dashboard-header-ollama-cta {
   max-width: 100%;
 }
 
-/* Full width up to 5 card columns; then center and stop growing */
+/* Full width up to 5 card columns; beats Bootstrap .container breakpoint caps */
 #dashboard-page.container.dashboard-page-wide {
   --model-card-max-track: var(--model-card-track);
   --model-card-gap: var(--model-card-gap-x);
@@ -322,12 +346,18 @@ html.light .dashboard-header-ollama-cta {
   container-type: inline-size;
   container-name: dashboard-page;
   width: 100%;
-  max-width: var(--dashboard-content-max) !important;
+  max-width: min(100%, var(--dashboard-content-max)) !important;
   margin-inline: auto !important;
   padding-inline: var(--dashboard-page-pad-x);
   padding-top: 0;
   padding-bottom: var(--dashboard-page-pad-bottom);
   box-sizing: border-box;
+}
+
+@media (min-width: 576px), (min-width: 768px), (min-width: 992px), (min-width: 1200px), (min-width: 1400px) {
+  #dashboard-page.container.dashboard-page-wide {
+    max-width: min(100%, var(--dashboard-content-max)) !important;
+  }
 }
 
 .dashboard-header-bar {
@@ -692,91 +722,37 @@ html.light .dashboard-header-ollama-cta {
   }
 }
 
-/* Stack status below controls only on narrow banners */
-@container dash-hdr (max-width: 47.99rem) {
-  .dashboard-header-bar {
-    --header-ollama-control-height: 1.9rem;
-    --health-service-hit: var(--header-ollama-control-height);
-    --hdr-meta-fs: 0.6875rem;
-    --hdr-meta-lh: 1.1rem;
-    --header-panel-pad-y: 0.14rem;
-    --header-panel-pad-x: 0.38rem;
-    --hdr-panel-row-gap: 0.14rem;
-    gap: var(--space-xxs) var(--space-xs);
-  }
-
-  .dashboard-header-start {
-    flex: 1 1 100%;
-  }
-
-  .dashboard-header-banner .dashboard-header-health.health-status-badge {
-    min-width: 0;
-    max-width: min(100%, 11rem);
-    padding: 0.14rem 0.4rem;
-    font-size: 0.72rem;
-  }
-
-  .dashboard-header-banner .service-controls .btn-sm {
-    font-size: 0.68rem;
-  }
-
-  .dashboard-header-meta-group {
-    --hdr-meta-panel-min: calc(var(--hdr-meta-panel-min-visual) / var(--ui-density, 1));
-    --hdr-meta-panel-max: calc(32rem / var(--ui-density, 1));
-    flex: 1 1 100%;
-    grid-template-columns: max-content;
-    justify-content: center;
-    margin-inline: auto;
-    width: 100%;
-    max-width: calc(100% - var(--header-theme-hit) - var(--header-theme-gap));
-    box-sizing: border-box;
-  }
-
-  .dashboard-header-meta-group > .dashboard-header-info-panel {
-    min-width: var(--hdr-meta-panel-min);
-    width: max-content;
-    max-width: var(--hdr-meta-panel-max);
-    overflow: visible;
-  }
-
-  .dashboard-header-meta-group .dashboard-header-panel-full {
-    min-width: min-content;
-    width: max-content;
-    max-width: var(--hdr-meta-panel-max);
-  }
-
-  .dashboard-header-meta-group .dashboard-header-info-row {
-    min-width: min-content;
-    max-width: var(--hdr-meta-panel-max);
-  }
-
-  .dashboard-header-meta-chip {
-    padding: 0.06rem 0.3rem;
-  }
-
-  .api-proxy-status-badge {
-    max-width: 9rem;
-    font-size: 0.58rem;
-    padding: 0.08rem 0.26rem;
-  }
+/* Chrome minimum window width (~500px) — floor; no layouts below this. */
+#dashboard-body {
+  min-width: 500px;
 }
 
-/* Too narrow for two full panels at min-width — compact URL strips only */
-@container dash-hdr (max-width: 42rem) {
+/* Narrow banner (~768px down to Chrome min): one top row — controls + app URLs stay together */
+@container dash-hdr (max-width: 47.99rem) {
   .dashboard-header-bar {
     --header-ollama-control-height: 1.625rem;
     --health-service-hit: var(--header-ollama-control-height);
     --hdr-meta-fs: 0.65rem;
     --hdr-meta-lh: 1.05rem;
-    --header-panel-pad-y: 0.12rem;
-    --header-panel-pad-x: 0.32rem;
+    --header-panel-pad-y: 0.1rem;
+    --header-panel-pad-x: 0.28rem;
+    --hdr-panel-row-gap: 0.1rem;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.2rem 0.28rem;
+  }
+
+  .dashboard-header-start {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    min-width: 0;
+    max-width: none;
   }
 
   .dashboard-header-service-cluster,
   .dashboard-header-start-lock {
     flex-wrap: nowrap;
-    gap: 0.16rem 0.22rem;
-    max-width: 100%;
+    gap: 0.14rem 0.18rem;
   }
 
   .dashboard-header-ollama-toolbar {
@@ -785,33 +761,51 @@ html.light .dashboard-header-ollama-cta {
   }
 
   .dashboard-header-banner .dashboard-meta-logo {
-    width: 1.3rem;
-    height: 1.3rem;
-    padding: 0.1rem;
+    width: 1.28rem;
+    height: 1.28rem;
+    padding: 0.08rem;
   }
 
   .dashboard-header-banner .dashboard-header-health.health-status-badge {
     flex: 0 1 auto;
     min-width: 0;
-    max-width: 6.75rem;
-    font-size: 0.65rem;
-    padding: 0.1rem 0.28rem;
+    max-width: 5.5rem;
+    padding: 0.08rem 0.26rem;
+    font-size: 0.62rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .dashboard-header-banner .service-controls .btn-sm {
-    font-size: 0.62rem;
+    font-size: 0.6rem;
   }
 
   .dashboard-header-meta-group {
-    --hdr-meta-panel-min: calc(8.75rem / var(--ui-density, 1));
-    --hdr-meta-panel-max: min(calc(16rem / var(--ui-density, 1)), calc(50vw - 2rem));
-    grid-template-columns: max-content;
-    justify-content: center;
-    align-items: stretch;
-    gap: var(--space-xxs);
-    margin-inline: auto;
+    --hdr-meta-panel-min: 0px;
+    --hdr-meta-panel-max: min(11.5rem, calc(100vw - 22rem));
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    max-width: none;
+    margin-inline: 0 0;
+    margin-left: auto;
+    justify-content: flex-end;
+    justify-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-header-meta-group > .dashboard-header-info-panel {
+    min-width: 0;
     width: 100%;
-    max-width: calc(100% - var(--header-theme-hit) - var(--header-theme-gap));
+    max-width: var(--hdr-meta-panel-max);
+    min-height: 0;
+    height: auto;
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    overflow: hidden;
   }
 
   .dashboard-header-meta-group .dashboard-header-panel-full {
@@ -820,10 +814,14 @@ html.light .dashboard-header-ollama-cta {
 
   .dashboard-header-meta-group .dashboard-header-panel-compact {
     display: flex !important;
-    width: max-content;
-    min-width: var(--hdr-meta-panel-min);
-    max-width: var(--hdr-meta-panel-max);
-    min-height: var(--hdr-panel-row-h);
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0.12rem;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 0;
     padding: var(--header-panel-pad-y) var(--header-panel-pad-x);
     border-radius: var(--border-radius);
     background: var(--header-meta-panel-bg);
@@ -833,25 +831,21 @@ html.light .dashboard-header-ollama-cta {
     overflow: hidden;
   }
 
-  .dashboard-header-meta-group > .dashboard-header-info-panel {
-    min-width: var(--hdr-meta-panel-min);
-    width: max-content;
-    max-width: var(--hdr-meta-panel-max);
-    min-height: 0;
-    height: auto;
-    padding: 0;
-    border: none;
-    background: transparent;
-    box-shadow: none;
-    overflow: visible;
-  }
-
   .dashboard-header-meta-group .dashboard-header-meta-chip--endpoint {
     width: 100%;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
     justify-content: flex-start;
+    padding: 0.05rem 0.24rem;
+    font-size: 0.62rem;
+  }
+
+  .api-proxy-status-badge {
+    max-width: 9rem;
+    font-size: 0.58rem;
+    padding: 0.08rem 0.26rem;
   }
 }
 
@@ -984,27 +978,27 @@ html.light .dashboard-header-meta-chip--warn {
   font-variant-numeric: tabular-nums;
 }
 
-/* Phones: slightly larger meta copy; tighter vertical rhythm */
+/* Phones at Chrome min width: tighten service cluster; header stays one row (see dash-hdr query) */
 @media (max-width: 575.98px) {
   .dashboard-header-bar {
-    gap: 0.32rem 0.45rem;
-    --header-theme-hit: 2.1rem;
+    gap: 0.2rem 0.28rem;
+    --header-theme-hit: 2rem;
     --header-ollama-control-height: 1.625rem;
     --health-service-hit: var(--header-ollama-control-height);
   }
 
   .dashboard-header-start {
-    gap: 0.22rem 0.3rem;
+    gap: 0.16rem 0.2rem;
     flex-wrap: nowrap;
   }
 
   .dashboard-header-service-cluster {
     flex-wrap: nowrap;
-    gap: 0.16rem 0.22rem;
+    gap: 0.12rem 0.18rem;
   }
 
   .dashboard-header-start-lock {
-    gap: 0.22rem 0.3rem;
+    gap: 0.16rem 0.2rem;
   }
 
   .dashboard-header-banner .refresh-indicator {
@@ -1015,25 +1009,9 @@ html.light .dashboard-header-meta-chip--warn {
     gap: 0.28rem;
   }
 
-  .dashboard-header-banner .dashboard-meta-logo {
-    width: 1.4rem;
-    height: 1.4rem;
-    padding: 0.16rem;
-  }
-
   .dashboard-header-banner .theme-toggle-btn {
-    width: 2.05rem;
-    height: 2.05rem;
-  }
-
-  .dashboard-header-banner .dashboard-header-health.health-status-badge {
-    min-width: 0;
-    max-width: 6.75rem;
-    white-space: nowrap;
-    height: var(--header-ollama-control-height, 1.625rem);
-    min-height: var(--header-ollama-control-height, 1.625rem);
-    max-height: var(--header-ollama-control-height, 1.625rem);
-    font-size: 0.65rem;
+    width: 2rem;
+    height: 2rem;
   }
 }
 
@@ -1385,7 +1363,7 @@ canvas {
   backdrop-filter: blur(5px);
   transition: all 0.3s ease;
   width: 100%;
-  max-width: calc(var(--model-card-grid-max) + 2 * var(--section-shell-pad-x));
+  max-width: var(--models-section-shell-max);
   margin-inline: auto;
   box-sizing: border-box;
 }
@@ -1504,21 +1482,26 @@ canvas {
 }
 
 /*
- * Card grid: fixed-width cards, always centered (max 5 per row).
+ * Card row: flex wrap, fixed card width — only column count changes (max 5).
  */
 .model-cards-row.row {
   --model-card-gap: var(--model-card-gap-x);
   --model-card-track: var(--model-card-max-track, var(--model-card-track));
-  --model-card-grid-max: calc(5 * var(--model-card-track) + 4 * var(--model-card-gap));
+  --model-card-grid-max: calc(
+    var(--model-card-cols-max) * var(--model-card-track)
+      + (var(--model-card-cols-max) - 1) * var(--model-card-gap)
+  );
   display: flex !important;
   flex-wrap: wrap;
   justify-content: center;
-  align-items: stretch;
+  align-items: flex-start;
   align-content: flex-start;
   gap: var(--model-card-gap-y) var(--model-card-gap);
   width: 100%;
-  max-width: var(--model-card-grid-max);
+  max-width: 100%;
   margin-inline: auto !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
   box-sizing: border-box;
 }
 
@@ -1528,17 +1511,13 @@ canvas {
 }
 
 .model-cards-row.row > .col {
+  flex: 0 0 var(--model-card-track) !important;
   width: var(--model-card-track) !important;
-  max-width: min(100%, var(--model-card-track));
-  flex: 0 1 var(--model-card-track);
+  min-width: var(--model-card-track) !important;
+  max-width: var(--model-card-track) !important;
   box-sizing: border-box;
   padding-left: 0 !important;
   padding-right: 0 !important;
-}
-
-/* Downloadable + extended grids: ~30% narrower max/min track than Running / Available */
-.model-cards-row.row.model-cards-row--downloadable {
-  --model-card-track: 18.54rem;
 }
 
 .model-cards-row.row .model-card {
@@ -1547,7 +1526,7 @@ canvas {
 
 /* Professional Model Card Styles — vertical flow + uniform spec grid */
 .model-card {
-  padding: 0.5rem 0.65rem;
+  padding: var(--model-card-pad-y) var(--model-card-pad-x);
   margin: 0;
   border-radius: var(--border-radius-lg);
   background: var(--model-card-bg, rgba(255, 255, 255, 0.02));
@@ -1555,17 +1534,47 @@ canvas {
   transition: all 0.3s ease;
   position: relative;
   z-index: 0;
-  overflow: visible;
+  overflow: hidden;
   animation: fadeInUp 0.5s ease-out;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.3rem;
+  gap: var(--model-card-section-gap);
   container-type: inline-size;
   container-name: model-card;
   width: 100%;
-  min-width: 0;
+  min-width: var(--model-card-track);
+  max-width: var(--model-card-track);
+  height: auto;
+  min-height: 0;
+  max-height: none;
   box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+/* Content-sized cards — do not stretch to row height (Bootstrap .h-100) */
+.model-card.h-100,
+.model-card--downloadable.h-100,
+.model-card--running.h-100,
+.model-card--derived.h-100 {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+
+/* Baked / derived: visual accent only */
+.model-card--derived {
+  border-color: rgba(255, 193, 7, 0.42);
+  background: rgba(255, 193, 7, 0.05);
+}
+
+.model-card--derived .model-icon-wrapper {
+  background: linear-gradient(135deg, #a67c00, #ffc107);
+}
+
+.model-card--derived .badge.bg-warning {
+  font-size: 0.65rem;
+  padding: 0.2em 0.45em;
 }
 
 /* Header: icon | body — first column fixed width so the icon stays anchored (no x drift when card width changes). */
@@ -1580,9 +1589,10 @@ canvas {
   width: 100%;
   min-width: 0;
   margin-bottom: 0;
-  padding-bottom: 0.22rem;
+  padding-bottom: var(--model-card-head-pad-bottom);
   border-bottom: 1px solid var(--model-card-border, rgba(255, 255, 255, 0.1));
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .model-card .model-header.model-card-head .model-icon-wrapper {
@@ -1599,26 +1609,27 @@ canvas {
 .model-card-head-body {
   grid-area: head-body;
   min-width: 0;
-  min-height: 2.3rem;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
 }
 
-/* Title on the left; capabilities on the right — always same row, title shrinks/ellipsizes. */
+/* Title on the left; trail (status/caps) on the right — wraps when needed */
 .model-card-head-name-row {
   display: flex;
   flex-direction: row;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-start;
-  column-gap: 0.45rem;
+  row-gap: var(--model-card-head-name-gap-y);
+  column-gap: var(--model-card-head-name-gap-x);
   width: 100%;
   min-width: 0;
 }
 
-/* Trail: status + caps; stays on same row as title when space permits (margin-left: auto). */
+/* Trail: status + caps; stays on same row as title when space permits */
 .model-card-head-trail {
   display: flex;
   flex-direction: row;
@@ -1626,7 +1637,7 @@ canvas {
   align-items: center;
   justify-content: flex-end;
   gap: 0.32rem 0.4rem;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   margin-left: auto;
@@ -1713,8 +1724,13 @@ canvas {
   width: 100%;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.26rem;
+  gap: var(--model-card-specs-gap);
   align-content: start;
+  flex: 0 0 auto;
+  min-height: 0;
+  margin-top: 0;
+  margin-bottom: 0 !important;
+  overflow: visible;
 }
 
 /* Flatten spec rows into the parent grid (no ragged flex wraps) */
@@ -1730,6 +1746,7 @@ canvas {
 .model-card .model-actions {
   width: 100%;
   overflow: visible;
+  flex: 0 0 auto;
 }
 
 .model-card:nth-child(1) {
@@ -1828,7 +1845,6 @@ canvas {
 }
 
 .model-card .model-title .model-title-scope {
-  display: block;
   font-family: monospace;
   font-size: 0.68rem;
   font-weight: 500;
@@ -1836,9 +1852,15 @@ canvas {
   letter-spacing: 0.02em;
   color: var(--model-title-scope-color, var(--model-title-color, #ffffff));
   opacity: var(--model-title-scope-opacity, 0.66);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .model-title-name-line {
@@ -1914,43 +1936,64 @@ canvas {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-family: monospace;
-  font-size: 0.76em;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  padding: 0.18em 0.5em 0.2em;
+  box-sizing: border-box;
+  height: var(--model-pill-height);
+  min-height: var(--model-pill-height);
+  max-height: var(--model-pill-height);
+  padding: 0 0.42em;
   margin-left: 0.12em;
-  border-radius: 0.42em;
+  font-family: monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  border-radius: 999px;
   background: var(--model-title-tag-bg, rgba(255, 255, 255, 0.08));
   color: var(--model-title-tag-fg, #eceff1);
   border: 1px solid var(--model-title-tag-border, rgba(255, 255, 255, 0.18));
   box-shadow:
     0 1px 0 rgba(255, 255, 255, 0.07),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  line-height: 1.2;
   flex-shrink: 0;
   max-width: 100%;
 }
 
 /* Saved-defaults indicator lives inside Settings action (right), not the title */
 .model-action-settings-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  line-height: 1;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+}
+
+.model-action-settings-label-row {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.2rem;
   line-height: 1;
-  width: auto;
-  max-width: 100%;
-  /* Avoid min-width:0 here — it lets flex/grid shrink the row to nothing in minmax(0,1fr) cells */
-  min-width: min-content;
-  flex-wrap: wrap;
-  white-space: normal;
-  row-gap: 0.12rem;
+}
+
+.model-action-settings-inner > .model-settings-status-badge {
+  align-self: center;
+  margin-inline: auto;
 }
 
 .model-actions .model-action-settings-btn .fa-cog {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 0.68rem;
   flex-shrink: 0;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
 }
 
 .model-actions .model-action-settings-btn .model-action-btn-label {
@@ -1959,31 +2002,66 @@ canvas {
 
 /* Settings status: always visible — saved (amber) vs default/recommended (grey) */
 .model-actions .model-action-settings-btn .model-settings-status-badge.badge {
+  --bs-badge-padding-x: 0.32rem;
+  --bs-badge-padding-y: 0;
   flex-shrink: 0;
-  display: inline-flex !important;
+  display: flex !important;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 0.18rem;
-  font-size: 0.56rem !important;
+  justify-content: center;
+  align-content: center;
+  gap: 0.16rem;
+  box-sizing: border-box;
+  height: var(--model-pill-height);
+  min-height: var(--model-pill-height);
+  max-height: var(--model-pill-height);
+  padding: 0 0.32rem !important;
+  font-size: 0.54rem !important;
   font-weight: 700 !important;
   line-height: 1 !important;
-  padding: 0.1rem 0.38rem 0.11rem !important;
-  letter-spacing: 0.01em;
-  vertical-align: middle;
+  letter-spacing: normal;
+  text-align: center;
+  vertical-align: unset !important;
+  position: static !important;
+  top: auto !important;
   border-style: solid;
   border-width: 1px;
-  min-height: 0;
+  white-space: nowrap;
 }
 
 .model-actions .model-action-settings-btn .model-settings-status-badge .model-settings-status-ic {
-  font-size: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 0.85em;
+  margin: 0;
+  padding: 0;
+  font-size: 0.46rem;
   line-height: 1;
+}
+
+.model-actions .model-action-settings-btn .model-settings-status-badge .model-settings-status-ic::before {
+  display: block;
+  line-height: 1;
+}
+
+.model-actions .model-action-settings-btn .model-settings-status-badge > span {
+  display: block;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+  font-size: inherit;
+  letter-spacing: normal;
 }
 
 .model-actions .model-action-settings-btn .model-settings-status-badge--saved {
   color: #1a1a1a !important;
   background-color: #ffc107 !important;
   border-color: rgba(0, 0, 0, 0.14) !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  box-shadow: none;
 }
 
 .model-actions .model-action-settings-btn .model-settings-status-badge--saved .model-settings-status-ic {
@@ -2017,9 +2095,15 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
 }
 
 .model-actions .model-action-settings-btn {
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  text-align: center;
   padding: 0.22rem 0.32rem;
   font-size: 0.75rem;
   overflow: visible !important;
+  line-height: 1;
 }
 
 .model-capabilities {
@@ -2115,20 +2199,22 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
 }
 
 /* Unified spec spacing: grid gaps replace per-row margins */
-.model-card .model-specs {
-  margin-bottom: 0 !important;
-  margin-top: 0;
-  flex: none;
-}
-
 .model-card .spec-row {
   margin-bottom: 0;
 }
 
-/* Consistent gap between specs and actions for all card types */
+/* Fixed specs → actions gap via card flex gap (no flex-grow / margin-auto slack) */
 .model-card .model-actions {
-  margin-top: 0.06rem !important;
+  margin-top: 0 !important;
+  gap: var(--model-card-actions-gap-y) var(--model-card-actions-gap-x) !important;
 }
+
+.model-card .model-action-settings-btn {
+  padding-top: var(--model-card-settings-btn-pad-y) !important;
+  padding-bottom: var(--model-card-settings-btn-pad-y) !important;
+}
+
+/* Downloadable / derived / running height overrides live on their card modifiers */
 
 /* Placeholder rows with only opacity-0 items must not add vertical space */
 .spec-row:has(.spec-item.opacity-0):not(:has(.spec-item:not(.opacity-0))) {
@@ -2153,15 +2239,31 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
   font-size: 0.8125rem;
   background: var(--spec-tile-bg, rgba(255, 255, 255, 0.02));
   border-radius: 8px;
-  padding: 0.2rem 0.35rem;
+  padding: var(--model-card-spec-item-pad-y) var(--model-card-spec-item-pad-x);
   margin: 0;
   border: 1px solid var(--spec-tile-border, rgba(255, 255, 255, 0.05));
   transition: background 0.2s ease, border-color 0.2s ease;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.3rem;
-  min-height: 2rem;
-  overflow: hidden;
+  min-height: var(--model-card-spec-item-min-h);
+  overflow: visible;
+}
+
+.model-card .model-specs > .spec-row:first-child .spec-item {
+  min-height: var(--model-card-spec-item-min-h-tall);
+}
+
+.model-card .spec-item .spec-content {
+  justify-content: flex-start;
+  gap: 0.02rem;
+}
+
+.model-card .spec-item .spec-value + .text-muted.small {
+  display: block;
+  margin-top: 0.06rem;
+  line-height: 1.3;
+  font-size: 0.68rem;
 }
 
 /* Legacy selectors for non-card usage */
@@ -2217,8 +2319,8 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
 }
 
 .model-card .spec-item .spec-icon {
-  align-self: center;
-  padding-top: 0;
+  align-self: flex-start;
+  padding-top: 0.12rem;
 }
 
 .spec-icon i {
@@ -2325,7 +2427,7 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
 /* Card actions: grid by intent (not a fixed 3-per-row strip) */
 .model-actions {
   display: grid;
-  gap: 0.28rem 0.28rem;
+  gap: var(--model-card-actions-gap-y) var(--model-card-actions-gap-x);
   margin-top: 0 !important;
   align-content: start;
 }
@@ -2804,6 +2906,108 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
 
 .ask-model-response-area {
   background: var(--primary-bg, #1a1a1a);
+  padding-top: 2.35rem !important;
+}
+
+.ask-model-response-shell {
+  position: relative;
+}
+
+.ask-model-response-actions {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.ask-model-action-btn {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+  line-height: 1.2;
+  opacity: 0.92;
+}
+
+.ask-history-toolbar {
+  border-bottom: 1px solid var(--input-border, #333);
+  padding-bottom: 0.65rem;
+}
+
+.ask-history-filter {
+  min-width: 10rem;
+  max-width: 16rem;
+}
+
+.ask-history-list {
+  max-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ask-history-item {
+  border: 1px solid var(--input-border, #333);
+  border-radius: 0.375rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--primary-bg, #1a1a1a);
+}
+
+.ask-history-item--expanded {
+  border-color: rgba(25, 135, 84, 0.45);
+}
+
+.ask-history-item-toggle {
+  color: inherit !important;
+}
+
+.ask-history-item-toggle:hover .ask-history-preview {
+  color: var(--text-primary, #e6e6e6);
+}
+
+.ask-history-preview {
+  color: var(--text-muted, #adb5bd);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ask-history-detail {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.65rem;
+}
+
+.ask-history-text {
+  white-space: pre-wrap;
+  font-size: 0.88rem;
+  max-height: 180px;
+  overflow-y: auto;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.25rem;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ask-history-empty {
+  border: 1px dashed var(--input-border, #444);
+  border-radius: 0.375rem;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.ask-history-model {
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.ask-history-time {
+  font-size: 0.75rem;
+}
+
+#askModelModal .tab-content {
+  padding-top: 0.15rem;
 }
 
 #askModelModal .ask-model-input {
@@ -3285,8 +3489,8 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
 }
 
 #runningModelsContainer.row.g-3 {
-  --bs-gutter-x: var(--model-card-gap-x);
-  --bs-gutter-y: var(--model-card-gap-y);
+  --bs-gutter-x: 0;
+  --bs-gutter-y: 0;
 }
 
 /* Card padding */
@@ -3316,12 +3520,16 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
 }
 
 .model-card .spec-item {
-  padding: 0.18rem 0.32rem !important;
-  min-height: 1.42rem !important;
+  padding: var(--model-card-spec-item-pad-y) var(--model-card-spec-item-pad-x) !important;
+  min-height: var(--model-card-spec-item-min-h) !important;
+}
+
+.model-card .model-specs > .spec-row:first-child .spec-item {
+  min-height: var(--model-card-spec-item-min-h-tall) !important;
 }
 
 .model-actions {
-  gap: 0.28rem 0.26rem !important;
+  gap: var(--model-card-actions-gap-y) var(--model-card-actions-gap-x) !important;
 }
 
 .model-actions .btn {
@@ -3330,7 +3538,10 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
 }
 
 .model-actions .model-action-settings-btn {
-  padding: 0.22rem 0.3rem !important;
+  padding-top: var(--model-card-settings-btn-pad-y) !important;
+  padding-bottom: var(--model-card-settings-btn-pad-y) !important;
+  padding-left: 0.3rem !important;
+  padding-right: 0.3rem !important;
   font-size: 0.75rem !important;
 }
 
@@ -3415,7 +3626,10 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
 
   .model-actions .model-action-settings-btn {
     font-size: 0.64rem;
-    padding: 0.28rem 0.12rem;
+    padding-top: var(--model-card-settings-btn-pad-y) !important;
+    padding-bottom: var(--model-card-settings-btn-pad-y) !important;
+    padding-left: 0.12rem !important;
+    padding-right: 0.12rem !important;
   }
 
   /* Long registry paths may wrap; name+tag stay in .model-title-name-core (chip never orphaned) */
@@ -3428,8 +3642,8 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
     white-space: normal;
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
     overflow: hidden;
   }
 
@@ -3505,9 +3719,10 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
   border-radius: var(--border-radius-lg);
   background: var(--section-shell-bg, rgba(255, 255, 255, 0.02));
   box-shadow: 0 1px 3px var(--shadow-light);
-  overflow: hidden;
+  overflow-x: visible;
+  overflow-y: visible;
   width: 100%;
-  max-width: calc(var(--model-card-grid-max) + 2 * var(--section-shell-pad-x));
+  max-width: var(--models-section-shell-max);
   margin-inline: auto;
   box-sizing: border-box;
 }
@@ -3549,7 +3764,10 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
   padding: var(--section-shell-body-pad-y) var(--section-shell-pad-x);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 /* Collapsible model sections (available + downloadable). */

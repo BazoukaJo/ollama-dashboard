@@ -241,7 +241,7 @@
                             {% if models %}
                             {% for model in models %}
                             <div class="col">
-                                <div class="model-card h-100" data-model-name="{{ model.name|e }}">
+                                <div class="model-card h-100 model-card--running" data-model-name="{{ model.name|e }}">
                                     <div class="model-header model-card-head">
                                         <div class="model-icon-wrapper">
                                             <i class="fas fa-brain model-icon-main"></i>
@@ -361,7 +361,7 @@
                                         </button>
                                         <button type="button" class="btn btn-secondary model-action-settings-btn" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Edit temperature, context, and other options stored for this dashboard." aria-label="Settings{% if model.has_custom_settings %} (saved custom defaults){% else %} (using defaults){% endif %}">
                                             <span class="model-action-settings-inner">
-                                                <i class="fas fa-cog" aria-hidden="true"></i><span class="model-action-btn-label">Settings</span>{% if model.has_custom_settings %}<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--saved" data-dashboard-tooltip="Custom per-model options saved for this dashboard (temperature, context, etc.)." aria-label="Saved custom defaults"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Saved</span></span>{% else %}<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--default" data-dashboard-tooltip="Using recommended or built-in defaults — nothing custom saved yet for this model." aria-label="Using default settings"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Default</span></span>{% endif %}
+                                                <span class="model-action-settings-label-row"><i class="fas fa-cog" aria-hidden="true"></i><span class="model-action-btn-label">Settings</span></span>{% if model.has_custom_settings %}<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--saved" data-dashboard-tooltip="Custom per-model options saved for this dashboard (temperature, context, etc.)." aria-label="Saved custom defaults"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Saved</span></span>{% else %}<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--default" data-dashboard-tooltip="Using recommended or built-in defaults — nothing custom saved yet for this model." aria-label="Using default settings"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Default</span></span>{% endif %}
                                             </span>
                                         </button>
                                     </div>
@@ -502,7 +502,7 @@
                                         </button>
                                         <button type="button" class="btn btn-secondary model-action-settings-btn" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Per-model defaults for this dashboard (applied on next load/start)." aria-label="Settings{% if model.has_custom_settings %} (saved custom defaults){% else %} (using defaults){% endif %}">
                                             <span class="model-action-settings-inner">
-                                                <i class="fas fa-cog" aria-hidden="true"></i><span class="model-action-btn-label">Settings</span>{% if model.has_custom_settings %}<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--saved" data-dashboard-tooltip="Custom per-model options saved for this dashboard (temperature, context, etc.)." aria-label="Saved custom defaults"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Saved</span></span>{% else %}<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--default" data-dashboard-tooltip="Using recommended or built-in defaults — nothing custom saved yet for this model." aria-label="Using default settings"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Default</span></span>{% endif %}
+                                                <span class="model-action-settings-label-row"><i class="fas fa-cog" aria-hidden="true"></i><span class="model-action-btn-label">Settings</span></span>{% if model.has_custom_settings %}<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--saved" data-dashboard-tooltip="Custom per-model options saved for this dashboard (temperature, context, etc.)." aria-label="Saved custom defaults"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Saved</span></span>{% else %}<span class="badge rounded-pill model-settings-status-badge model-settings-status-badge--default" data-dashboard-tooltip="Using recommended or built-in defaults — nothing custom saved yet for this model." aria-label="Using default settings"><i class="fas fa-floppy-disk model-settings-status-ic" aria-hidden="true"></i><span>Default</span></span>{% endif %}
                                             </span>
                                         </button>
                                         <button type="button" class="btn btn-danger" data-model-action="delete" onclick="deleteModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Remove from disk (ollama rm). This cannot be undone." aria-label="Delete model">
@@ -661,46 +661,85 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <p id="askModelCapabilitiesHint" class="small text-muted mb-2"></p>
-                    <div class="ask-attachments-toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
-                        <input type="file" id="askImageInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
-                        <input type="file" id="askPdfInput" class="d-none" accept=".pdf,application/pdf">
-                        <input type="file" id="askDocInput" class="d-none" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
-                        <button type="button" id="askAttachImageBtn" class="btn btn-sm btn-outline-info">
-                            <i class="fas fa-image me-1" aria-hidden="true"></i>Image
-                        </button>
-                        <button type="button" id="askAttachPdfBtn" class="btn btn-sm btn-outline-info">
-                            <i class="fas fa-file-pdf me-1" aria-hidden="true"></i>PDF
-                        </button>
-                        <button type="button" id="askAttachDocBtn" class="btn btn-sm btn-outline-info">
-                            <i class="fas fa-file-word me-1" aria-hidden="true"></i>Word
-                        </button>
-                        <button type="button" id="askAttachCodeBtn" class="btn btn-sm btn-outline-info">
-                            <i class="fas fa-code me-1" aria-hidden="true"></i>Code
-                        </button>
-                    </div>
-                    <div id="askAttachmentsList" class="ask-attachments-list mb-2" style="display:none;"></div>
-                    <div id="askCodeSnippetWrap" class="ask-code-snippet-wrap mb-3 p-2 border border-secondary rounded" style="display:none;">
-                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                            <label class="small text-muted mb-0" for="askCodeLanguage">Language</label>
-                            <select id="askCodeLanguage" class="form-select form-select-sm ask-model-input" style="width:auto; min-width:8rem;"></select>
-                            <button type="button" id="askCodeConfirmBtn" class="btn btn-sm btn-success ms-auto">
-                                <i class="fas fa-plus me-1" aria-hidden="true"></i>Add snippet
+                    <ul class="nav nav-tabs mb-3" id="askModalTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="askTabBtn" data-bs-toggle="tab" data-bs-target="#askTabPane" type="button" role="tab" aria-controls="askTabPane" aria-selected="true">Ask</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="askHistoryTabBtn" data-bs-toggle="tab" data-bs-target="#askHistoryTabPane" type="button" role="tab" aria-controls="askHistoryTabPane" aria-selected="false">
+                                History <span id="askHistoryCount" class="badge bg-secondary ms-1">0</span>
                             </button>
-                        </div>
-                        <textarea id="askCodeInput" class="form-control form-control-sm ask-model-input font-monospace" rows="5" placeholder="Paste code here…" aria-label="Code snippet"></textarea>
-                    </div>
-                    <div class="mb-3">
-                        <textarea id="askModelInput" class="form-control ask-model-input" rows="3" placeholder="Type your question and press Enter (or click Send)…" aria-label="Question for the model"></textarea>
-                    </div>
-                    <div id="askModelResponseWrap" style="display:none;">
-                        <div class="d-flex align-items-center gap-2 mb-2">
-                            <span class="text-muted small">Response</span>
-                            <div id="askModelSpinner" class="spinner-border spinner-border-sm text-success" role="status" style="display:none;">
-                                <span class="visually-hidden">Loading...</span>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="askModalTabContent">
+                        <div class="tab-pane fade show active" id="askTabPane" role="tabpanel" aria-labelledby="askTabBtn" tabindex="0">
+                            <p id="askModelCapabilitiesHint" class="small text-muted mb-2"></p>
+                            <div class="ask-attachments-toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
+                                <input type="file" id="askImageInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
+                                <input type="file" id="askPdfInput" class="d-none" accept=".pdf,application/pdf">
+                                <input type="file" id="askDocInput" class="d-none" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+                                <button type="button" id="askAttachImageBtn" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-image me-1" aria-hidden="true"></i>Image
+                                </button>
+                                <button type="button" id="askAttachPdfBtn" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-file-pdf me-1" aria-hidden="true"></i>PDF
+                                </button>
+                                <button type="button" id="askAttachDocBtn" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-file-word me-1" aria-hidden="true"></i>Word
+                                </button>
+                                <button type="button" id="askAttachCodeBtn" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-code me-1" aria-hidden="true"></i>Code
+                                </button>
+                            </div>
+                            <div id="askAttachmentsList" class="ask-attachments-list mb-2" style="display:none;"></div>
+                            <div id="askCodeSnippetWrap" class="ask-code-snippet-wrap mb-3 p-2 border border-secondary rounded" style="display:none;">
+                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                    <label class="small text-muted mb-0" for="askCodeLanguage">Language</label>
+                                    <select id="askCodeLanguage" class="form-select form-select-sm ask-model-input" style="width:auto; min-width:8rem;"></select>
+                                    <button type="button" id="askCodeConfirmBtn" class="btn btn-sm btn-success ms-auto">
+                                        <i class="fas fa-plus me-1" aria-hidden="true"></i>Add snippet
+                                    </button>
+                                </div>
+                                <textarea id="askCodeInput" class="form-control form-control-sm ask-model-input font-monospace" rows="5" placeholder="Paste code here…" aria-label="Code snippet"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <textarea id="askModelInput" class="form-control ask-model-input" rows="3" placeholder="Type your question and press Enter (or click Send)…" aria-label="Question for the model"></textarea>
+                            </div>
+                            <div id="askModelResponseWrap" style="display:none;">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <span class="text-muted small">Response</span>
+                                    <div id="askModelSpinner" class="spinner-border spinner-border-sm text-success" role="status" style="display:none;">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                                <div class="ask-model-response-shell position-relative">
+                                    <div class="ask-model-response-actions">
+                                        <button type="button" id="askModelCopyBtn" class="btn btn-sm btn-outline-secondary ask-model-action-btn" data-dashboard-tooltip="Copy response to clipboard" aria-label="Copy response" disabled>
+                                            <i class="fas fa-copy" aria-hidden="true"></i><span class="ms-1">Copy</span>
+                                        </button>
+                                        <button type="button" id="askModelSaveBtn" class="btn btn-sm btn-outline-success ask-model-action-btn" data-dashboard-tooltip="Save question and answer to history" aria-label="Save to history" disabled>
+                                            <i class="fas fa-bookmark" aria-hidden="true"></i><span class="ms-1">Save</span>
+                                        </button>
+                                    </div>
+                                    <div id="askModelResponse" class="ask-model-response-area p-3 border border-secondary rounded" style="white-space:pre-wrap; max-height:400px; overflow-y:auto; font-size:0.9rem; background:#1a1a1a;"></div>
+                                </div>
                             </div>
                         </div>
-                        <div id="askModelResponse" class="ask-model-response-area p-3 border border-secondary rounded" style="white-space:pre-wrap; max-height:400px; overflow-y:auto; font-size:0.9rem; background:#1a1a1a;"></div>
+                        <div class="tab-pane fade" id="askHistoryTabPane" role="tabpanel" aria-labelledby="askHistoryTabBtn" tabindex="0">
+                            <div class="d-flex flex-wrap align-items-center gap-2 mb-3 ask-history-toolbar">
+                                <label class="small text-muted mb-0" for="askHistoryModelFilter">Model</label>
+                                <select id="askHistoryModelFilter" class="form-select form-select-sm ask-model-input ask-history-filter" aria-label="Filter history by model">
+                                    <option value="">All models</option>
+                                </select>
+                                <button type="button" id="askHistoryClearAllBtn" class="btn btn-sm btn-outline-danger ms-auto">
+                                    <i class="fas fa-trash-alt me-1" aria-hidden="true"></i>Clear all
+                                </button>
+                            </div>
+                            <div id="askHistoryEmpty" class="ask-history-empty text-muted small text-center py-4">
+                                No saved answers yet. Ask a question, then click Save.
+                            </div>
+                            <div id="askHistoryList" class="ask-history-list"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -760,6 +799,7 @@
     <script src="{{ url_for('static', filename='js/modules/serviceControl.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/settings.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/api_proxy.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/askHistory.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/askModal.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/bootstrap.js') }}?v={{ timestamp }}"></script>
@@ -781,23 +821,53 @@
         section.style.display = '';
         container.innerHTML = models.map(m => {
           const name = m.name || m;
-          // Strip -dashboard suffix (keep tag if present): mymodel-dashboard:latest → mymodel:latest
+          const esc = (s) => String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+          const safe = typeof escapeHtml === 'function' ? escapeHtml(String(name)) : esc(name);
           const source = name.replace(/-dashboard(:[^:]*)$/, '$1').replace(/-dashboard$/, '');
+          const safeSource = typeof escapeHtml === 'function' ? escapeHtml(String(source)) : esc(source);
+          const titleBlock = (window.modelCards && typeof window.modelCards.modelTitleMarkup === 'function')
+            ? window.modelCards.modelTitleMarkup(name)
+            : `<div class="model-title"><span class="model-title-display">${safe}</span></div>`;
           return `<div class="col">
-            <div class="card h-100 border-warning" data-model-name="${name}" style="background:rgba(255,193,7,0.05)">
-              <div class="card-body d-flex flex-column gap-2">
-                <div class="d-flex align-items-start justify-content-between gap-1">
-                  <span class="fw-semibold small text-break" style="word-break:break-all">${name}</span>
-                  <span class="badge bg-warning text-dark flex-shrink-0">Baked</span>
+            <div class="model-card h-100 model-card--derived" data-model-name="${safe}">
+              <div class="model-header model-card-head">
+                <div class="model-icon-wrapper">
+                  <i class="fas fa-cookie-bite model-icon-main"></i>
                 </div>
-                <div class="text-muted small">From: <code>${source}</code></div>
-                <div class="mt-auto">
-                  <button class="btn btn-sm btn-outline-danger w-100"
-                    onclick="deleteModel('${name}')"
-                    data-dashboard-tooltip="Remove this baked model from disk (ollama rm). Does not affect '${source}' or your saved settings.">
-                    <i class="fas fa-trash me-1"></i>Delete
-                  </button>
+                <div class="model-card-head-body">
+                  <div class="model-card-head-name-row">
+                    ${titleBlock}
+                    <div class="model-card-head-trail">
+                      <span class="badge bg-warning text-dark">Baked</span>
+                    </div>
+                  </div>
                 </div>
+              </div>
+              <div class="model-specs">
+                <div class="spec-row">
+                  <div class="spec-item spec-item--full">
+                    <div class="spec-icon">
+                      <i class="fas fa-link"></i>
+                    </div>
+                    <div class="spec-content">
+                      <div class="spec-label" data-dashboard-tooltip="Original model this baked variant was created from.">Source model</div>
+                      <div class="spec-value text-truncate"><code>${safeSource}</code></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="model-actions model-actions--download">
+                <button type="button" class="btn btn-danger" data-model-action="delete"
+                  onclick="deleteModel(this.closest('.model-card').dataset.modelName)"
+                  data-dashboard-tooltip="Remove this baked model from disk (ollama rm). Does not affect the source model or your saved settings."
+                  aria-label="Delete baked model">
+                  <i class="fas fa-trash"></i> <span class="model-action-btn-label">Delete</span>
+                </button>
               </div>
             </div>
           </div>`;

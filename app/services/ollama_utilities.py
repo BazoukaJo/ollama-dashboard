@@ -4,6 +4,7 @@ import json
 import os
 import re
 import time
+import uuid
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Optional, Tuple
@@ -215,15 +216,42 @@ class OllamaServiceUtilities:
         except HTTP_SERVICE_ERRORS:
             return str(value)
 
+    def _chat_history_file_path(self):
+        return os.path.join(
+            os.path.dirname(self.app.config['HISTORY_FILE']),
+            'chat_history.json',
+        )
+
+    def _write_chat_history(self, history):
+        chat_history_file = self._chat_history_file_path()
+        os.makedirs(os.path.dirname(chat_history_file) or '.', exist_ok=True)
+        with open(chat_history_file, 'w', encoding='utf-8') as f:
+            json.dump(history, f, indent=2)
+
+    def _normalize_chat_history(self, history):
+        """Ensure every entry has an id; persist if any were missing."""
+        if not isinstance(history, list):
+            return [], False
+        changed = False
+        for entry in history:
+            if isinstance(entry, dict) and not entry.get('id'):
+                entry['id'] = str(uuid.uuid4())
+                changed = True
+        return history, changed
+
     def get_chat_history(self):
         """Get chat history"""
         try:
             if not self.app or not hasattr(self.app, "config"):
                 return []
-            chat_history_file = os.path.join(os.path.dirname(self.app.config['HISTORY_FILE']), 'chat_history.json')
+            chat_history_file = self._chat_history_file_path()
             if os.path.exists(chat_history_file):
                 with open(chat_history_file, encoding='utf-8') as f:
-                    return json.load(f)
+                    history = json.load(f)
+                history, changed = self._normalize_chat_history(history)
+                if changed:
+                    self._write_chat_history(history)
+                return history
             return []
         except HTTP_SERVICE_ERRORS as e:
             self.logger.exception("Error loading chat history: %s", e)
@@ -231,25 +259,61 @@ class OllamaServiceUtilities:
 
     def save_chat_session(self, session_data):
         """Save a chat session"""
+        if not self.app or not hasattr(self.app, "config"):
+            return None
+        if not session_data or not isinstance(session_data, dict):
+            raise ValueError("Invalid session data")
+        model = str(session_data.get('model') or '').strip()
+        prompt = str(session_data.get('prompt') or '').strip()
+        response = str(session_data.get('response') or '').strip()
+        if not model:
+            raise ValueError("Model name is required")
+        if not prompt and not response:
+            raise ValueError("At least prompt or response is required")
+
         try:
-            if not self.app or not hasattr(self.app, "config"):
-                return
-            chat_history_file = os.path.join(os.path.dirname(self.app.config['HISTORY_FILE']), 'chat_history.json')
             history = self.get_chat_history()
 
-            # Add timestamp if not present
+            if not session_data.get('id'):
+                session_data['id'] = str(uuid.uuid4())
             if 'timestamp' not in session_data:
                 session_data['timestamp'] = datetime.now().isoformat()
 
-            history.insert(0, session_data)  # Add to beginning
-
-            # Keep only last 100 sessions
+            history.insert(0, session_data)
             history = history[:100]
-
-            with open(chat_history_file, 'w', encoding='utf-8') as f:
-                json.dump(history, f, indent=2)
+            self._write_chat_history(history)
+            return session_data['id']
         except HTTP_SERVICE_ERRORS as e:
             self.logger.exception("Error saving chat session: %s", e)
+            raise
+
+    def delete_chat_session(self, session_id):
+        """Remove one chat session by id. Returns True if removed."""
+        try:
+            if not self.app or not hasattr(self.app, "config"):
+                return False
+            session_id = str(session_id or '').strip()
+            if not session_id:
+                return False
+            history = self.get_chat_history()
+            new_history = [h for h in history if h.get('id') != session_id]
+            if len(new_history) == len(history):
+                return False
+            self._write_chat_history(new_history)
+            return True
+        except HTTP_SERVICE_ERRORS as e:
+            self.logger.exception("Error deleting chat session: %s", e)
+            return False
+
+    def clear_chat_history(self):
+        """Remove all saved chat sessions."""
+        try:
+            if not self.app or not hasattr(self.app, "config"):
+                return
+            self._write_chat_history([])
+        except HTTP_SERVICE_ERRORS as e:
+            self.logger.exception("Error clearing chat history: %s", e)
+            raise
 
     def get_model_performance(self, model_name):
         """Get performance metrics for a model"""
