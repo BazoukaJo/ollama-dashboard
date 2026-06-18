@@ -1,6 +1,7 @@
 """Estimate and trim OpenAI/Copilot chat payloads to fit num_ctx budgets."""
 from __future__ import annotations
 
+import copy
 import json
 import os
 from typing import Any
@@ -8,6 +9,9 @@ from typing import Any
 _CHARS_PER_TOKEN = 4
 _DEFAULT_RESERVE_RATIO = 0.2
 _TOKENS_PER_IMAGE = 256
+_MAX_TRUNCATION_PASSES = 32
+_MIN_LAST_TURN_TOKENS = 512
+_TRUNCATION_MARKER = '\n\n[... trimmed by ollama-dashboard proxy to fit context window ...]'
 
 
 def estimate_tokens(text: str) -> int:
@@ -19,7 +23,7 @@ def estimate_tokens(text: str) -> int:
 
 def _message_text(message: dict[str, Any]) -> str:
     content = message.get('content')
-    if isinstance(content, str):
+    if isinstance(content, str) and content.strip():
         return content
     if isinstance(content, list):
         parts: list[str] = []
@@ -81,14 +85,103 @@ def completion_budget(num_ctx: int) -> int:
     return max(256, int(ctx * (1.0 - _reserve_ratio())))
 
 
+def _chars_for_tokens(tokens: int) -> int:
+    return max(0, int(tokens) * _CHARS_PER_TOKEN)
+
+
+def _truncate_string_to_tokens(text: str, max_tokens: int) -> str:
+    """Shrink text to an estimated token budget, keeping head and tail when possible."""
+    if not text or max_tokens <= 0:
+        return ''
+    max_chars = _chars_for_tokens(max_tokens)
+    if len(text) <= max_chars:
+        return text
+    if max_chars <= len(_TRUNCATION_MARKER) + 32:
+        return text[:max_chars]
+    budget = max_chars - len(_TRUNCATION_MARKER)
+    head = max(budget // 6, 64)
+    tail = max(budget - head, 64)
+    if head + tail > len(text):
+        return text[:max_chars]
+    return text[:head] + _TRUNCATION_MARKER + text[-tail:]
+
+
+def _truncate_tool_calls(message: dict[str, Any], token_budget: int) -> None:
+    """Drop oldest tool calls until the serialized form fits ``token_budget``."""
+    calls = message.get('tool_calls')
+    if not isinstance(calls, list) or not calls:
+        return
+    while len(calls) > 1 and estimate_tokens(json.dumps(calls, ensure_ascii=False)) > token_budget:
+        calls.pop(0)
+    message['tool_calls'] = calls
+
+
+def _truncate_message_content(message: dict[str, Any], token_budget: int) -> dict[str, Any]:
+    """Return a copy of ``message`` with content shrunk to ``token_budget`` (estimated)."""
+    msg = copy.deepcopy(message)
+    overhead = 4 + _image_token_cost(msg)
+    content_budget = max(1, token_budget - overhead)
+
+    tool_calls = msg.get('tool_calls')
+    if isinstance(tool_calls, list) and tool_calls:
+        _truncate_tool_calls(msg, content_budget)
+        overhead = 4 + _image_token_cost(msg) + estimate_tokens(
+            json.dumps(msg.get('tool_calls') or [], ensure_ascii=False),
+        )
+        content_budget = max(1, token_budget - overhead)
+
+    content = msg.get('content')
+    if isinstance(content, str):
+        msg['content'] = _truncate_string_to_tokens(content, content_budget)
+        return msg
+
+    if isinstance(content, list):
+        text_parts: list[str] = []
+        non_text: list[Any] = []
+        for block in content:
+            if isinstance(block, dict):
+                btype = str(block.get('type') or '').lower()
+                if btype in ('text', 'input_text') and block.get('text'):
+                    text_parts.append(str(block['text']))
+                elif block.get('text'):
+                    text_parts.append(str(block['text']))
+                else:
+                    non_text.append(block)
+            else:
+                non_text.append(block)
+        joined = '\n'.join(text_parts)
+        truncated = _truncate_string_to_tokens(joined, content_budget)
+        if non_text:
+            msg['content'] = [{'type': 'text', 'text': truncated}] + non_text
+        else:
+            msg['content'] = truncated
+        return msg
+
+    if tool_calls:
+        msg.setdefault('content', '')
+        return msg
+
+    msg['content'] = ''
+    return msg
+
+
+def _messages_fit(system_msgs: list[dict[str, Any]], rest: list[dict[str, Any]], budget: int) -> bool:
+    return estimate_messages_tokens(system_msgs + rest) <= budget
+
+
 def trim_messages_to_budget(
     messages: list[Any],
     num_ctx: int,
     *,
     strategy: str | None = None,  # noqa: ARG001 — reserved for future strategies
 ) -> tuple[list[Any], dict[str, Any]]:
-    """Trim oldest non-system messages until estimated tokens fit the budget."""
-    msgs = [m for m in (messages or []) if isinstance(m, dict)]
+    """Trim chat history to fit ``num_ctx``.
+
+    1. Drop oldest non-system messages while more than one remains.
+    2. Truncate the remaining message body in-place (never remove the last turn entirely).
+    3. If only system messages remain and still exceed budget, truncate system text too.
+    """
+    msgs = [copy.deepcopy(m) for m in (messages or []) if isinstance(m, dict)]
     budget = completion_budget(num_ctx)
     before = estimate_messages_tokens(msgs)
     meta: dict[str, Any] = {
@@ -97,6 +190,7 @@ def trim_messages_to_budget(
         'tokens_after': before,
         'budget': budget,
         'messages_removed': 0,
+        'content_truncated': 0,
     }
     if before <= budget or not msgs:
         return msgs, meta
@@ -104,12 +198,75 @@ def trim_messages_to_budget(
     system_msgs = [m for m in msgs if m.get('role') == 'system']
     rest = [m for m in msgs if m.get('role') != 'system']
 
-    while rest and estimate_messages_tokens(system_msgs + rest) > budget:
+    # Phase 1: remove oldest non-system messages, but keep at least one.
+    while len(rest) > 1 and not _messages_fit(system_msgs, rest, budget):
         rest.pop(0)
         meta['messages_removed'] += 1
+
+    # Phase 2: shrink system prompts before truncating the latest user turn to nothing.
+    for _ in range(_MAX_TRUNCATION_PASSES):
+        if _messages_fit(system_msgs, rest, budget) or not system_msgs:
+            break
+        rest_tokens = estimate_messages_tokens(rest)
+        sys_allowance = budget - rest_tokens
+        if sys_allowance <= 8:
+            break
+        if estimate_messages_tokens(system_msgs) <= sys_allowance:
+            break
+        current = system_msgs[0]
+        before_msg = estimate_messages_tokens([current])
+        target_tokens = max(16, sys_allowance - 4 - _image_token_cost(current))
+        truncated = _truncate_message_content(current, target_tokens)
+        if estimate_messages_tokens([truncated]) >= before_msg:
+            break
+        system_msgs[0] = truncated
+        meta['content_truncated'] += 1
+
+    # Phase 3: truncate non-system bodies (keep the last user turn usable).
+    for _ in range(_MAX_TRUNCATION_PASSES):
+        if _messages_fit(system_msgs, rest, budget) or not rest:
+            break
+        overhead_tokens = estimate_messages_tokens(system_msgs)
+        remaining = budget - overhead_tokens
+        if remaining <= 8:
+            break
+        current = rest[0]
+        before_msg = estimate_messages_tokens([current])
+        min_turn = _MIN_LAST_TURN_TOKENS if len(rest) == 1 else 16
+        target_tokens = max(min_turn, remaining - 4 - _image_token_cost(current))
+        truncated = _truncate_message_content(current, target_tokens)
+        if estimate_messages_tokens([truncated]) >= before_msg:
+            break
+        rest[0] = truncated
+        meta['content_truncated'] += 1
+
+    # Phase 4: last resort — shrink system again if the user turn still does not fit.
+    for _ in range(_MAX_TRUNCATION_PASSES):
+        if _messages_fit(system_msgs, rest, budget) or not system_msgs:
+            break
+        rest_tokens = estimate_messages_tokens(rest)
+        sys_allowance = budget - rest_tokens
+        if sys_allowance <= 8:
+            break
+        if estimate_messages_tokens(system_msgs) <= sys_allowance:
+            break
+        current = system_msgs[0]
+        before_msg = estimate_messages_tokens([current])
+        target_tokens = max(16, sys_allowance - 4 - _image_token_cost(current))
+        truncated = _truncate_message_content(current, target_tokens)
+        if estimate_messages_tokens([truncated]) >= before_msg:
+            break
+        system_msgs[0] = truncated
+        meta['content_truncated'] += 1
 
     trimmed = system_msgs + rest
     after = estimate_messages_tokens(trimmed)
     meta['tokens_after'] = after
-    meta['trimmed'] = meta['messages_removed'] > 0 or after < before
+    meta['trimmed'] = (
+        meta['messages_removed'] > 0
+        or meta['content_truncated'] > 0
+        or after < before
+    )
+    if after > budget:
+        meta['budget_exceeded'] = True
     return trimmed, meta

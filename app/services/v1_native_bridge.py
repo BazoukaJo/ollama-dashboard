@@ -11,6 +11,7 @@ traffic uses ``openai_chat_to_native()`` + ``/api/chat``.
 from __future__ import annotations
 
 import json
+import os
 import time
 import uuid
 from typing import Any, Iterator
@@ -158,6 +159,34 @@ def openai_chat_to_native(
     return native
 
 
+def apply_copilot_native_defaults(
+    native: dict[str, Any],
+    openai_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Tune native ``/api/chat`` for IDE clients without disabling agent/tool models.
+
+    Plain chat: force ``think: false`` so Copilot BYOK does not show a lone ``I`` from
+    reasoning tokens (it only renders ``delta.content``).
+
+    Agent requests (``tools`` present): leave ``think`` unset unless the client explicitly
+    requested a reasoning level, so tool-capable models keep their default behavior.
+    """
+    allow_thinking = os.getenv('OLLAMA_COPILOT_ALLOW_THINKING', '').strip().lower() in (
+        '1', 'true', 'yes',
+    )
+    has_tools = bool(native.get('tools'))
+    think = _resolve_think_from_openai_payload(openai_payload)
+    if allow_thinking and think is not None:
+        native['think'] = think
+    elif has_tools:
+        # Agent/tool requests: keep the model's default tool behavior. Copilot sends
+        # reasoning_effort on every turn; do not map that to native think here.
+        pass
+    else:
+        native['think'] = False
+    return native
+
+
 def openai_completion_to_native(
     payload: dict[str, Any],
     dashboard_settings: dict[str, Any],
@@ -185,9 +214,22 @@ def _created_ts() -> int:
     return int(time.time())
 
 
+def openai_sse_stream_opening(
+    model: str,
+    completion_id: str | None = None,
+) -> tuple[str, str, int]:
+    """Return an immediate role SSE chunk while Ollama loads the model."""
+    cid = completion_id or _completion_id()
+    created = _created_ts()
+    line = _openai_chat_chunk(cid, model, {'role': 'assistant'}, created=created)
+    return line, cid, created
+
+
 def native_chat_response_to_openai(
     native: dict[str, Any],
     completion_id: str | None = None,
+    *,
+    copilot_safe: bool = False,
 ) -> dict[str, Any]:
     """Convert a non-streaming ``/api/chat`` response to OpenAI chat.completion JSON."""
     cid = completion_id or _completion_id()
@@ -195,10 +237,15 @@ def native_chat_response_to_openai(
     content = message.get('content')
     if content is None:
         content = ''
-    if not str(content).strip():
-        reasoning = _assistant_reasoning_piece(message)
-        if reasoning:
+    reasoning = _assistant_reasoning_piece(message)
+    content_s = str(content).strip()
+    if copilot_safe:
+        if not content_s and reasoning:
             content = reasoning
+        elif reasoning and len(content_s) <= 3 and len(reasoning.strip()) > len(content_s):
+            content = reasoning
+    elif not content_s and reasoning:
+        content = reasoning
     choice: dict[str, Any] = {
         'index': 0,
         'message': {
@@ -212,8 +259,7 @@ def native_chat_response_to_openai(
         if converted:
             choice['message']['tool_calls'] = converted
             choice['finish_reason'] = 'tool_calls'
-    reasoning = _assistant_reasoning_piece(message)
-    if reasoning:
+    if reasoning and not copilot_safe:
         choice['message']['reasoning'] = reasoning
     usage = {}
     if native.get('prompt_eval_count') is not None:
@@ -264,14 +310,12 @@ def _openai_chat_delta_from_native_message(
     content_s = str(content) if content is not None else ''
     reasoning = _assistant_reasoning_piece(msg)
     if reasoning:
-        delta['reasoning'] = reasoning
-        delta['reasoning_content'] = reasoning
-        if content_s.strip():
-            delta['content'] = content_s
-        elif mirror_thinking_to_content:
-            delta['content'] = reasoning
+        if mirror_thinking_to_content:
+            # Copilot BYOK only renders delta.content; omit reasoning fields it may reject.
+            delta['content'] = content_s if content_s.strip() else reasoning
         else:
-            delta['content'] = ''
+            delta['reasoning'] = reasoning
+            delta['content'] = content_s if content_s.strip() else ''
     elif content is not None:
         delta['content'] = content_s
     else:
@@ -280,8 +324,6 @@ def _openai_chat_delta_from_native_message(
         converted = _native_tool_calls_to_openai(msg['tool_calls'])
         if converted:
             delta['tool_calls'] = converted
-            if not delta.get('content'):
-                delta['content'] = content_s
     return delta
 
 
@@ -297,11 +339,12 @@ def _openai_chat_chunk(
     *,
     finish_reason: str | None = None,
     usage: dict[str, Any] | None = None,
+    created: int | None = None,
 ) -> str:
     chunk: dict[str, Any] = {
         'id': completion_id,
         'object': 'chat.completion.chunk',
-        'created': _created_ts(),
+        'created': created if created is not None else _created_ts(),
         'model': model,
         'system_fingerprint': 'fp_ollama',
         'choices': [{
@@ -318,25 +361,55 @@ def _openai_chat_chunk(
 def _delta_has_substance(delta: dict[str, Any]) -> bool:
     if delta.get('tool_calls'):
         return True
-    if delta.get('reasoning') or delta.get('reasoning_content'):
+    if delta.get('reasoning'):
         return True
     content = delta.get('content')
-    return isinstance(content, str) and bool(content.strip())
+    return isinstance(content, str) and content != ''
+
+
+def _delta_content_char_len(delta: dict[str, Any]) -> int:
+    """Bytes VS Code/Copilot clients render from a streaming delta."""
+    content = delta.get('content')
+    return len(str(content)) if isinstance(content, str) else 0
+
+
+def _strip_reasoning_from_delta(delta: dict[str, Any]) -> dict[str, Any]:
+    """Copilot BYOK ignores ``delta.reasoning``; omit the field from outbound SSE."""
+    out = dict(delta)
+    out.pop('reasoning', None)
+    return out
+
+
+def _copilot_content_only_delta(content: str) -> dict[str, Any]:
+    """OpenAI-shaped delta with only fields Copilot BYOK renders."""
+    return {'role': 'assistant', 'content': content}
+
+
+# Max content length treated as a thinking bleed prefix (e.g. lone "I") during thinking phase.
+_COPILOT_BLEED_MAX_CHARS = 3
 
 
 def _truncate_delta_for_stream(delta: dict[str, Any], remaining: int) -> dict[str, Any]:
     """Trim delta text fields so streamed SSE stays under the IDE char budget."""
     if remaining <= 0:
-        return {'role': delta.get('role') or 'assistant', 'content': ''}
+        out = {'role': delta.get('role') or 'assistant', 'content': ''}
+        if 'reasoning' in delta:
+            out['reasoning'] = ''
+        if delta.get('tool_calls'):
+            out['tool_calls'] = delta['tool_calls']
+        return out
     out = dict(delta)
-    for key in ('content', 'reasoning', 'reasoning_content'):
-        val = out.get(key)
-        if isinstance(val, str) and len(val) > remaining:
-            out[key] = val[:remaining]
-            remaining = 0
-            break
-        if isinstance(val, str):
-            remaining -= len(val)
+    content = out.get('content')
+    if isinstance(content, str) and len(content) > remaining:
+        out['content'] = content[:remaining]
+        remaining = 0
+    elif isinstance(content, str):
+        remaining -= len(content)
+    reasoning = out.get('reasoning')
+    if remaining <= 0:
+        out.pop('reasoning', None)
+    elif isinstance(reasoning, str) and len(reasoning) > remaining:
+        out['reasoning'] = reasoning[:remaining]
     return out
 
 
@@ -347,18 +420,34 @@ def stream_native_chat_lines_to_openai_sse(
     completion_id: str | None = None,
     include_usage: bool = False,
     max_stream_chars: int | None = None,
+    mirror_thinking_to_content: bool = False,
+    omit_reasoning_deltas: bool = False,
+    agent_mode: bool = False,
+    stream_created: int | None = None,
 ) -> Iterator[str]:
-    """Convert NDJSON ``/api/chat`` stream lines to OpenAI SSE chunks."""
+    """Convert NDJSON ``/api/chat`` stream lines to OpenAI SSE chunks.
+
+    ``mirror_thinking_to_content`` maps native thinking tokens into ``delta.content``
+    so IDE clients (VS Code Copilot BYOK) that ignore ``delta.reasoning`` still render output.
+
+    ``omit_reasoning_deltas`` skips streaming ``delta.reasoning`` chunks (Copilot BYOK
+    ignores them). Thinking is flushed into ``delta.content`` on ``done`` when needed.
+
+    ``agent_mode`` preserves ``tool_calls`` SSE for Agent clients; thinking is not
+    flushed into ``content`` when the model returns tools instead of text.
+    """
     cid = completion_id or _completion_id()
+    created = stream_created if stream_created is not None else _created_ts()
     seen_tool_calls = False
     yielded_substance = False
     yielded_content = False
+    yielded_agent_turn = False
     last_native: dict[str, Any] | None = None
-    sent_role = False
     char_budget = max_stream_chars if max_stream_chars is not None else proxy_max_response_chars()
     streamed_chars = 0
     acc_content: list[str] = []
     acc_thinking: list[str] = []
+    in_thinking_phase = False
 
     for raw in line_iter:
         if not raw:
@@ -372,54 +461,100 @@ def stream_native_chat_lines_to_openai_sse(
         last_native = native
         msg = native.get('message') if isinstance(native.get('message'), dict) else {}
         reasoning = _assistant_reasoning_piece(msg)
+        content_piece = msg.get('content')
+        content_s = str(content_piece) if content_piece is not None else ''
         if reasoning:
             acc_thinking.append(reasoning)
-        content_piece = msg.get('content')
-        if content_piece is not None and str(content_piece):
-            acc_content.append(str(content_piece))
-            if str(content_piece).strip():
-                yielded_content = True
+            in_thinking_phase = True
+        if content_s:
+            acc_content.append(content_s)
 
-        delta = _openai_chat_delta_from_native_message(msg)
+        delta = _openai_chat_delta_from_native_message(
+            msg, mirror_thinking_to_content=mirror_thinking_to_content,
+        )
         if delta.get('tool_calls'):
             seen_tool_calls = True
-        if not sent_role and delta.get('role'):
-            yield _openai_chat_chunk(cid, model, {'role': delta['role']})
-            sent_role = True
-        if _delta_has_substance(delta) and streamed_chars < char_budget:
-            piece_len = sum(
-                len(str(delta.get(k) or ''))
-                for k in ('content', 'reasoning', 'reasoning_content')
-            )
-            if streamed_chars + piece_len > char_budget:
+            in_thinking_phase = False
+            if omit_reasoning_deltas:
+                delta = _strip_reasoning_from_delta(delta)
+            if delta.get('content') is None:
+                delta['content'] = ''
+            if _delta_has_substance(delta) and streamed_chars < char_budget:
+                yield _openai_chat_chunk(cid, model, delta, created=created)
+                yielded_substance = True
+                yielded_agent_turn = True
+                streamed_chars += _delta_content_char_len(delta)
+        elif omit_reasoning_deltas:
+            # Copilot BYOK renders delta.content only. Hold thinking tokens and defer
+            # short content that arrives during the thinking phase (often a lone "I").
+            if content_s and not reasoning:
+                joined = ''.join(acc_content).strip()
+                is_bleed = (
+                    in_thinking_phase
+                    and acc_thinking
+                    and len(content_s.strip()) <= _COPILOT_BLEED_MAX_CHARS
+                    and len(joined) <= _COPILOT_BLEED_MAX_CHARS
+                )
+                if not is_bleed:
+                    in_thinking_phase = False
+                    if streamed_chars < char_budget:
+                        out_delta = _copilot_content_only_delta(content_s)
+                        if streamed_chars + len(content_s) > char_budget:
+                            out_delta = _truncate_delta_for_stream(
+                                out_delta, char_budget - streamed_chars,
+                            )
+                        yield _openai_chat_chunk(cid, model, out_delta, created=created)
+                        yielded_substance = True
+                        if content_s.strip():
+                            yielded_content = True
+                        streamed_chars += _delta_content_char_len(out_delta)
+        elif _delta_has_substance(delta) and streamed_chars < char_budget:
+            content_len = _delta_content_char_len(delta)
+            if streamed_chars + content_len > char_budget:
                 delta = _truncate_delta_for_stream(delta, char_budget - streamed_chars)
-            yield _openai_chat_chunk(cid, model, delta)
+                content_len = _delta_content_char_len(delta)
+            yield _openai_chat_chunk(cid, model, delta, created=created)
             yielded_substance = True
-            streamed_chars += sum(
-                len(str(delta.get(k) or ''))
-                for k in ('content', 'reasoning', 'reasoning_content')
-            )
+            if content_len:
+                yielded_content = True
+            streamed_chars += content_len
         if native.get('done'):
-            if not yielded_content:
-                final_text = ''.join(acc_content).strip() or ''.join(acc_thinking).strip()
+            if not yielded_content and not seen_tool_calls:
+                final_text = ''.join(acc_content).strip()
+                if (
+                    omit_reasoning_deltas
+                    and final_text
+                    and len(final_text) <= _COPILOT_BLEED_MAX_CHARS
+                    and acc_thinking
+                ):
+                    final_text = ''
+                if not final_text and acc_thinking:
+                    final_text = ''.join(acc_thinking).strip()
                 if final_text and streamed_chars < char_budget:
-                    final_delta: dict[str, Any] = {
-                        'role': 'assistant',
-                        'content': final_text[: max(0, char_budget - streamed_chars)],
-                    }
-                    thinking_joined = ''.join(acc_thinking).strip()
-                    if thinking_joined:
-                        final_delta['reasoning'] = thinking_joined
-                        final_delta['reasoning_content'] = thinking_joined
-                    yield _openai_chat_chunk(cid, model, final_delta)
+                    final_delta = _copilot_content_only_delta(
+                        final_text[: max(0, char_budget - streamed_chars)],
+                    )
+                    yield _openai_chat_chunk(cid, model, final_delta, created=created)
                     yielded_substance = True
                     yielded_content = True
+            elif seen_tool_calls and not yielded_agent_turn:
+                final_delta = _openai_chat_delta_from_native_message(
+                    msg, mirror_thinking_to_content=False,
+                )
+                if omit_reasoning_deltas:
+                    final_delta = _strip_reasoning_from_delta(final_delta)
+                if final_delta.get('content') is None:
+                    final_delta['content'] = ''
+                if final_delta.get('tool_calls'):
+                    yield _openai_chat_chunk(cid, model, final_delta, created=created)
+                    yielded_substance = True
+                    yielded_agent_turn = True
             elif not yielded_substance:
                 final_delta = _openai_chat_delta_from_native_message(
-                    msg, mirror_thinking_to_content=True,
+                    msg, mirror_thinking_to_content=mirror_thinking_to_content or True,
                 )
                 if _delta_has_substance(final_delta):
-                    yield _openai_chat_chunk(cid, model, final_delta)
+                    yield _openai_chat_chunk(cid, model, final_delta, created=created)
                     yielded_substance = True
             finish = 'tool_calls' if seen_tool_calls else 'stop'
             usage = None
@@ -435,22 +570,23 @@ def stream_native_chat_lines_to_openai_sse(
                     usage['total_tokens'] = prompt + completion
             yield _openai_chat_chunk(
                 cid, model, _openai_chat_finish_delta(), finish_reason=finish, usage=usage,
+                created=created,
             )
 
     if last_native is None:
-        yield _openai_chat_chunk(cid, model, _openai_chat_finish_delta())
+        yield _openai_chat_chunk(cid, model, _openai_chat_finish_delta(), created=created)
         yield _openai_chat_chunk(
-            cid, model, _openai_chat_finish_delta(), finish_reason='stop',
+            cid, model, _openai_chat_finish_delta(), finish_reason='stop', created=created,
         )
     elif not yielded_substance:
         msg = last_native.get('message') if isinstance(last_native.get('message'), dict) else {}
         final_delta = _openai_chat_delta_from_native_message(
-            msg, mirror_thinking_to_content=True,
+            msg, mirror_thinking_to_content=mirror_thinking_to_content or True,
         )
         if _delta_has_substance(final_delta):
-            yield _openai_chat_chunk(cid, model, final_delta)
+            yield _openai_chat_chunk(cid, model, final_delta, created=created)
         yield _openai_chat_chunk(
-            cid, model, _openai_chat_finish_delta(), finish_reason='stop',
+            cid, model, _openai_chat_finish_delta(), finish_reason='stop', created=created,
         )
     yield 'data: [DONE]\n\n'
 

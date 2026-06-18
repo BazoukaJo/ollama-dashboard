@@ -46,10 +46,10 @@
     <div class="model-title">
         <span class="model-title-display" title="{{ name|e }}" aria-label="{{ name|e }}">
             <span class="model-title-stack">
+                <span class="model-title-name-line">
                 {%- if path_prefix -%}
                 <span class="model-title-scope-row"><span class="model-title-scope">{{ path_prefix|e }}</span></span>
                 {%- endif -%}
-                <span class="model-title-name-line">
                     {%- if mtag -%}
                     <span class="model-title-name-core">
                         <span class="model-title-base">{{ short_stem|e }}</span><span class="model-title-colon" aria-hidden="true">:</span><span class="model-title-tag">{{ mtag|e }}</span>
@@ -387,14 +387,14 @@
                             </div>
                             <div class="d-flex align-items-center dashboard-inline-gap-lg models-mgmt-toolbar-secondary">
                                 <div class="capability-filters d-flex align-items-center gap-1" id="availableModelsFilters">
-                                    <span class="text-muted small me-2" data-dashboard-tooltip="Click an icon to hide models that lack that capability (per Ollama metadata). Active = filter on.">Filters</span>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" data-dashboard-tooltip="Filter by reasoning / thinking support (metadata)." title="Toggle reasoning models" aria-label="Toggle reasoning models" onclick="toggleCapabilityFilter('reasoning')">
+                                    <span class="text-muted small me-2" data-dashboard-tooltip="Click to show only models with that capability (Ollama metadata). Highlighted = filter on; multiple filters combine (must match all).">Filters</span>
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn" data-capability="reasoning" data-dashboard-tooltip="Show only models with reasoning / thinking support." title="Filter reasoning models" aria-label="Filter reasoning models" aria-pressed="false" onclick="toggleCapabilityFilter('reasoning')">
                                         <i class="fas fa-brain"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" data-dashboard-tooltip="Filter by image / vision support (metadata)." title="Toggle vision models" aria-label="Toggle vision models" onclick="toggleCapabilityFilter('vision')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn" data-capability="vision" data-dashboard-tooltip="Show only models with image / vision support." title="Filter vision models" aria-label="Filter vision models" aria-pressed="false" onclick="toggleCapabilityFilter('vision')">
                                         <i class="fas fa-image"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" data-dashboard-tooltip="Filter by tool or function-calling support (metadata)." title="Toggle tool-enabled models" aria-label="Toggle tool-enabled models" onclick="toggleCapabilityFilter('tools')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn" data-capability="tools" data-dashboard-tooltip="Show only models with tool or function-calling support." title="Filter tool-enabled models" aria-label="Filter tool-enabled models" aria-pressed="false" onclick="toggleCapabilityFilter('tools')">
                                         <i class="fas fa-tools"></i>
                                     </button>
                                 </div>
@@ -541,14 +541,14 @@
                             </div>
                             <div class="d-flex align-items-center dashboard-inline-gap-lg models-mgmt-toolbar-secondary">
                                 <div class="capability-filters d-flex align-items-center gap-1" id="bestModelsFilters">
-                                    <span class="text-muted small me-2" data-dashboard-tooltip="Same as Available: filter the list by capability flags in model metadata.">Filters</span>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="reasoning" data-dashboard-tooltip="Filter by reasoning / thinking support (metadata)." title="Toggle reasoning models" aria-label="Toggle reasoning models" onclick="toggleCapabilityFilter('reasoning')">
+                                    <span class="text-muted small me-2" data-dashboard-tooltip="Same as Available: click to show only models with that capability; highlighted filters combine (must match all).">Filters</span>
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn" data-capability="reasoning" data-dashboard-tooltip="Show only models with reasoning / thinking support." title="Filter reasoning models" aria-label="Filter reasoning models" aria-pressed="false" onclick="toggleCapabilityFilter('reasoning')">
                                         <i class="fas fa-brain"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="vision" data-dashboard-tooltip="Filter by image / vision support (metadata)." title="Toggle vision models" aria-label="Toggle vision models" onclick="toggleCapabilityFilter('vision')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn" data-capability="vision" data-dashboard-tooltip="Show only models with image / vision support." title="Filter vision models" aria-label="Filter vision models" aria-pressed="false" onclick="toggleCapabilityFilter('vision')">
                                         <i class="fas fa-image"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-outline-secondary filter-btn active" data-capability="tools" data-dashboard-tooltip="Filter by tool or function-calling support (metadata)." title="Toggle tool-enabled models" aria-label="Toggle tool-enabled models" onclick="toggleCapabilityFilter('tools')">
+                                    <button class="btn btn-sm btn-outline-secondary filter-btn" data-capability="tools" data-dashboard-tooltip="Show only models with tool or function-calling support." title="Filter tool-enabled models" aria-label="Filter tool-enabled models" aria-pressed="false" onclick="toggleCapabilityFilter('tools')">
                                         <i class="fas fa-tools"></i>
                                     </button>
                                 </div>

@@ -1687,8 +1687,7 @@ function updateRunningModelsDisplay(models) {
   afterModelCardsRendered();
   // Running models must stay visible: capability filters only apply to catalog lists.
   runningModelsContainer.querySelectorAll(".model-card").forEach((card) => {
-    const column = card.closest(".model-cards-row .col, .col-12");
-    if (column) column.style.display = "";
+    setModelCardVisible(card, true);
   });
 }
 
@@ -1871,6 +1870,7 @@ function updateAvailableModelsDisplay(models) {
     applyCapabilityFilters("availableModelsContainer");
     afterModelCardsRendered();
     restoreAllDownloadUi();
+    applyCapabilityFilters("availableModelsContainer");
     return;
   }
 
@@ -1914,6 +1914,7 @@ function updateAvailableModelsDisplay(models) {
     applyCapabilityFilters("availableModelsContainer");
     afterModelCardsRendered();
     restoreAllDownloadUi();
+    applyCapabilityFilters("availableModelsContainer");
   } catch (err) {
     console.log("Failed to update capability icons for available models", err);
   }
@@ -2158,6 +2159,10 @@ document.addEventListener("DOMContentLoaded", function () {
   const savedDownloadableCollapsed =
     localStorage.getItem(DOWNLOADABLE_SECTION_COLLAPSED_KEY) === "true";
   toggleDownloadableSection(savedDownloadableCollapsed);
+
+  ["availableModelsContainer", "downloadableModelsContainer"].forEach((id) =>
+    applyCapabilityFilters(id),
+  );
 });
 
 function ensureAvailableCardForDownload(modelName) {
@@ -2197,6 +2202,7 @@ function ensureAvailableCardForDownload(modelName) {
       countEl.textContent = String(n);
     }
     afterModelCardsRendered();
+    applyCapabilityFilters("availableModelsContainer");
   }
   return card;
 }
@@ -2387,12 +2393,79 @@ async function pullModel(modelName) {
 }
 
 // Capability filtering logic
+function modelCardColumn(card) {
+  if (!card) return null;
+  const parent = card.parentElement;
+  if (parent && parent.classList.contains("col")) return parent;
+  return card.closest(".col");
+}
+
+function setModelCardVisible(card, visible) {
+  const column = modelCardColumn(card);
+  if (column) column.style.display = visible ? "" : "none";
+}
+
+function isDownloadActiveCard(card) {
+  if (!card) return false;
+  if (card.dataset.downloadActive === "true") return true;
+  const name = (card.dataset.modelName || "").trim();
+  if (!name || typeof getActiveDownloads !== "function") return false;
+  return Object.prototype.hasOwnProperty.call(getActiveDownloads(), name);
+}
+
+function capabilityFlagsFromCard(card) {
+  const caps = card.querySelectorAll(".capability-icon");
+  if (caps.length >= 3) {
+    return {
+      hasReasoning: caps[0].classList.contains("enabled"),
+      hasVision: caps[1].classList.contains("enabled"),
+      hasTools: caps[2].classList.contains("enabled"),
+      reasoningKnown:
+        caps[0].classList.contains("enabled") ||
+        caps[0].classList.contains("disabled"),
+      visionKnown:
+        caps[1].classList.contains("enabled") ||
+        caps[1].classList.contains("disabled"),
+      toolsKnown:
+        caps[2].classList.contains("enabled") ||
+        caps[2].classList.contains("disabled"),
+    };
+  }
+  const reasoning = card.dataset.hasReasoning;
+  const vision = card.dataset.hasVision;
+  const tools = card.dataset.hasTools;
+  return {
+    hasReasoning: reasoning === "true",
+    hasVision: vision === "true",
+    hasTools: tools === "true",
+    reasoningKnown: reasoning === "true" || reasoning === "false",
+    visionKnown: vision === "true" || vision === "false",
+    toolsKnown: tools === "true" || tools === "false",
+  };
+}
+
+function filterButtonsForContainer(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return null;
+  const shell = container.closest(".models-section-shell");
+  const bar =
+    shell?.querySelector(".capability-filters") ||
+    document.querySelector("#availableModelsFilters, #bestModelsFilters");
+  if (!bar) return null;
+  return {
+    reasoning: bar.querySelector('.filter-btn[data-capability="reasoning"]'),
+    vision: bar.querySelector('.filter-btn[data-capability="vision"]'),
+    tools: bar.querySelector('.filter-btn[data-capability="tools"]'),
+  };
+}
+
 function toggleCapabilityFilter(capability) {
   const filterBtns = document.querySelectorAll(
     `.filter-btn[data-capability="${capability}"]`,
   );
   filterBtns.forEach((btn) => {
     btn.classList.toggle("active");
+    btn.setAttribute("aria-pressed", btn.classList.contains("active") ? "true" : "false");
   });
 
   ["availableModelsContainer", "downloadableModelsContainer"].forEach((id) =>
@@ -2401,70 +2474,73 @@ function toggleCapabilityFilter(capability) {
   const runC = document.getElementById("runningModelsContainer");
   if (runC) {
     runC.querySelectorAll(".model-card").forEach((card) => {
-      const column = card.closest(".model-cards-row .col, .col-12");
-      if (column) column.style.display = "";
+      setModelCardVisible(card, true);
     });
   }
+}
+
+function syncModelSectionCount(containerId, countElementId) {
+  const container = document.getElementById(containerId);
+  const countEl = document.getElementById(countElementId);
+  if (!container || !countEl) return;
+  const cards = container.querySelectorAll(".model-card[data-model-name]");
+  const total = cards.length;
+  let visible = 0;
+  cards.forEach((card) => {
+    const column = modelCardColumn(card);
+    if (!column || column.style.display !== "none") visible += 1;
+  });
+  countEl.textContent = visible === total ? String(total) : `${visible}/${total}`;
 }
 
 function applyCapabilityFilters(containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  // Use the state of any visible filter button (only one section shows filters)
-  const firstReasoningBtn = document.querySelector(
-    `.filter-btn[data-capability="reasoning"]`,
-  );
-  const firstVisionBtn = document.querySelector(
-    `.filter-btn[data-capability="vision"]`,
-  );
-  const firstToolsBtn = document.querySelector(
-    `.filter-btn[data-capability="tools"]`,
-  );
-
+  const buttons = filterButtonsForContainer(containerId);
   const reasoningRequired =
-    firstReasoningBtn?.classList.contains("active") ?? false;
-  const visionRequired = firstVisionBtn?.classList.contains("active") ?? false;
-  const toolsRequired = firstToolsBtn?.classList.contains("active") ?? false;
+    buttons?.reasoning?.classList.contains("active") ?? false;
+  const visionRequired =
+    buttons?.vision?.classList.contains("active") ?? false;
+  const toolsRequired =
+    buttons?.tools?.classList.contains("active") ?? false;
 
-  // If no capabilities are required OR all are required, show all models
-  // This preserves the previous behavior where the default "all active"
-  // state does not hide any models.
-  if (
-    (!reasoningRequired && !visionRequired && !toolsRequired) ||
-    (reasoningRequired && visionRequired && toolsRequired)
-  ) {
-    const cards = container.querySelectorAll(".model-card");
-    cards.forEach((card) => {
-      const column = card.closest(".model-cards-row .col, .col-12");
-      if (column) column.style.display = "";
-    });
+  const cards = container.querySelectorAll(".model-card");
+
+  // No active filters → show every card.
+  if (!reasoningRequired && !visionRequired && !toolsRequired) {
+    cards.forEach((card) => setModelCardVisible(card, true));
+    if (containerId === "availableModelsContainer") {
+      syncModelSectionCount("availableModelsContainer", "availableModelsCount");
+    }
     return;
   }
 
-  // Otherwise, filter by selected capabilities
-  const cards = container.querySelectorAll(".model-card");
+  // Active filters combine with AND: model must satisfy every selected capability.
   cards.forEach((card) => {
-    const caps = card.querySelectorAll(".capability-icon");
-    if (caps.length >= 3) {
-      const hasReasoning = caps[0].classList.contains("enabled");
-      const hasVision = caps[1].classList.contains("enabled");
-      const hasTools = caps[2].classList.contains("enabled");
-
-      // Show models that have at least one of the selected capabilities.
-      // This is easier to understand than strict "must have all" logic.
-      let matches = false;
-      if (reasoningRequired && hasReasoning) matches = true;
-      if (visionRequired && hasVision) matches = true;
-      if (toolsRequired && hasTools) matches = true;
-
-      const column = card.closest(".model-cards-row .col, .col-12");
-      if (column) {
-        column.style.display = matches ? "" : "none";
-      }
+    if (isDownloadActiveCard(card)) {
+      setModelCardVisible(card, true);
+      return;
     }
+    const flags = capabilityFlagsFromCard(card);
+    let matches = true;
+    if (reasoningRequired) {
+      if (flags.reasoningKnown && !flags.hasReasoning) matches = false;
+    }
+    if (visionRequired) {
+      if (flags.visionKnown && !flags.hasVision) matches = false;
+    }
+    if (toolsRequired) {
+      if (flags.toolsKnown && !flags.hasTools) matches = false;
+    }
+    setModelCardVisible(card, matches);
   });
+
+  if (containerId === "availableModelsContainer") {
+    syncModelSectionCount("availableModelsContainer", "availableModelsCount");
+  }
 }
 
 // Global exposure
 window.toggleCapabilityFilter = toggleCapabilityFilter;
+window.applyCapabilityFilters = applyCapabilityFilters;

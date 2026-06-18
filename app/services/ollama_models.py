@@ -239,11 +239,17 @@ class OllamaServiceModels:
 
     def get_available_models(self, force_refresh=False):
         """Get list of available models from the Ollama server."""
+        if getattr(self, '_building_available_models_depth', 0) > 0:
+            cached = self._get_cached('available_models', ttl_seconds=10)
+            return cached if cached is not None else []
         if not force_refresh:
             cached = self._get_cached('available_models', ttl_seconds=10)
             if cached is not None:
                 return cached
         try:
+            self._building_available_models_depth = (
+                getattr(self, '_building_available_models_depth', 0) + 1
+            )
             host, port = self._ollama_core.get_ollama_host_port()
             tags_url = f"http://{host}:{port}/api/tags"
             response = self._session.get(tags_url, timeout=10)
@@ -293,6 +299,8 @@ class OllamaServiceModels:
                                 self._set_cached(f"show:{name}", (ctx, caps_list))
                         except HTTP_SERVICE_ERRORS:
                             pass
+            except concurrent.futures.TimeoutError:
+                pass
             except HTTP_SERVICE_ERRORS:
                 pass
 
@@ -321,6 +329,9 @@ class OllamaServiceModels:
         except HTTP_SERVICE_ERRORS as exc:
             self.logger.debug("Error fetching available models: %s", exc)
             return []
+        finally:
+            depth = getattr(self, '_building_available_models_depth', 0)
+            self._building_available_models_depth = max(0, depth - 1)
 
     def get_running_models(self, force_refresh=False):
         """Get list of currently running models.
@@ -433,6 +444,9 @@ class OllamaServiceModels:
     def get_model_info_cached(self, model_name):
         """Get cached model info from running or available models."""
         try:
+            if getattr(self, '_building_available_models_depth', 0) > 0:
+                detailed = self.get_detailed_model_info(model_name)
+                return detailed if isinstance(detailed, dict) else None
             running_models = self.get_running_models()
             for model in running_models:
                 if model.get('name') == model_name:

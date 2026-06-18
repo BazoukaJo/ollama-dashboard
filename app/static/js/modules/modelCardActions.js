@@ -154,6 +154,9 @@
 
   function enhanceAllModelCards() {
     document.querySelectorAll(".model-card[data-model-name]").forEach(appendMoreMenuToCard);
+    if (window.modelCards && typeof window.modelCards.setupAllTitleMarquees === "function") {
+      window.modelCards.setupAllTitleMarquees();
+    }
   }
 
   function decodeModel(el) {

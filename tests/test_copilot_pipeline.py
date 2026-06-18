@@ -72,7 +72,20 @@ def test_pipeline_caps_output_for_external_clients():
         'client': {'context_trim_enabled': False},
     }
     merged, meta = prepare_copilot_payload(payload, entry)
-    assert merged['options']['num_predict'] == 4096
-    assert merged['max_tokens'] == 4096
+    assert merged['options']['num_predict'] == 16384
+    assert merged['max_tokens'] == 16384
     assert 'parallel_tool_calls' not in merged
-    assert meta.get('client_compat', {}).get('num_predict_capped') == 4096
+    assert meta.get('client_compat', {}).get('num_predict_capped') == 16384
+
+
+def test_pipeline_forwards_tools_for_agent_mode():
+    payload = {
+        'model': 'gemma4:latest',
+        'messages': [{'role': 'user', 'content': 'hi'}],
+        'tools': [{'type': 'function', 'function': {'name': 'run_in_terminal', 'parameters': {}}}],
+        'tool_choice': 'auto',
+    }
+    merged, meta = prepare_copilot_payload(payload, {'settings': {'num_ctx': 8192}})
+    assert merged['tools'] == payload['tools']
+    assert merged['tool_choice'] == 'auto'
+    assert meta.get('agent_tools') is True

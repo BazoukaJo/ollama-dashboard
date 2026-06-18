@@ -92,7 +92,7 @@ def log_copilot_request(
                 k: pipeline[k]
                 for k in (
                     'routed_model', 'route_reason', 'system_prompt_injected',
-                    'context_trim', 'num_ctx', 'rag',
+                    'context_trim', 'num_ctx', 'rag', 'native_think', 'agent_tools',
                 )
                 if k in pipeline
             }
@@ -114,6 +114,9 @@ def _fetch_ps_models(ollama_base_url: str) -> list[dict]:
         body = response.json()
     except requests.RequestException as err:
         logger.debug('Could not read /api/ps: %s', err)
+        return []
+    except ValueError as err:
+        logger.debug('Invalid JSON from /api/ps: %s', err)
         return []
     models = body.get('models') if isinstance(body, dict) else None
     if not isinstance(models, list):
@@ -171,17 +174,25 @@ def ensure_model_context(ollama_base_url: str, model_name: str, options: dict[st
         return
     base = ollama_base_url.rstrip('/')
     try:
-        requests.post(
+        resp = requests.post(
             f'{base}/api/chat',
             json={
                 'model': model_name,
                 'messages': [{'role': 'user', 'content': 'hi'}],
                 'stream': False,
+                'think': False,
                 'keep_alive': '5m',
                 'options': dict(options),
             },
             timeout=120,
         )
+        if resp.status_code != 200:
+            err_snippet = (resp.text or resp.reason or 'unknown error')[:500]
+            logger.warning(
+                'Context preload for %s returned HTTP %s: %s',
+                model_name, resp.status_code, err_snippet,
+            )
+            return
         logger.info(
             'Preloaded %s with num_ctx=%s before first Copilot v1 request',
             model_name, want_ctx,

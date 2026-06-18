@@ -26,12 +26,37 @@ def test_sanitize_strips_unsupported_openai_fields():
     assert 'user' not in out
 
 
+def test_sanitize_strips_reasoning_effort_and_think():
+    """Copilot BYOK sends reasoning_effort/think — must not reach Ollama (re-enables thinking)."""
+    payload = {
+        'model': 'gemma4:latest',
+        'messages': [{'role': 'user', 'content': 'hi'}],
+        'reasoning_effort': 'medium',
+        'effort': 'high',
+        'think': True,
+        'reasoning': {'effort': 'low'},
+    }
+    out, meta = sanitize_v1_chat_payload(payload)
+    assert 'reasoning_effort' not in out
+    assert 'effort' not in out
+    assert 'think' not in out
+    assert 'reasoning' not in out
+    assert 'reasoning_effort' in meta.get('stripped_fields', [])
+
+
 def test_cap_num_predict_limits_client_and_dashboard():
     payload = {'max_tokens': 32000, 'options': {}}
     capped, meta = cap_num_predict(payload, {'num_predict': 8192})
-    assert capped['max_tokens'] == 4096
-    assert capped['options']['num_predict'] == 4096
-    assert meta['num_predict_ceiling'] == 4096
+    assert capped['max_tokens'] == 16384
+    assert capped['options']['num_predict'] == 16384
+    assert meta['num_predict_ceiling'] == 16384
+
+
+def test_cap_num_predict_uses_saved_without_client_request():
+    payload = {'options': {}}
+    capped, meta = cap_num_predict(payload, {'num_predict': 8192})
+    assert capped['options']['num_predict'] == 8192
+    assert meta['num_predict_ceiling'] == 8192
 
 
 def test_cap_num_predict_respects_lower_saved_value():
@@ -48,9 +73,9 @@ def test_prepare_external_v1_payload_sanitizes_and_caps():
         'metadata': {'trace': '1'},
     }
     out, meta = prepare_external_v1_payload(payload, None)
-    assert out['max_tokens'] == 4096
+    assert out['max_tokens'] == 16384
     assert 'metadata' not in out
-    assert meta['num_predict_capped'] == 4096
+    assert meta['num_predict_capped'] == 16384
 
 
 def test_sanitize_converts_multimodal_content_to_ollama_format():
@@ -133,6 +158,25 @@ def test_sanitize_assistant_tool_calls_get_empty_content():
     assert msg['role'] == 'assistant'
     assert msg['content'] == ''
     assert msg['tool_calls']
+
+
+def test_sanitize_agent_tool_calls_without_content_key():
+    """Agent-mode assistant turns may omit content when only tool_calls are present."""
+    payload = {
+        'model': 'qwen3:14b',
+        'messages': [{
+            'role': 'assistant',
+            'tool_calls': [{
+                'id': 'call_1',
+                'type': 'function',
+                'function': {'name': 'grep', 'arguments': '{"pattern":"foo"}'},
+            }],
+        }],
+    }
+    out, _meta = sanitize_v1_chat_payload(payload)
+    msg = out['messages'][0]
+    assert msg['content'] == ''
+    assert msg['tool_calls'][0]['function']['arguments'] == {'pattern': 'foo'}
 
 
 def test_sanitize_copilot_input_text_and_input_image():

@@ -158,14 +158,17 @@ def merge_model_info_for_recommendation(service, model_name, hint=None):
     merged = {}
     if isinstance(hint, dict):
         merged.update(hint)
-    try:
-        cached = service.get_model_info_cached(name)
-    except SERVICE_ERRORS:
-        cached = None
-    if isinstance(cached, dict):
-        merged = {**cached, **merged, "name": name}
-    else:
+    if getattr(service, '_building_available_models_depth', 0) > 0:
         merged.setdefault("name", name)
+    else:
+        try:
+            cached = service.get_model_info_cached(name)
+        except SERVICE_ERRORS:
+            cached = None
+        if isinstance(cached, dict):
+            merged = {**cached, **merged, "name": name}
+        else:
+            merged.setdefault("name", name)
     try:
         detailed = service.get_detailed_model_info(name)
     except SERVICE_ERRORS:
@@ -229,13 +232,17 @@ def normalize_setting_value(key, value, default_val):
 def ensure_model_settings_exists(service, model_info):
     try:
         model_name = model_info.get('name') if isinstance(model_info, dict) else str(model_info)
+        canon_key = normalize_model_settings_key(model_name)
+        if not canon_key:
+            return None
         with service._model_settings_lock:
             if not service._model_settings:
                 service._model_settings = load_model_settings(service) or {}
-            if model_name in service._model_settings:
-                return service._model_settings[model_name]
+            existing = lookup_settings_entry(service._model_settings, canon_key)
+            if existing is not None:
+                return existing
 
-        merged = merge_model_info_for_recommendation(service, model_name, model_info)
+        merged = merge_model_info_for_recommendation(service, canon_key, model_info)
         recommended = service._recommend_settings_for_model(merged)
         entry = {
             'settings': recommended,
@@ -243,7 +250,7 @@ def ensure_model_settings_exists(service, model_info):
             'last_updated': datetime.now(timezone.utc).isoformat()
         }
         with service._model_settings_lock:
-            service._model_settings[model_name] = entry
+            service._model_settings[canon_key] = entry
             write_model_settings_file(service, service._model_settings)
         return entry
     except SERVICE_ERRORS as e:
@@ -252,13 +259,17 @@ def ensure_model_settings_exists(service, model_info):
 
 def get_model_settings_with_fallback_entry(service, model_name):
     try:
+        canon_key = normalize_model_settings_key(model_name)
+        if not canon_key:
+            raise ValueError('model name required')
         with service._model_settings_lock:
             if not service._model_settings:
                 service._model_settings = load_model_settings(service) or {}
-            if model_name in service._model_settings:
-                return service._model_settings[model_name]
+            existing = lookup_settings_entry(service._model_settings, canon_key)
+            if existing is not None:
+                return existing
 
-        merged = merge_model_info_for_recommendation(service, model_name, None)
+        merged = merge_model_info_for_recommendation(service, canon_key, None)
         recommended = service._recommend_settings_for_model(merged)
         entry = {
             'settings': recommended,
@@ -266,7 +277,7 @@ def get_model_settings_with_fallback_entry(service, model_name):
             'last_updated': datetime.now(timezone.utc).isoformat()
         }
         with service._model_settings_lock:
-            service._model_settings[model_name] = entry
+            service._model_settings[canon_key] = entry
             write_model_settings_file(service, service._model_settings)
         return entry
     except SERVICE_ERRORS as e:

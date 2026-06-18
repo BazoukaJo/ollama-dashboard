@@ -206,6 +206,110 @@ restart_app.bat
 http://127.0.0.1:5000/ollama/copilot-debug
 ```
 
+## VS Code Copilot: reply is only the letter "I"
+
+Symptoms:
+
+- Copilot shows a single **`I`** (or another lone first token) instead of a full answer
+- Other clients (dashboard chat, curl) get a normal response from the same model
+
+**Cause:** VS Code Copilot sends **`reasoning_effort`** on most requests. That re-enabled
+**thinking** on models like `gemma4`, which stream long internal reasoning before the real
+answer. Copilot BYOK only renders **`delta.content`**, not **`delta.reasoning`**. When
+thinking was mirrored into content, users often saw only the first thinking token (`I` from
+"I need to…").
+
+**Fix (dashboard proxy):**
+
+1. **Restart the dashboard** after upgrading (`restart_app.bat`).
+2. The proxy **strips `reasoning_effort`**, forces **`think: false`**, and **never sends
+   `delta.reasoning`** to Copilot — only answer text in `delta.content`.
+3. Start a **new Copilot chat** and retry.
+4. Check **`http://127.0.0.1:5000/ollama/copilot-debug`** — recent chat entries should show
+   `"native_think": false` in the pipeline metadata.
+
+Optional: set `OLLAMA_COPILOT_ALLOW_THINKING=true` before starting the dashboard if you
+explicitly want thinking models for Copilot (most users should leave this off).
+
+See also [GUIDE.md — VS Code Copilot](GUIDE.md#vs-code-copilot-ollama).
+
+## VS Code Copilot: "Sorry, no response was returned"
+
+Symptoms:
+
+- Copilot shows **Sorry, no response was returned** with no answer text
+- `copilot-debug` shows `has_tools: true` on the request
+
+**Cause:** Copilot **Agent mode** sends **`tools`** on every request. Tool-capable models often
+reply with **`tool_calls` and empty `content`**. If the proxy does not stream those tool calls
+in OpenAI SSE shape (`role`, empty `content`, stringified `arguments`), Copilot treats the turn
+as empty. Older proxy builds also flushed buffered thinking into `content` on tool-call turns,
+which corrupted agent responses.
+
+**Fix (dashboard proxy):**
+
+1. **Restart the dashboard** (`restart_app.bat`).
+2. The proxy **forwards `tools` / `tool_choice`** to native `/api/chat` for Agent mode.
+3. Use a **tool-capable model** (for example Qwen3, Llama 3.1+, or other models Ollama lists
+   with tool support).
+4. Check **`copilot-debug`** — agent requests should show `"agent_tools": true` in pipeline
+   metadata when Copilot sent tools.
+
+If the model returns tool calls but Copilot still shows no text, confirm the model actually
+supports tools in Ollama and that VS Code Agent mode is enabled. Some models answer in plain
+text even when tools are offered; others return tools only — both paths are supported by the
+proxy.
+
+## VS Code Copilot: request timeout or model won't load
+
+Symptoms:
+
+- Copilot chat fails with a generic error or stops responding before the model answers
+- Model picker shows the model but the first message never completes
+- Large models (for example `gemma4:26b` with high `num_ctx`) fail on cold start while smaller models work
+
+**VS Code has no user-configurable timeout for Ollama BYOK.** The only documented Copilot
+setting for local Ollama is the endpoint URL:
+
+```json
+"github.copilot.chat.byok.ollamaEndpoint": "http://127.0.0.1:5000/ollama"
+```
+
+Open it via **File → Preferences → Settings**, search **“ollama endpoint”**, or run
+**Preferences: Open User Settings (JSON)** (`Ctrl+Shift+P`). Microsoft's
+[Copilot settings reference](https://code.visualstudio.com/docs/copilot/reference/copilot-settings)
+does not list a timeout for Ollama BYOK or for the newer **Custom Endpoint** provider
+(**Chat: Manage Language Models**). Request timeouts are built into the Copilot extension
+and cannot be changed in `settings.json` today.
+
+**Unrelated setting:** `chat.tools.terminal.enforceTimeoutFromModel` only affects **terminal
+commands** in Agent mode, not LLM chat request timeouts.
+
+**Dashboard proxy timeouts (server-side only)** — these control how long the dashboard waits
+for Ollama, not how long VS Code waits on the client:
+
+| Timeout | Seconds | Used for |
+|---------|---------|----------|
+| Connect | 30 | Upstream TCP connect |
+| Inference (chat) | 120 | Non-streaming `/api/chat` and bridged v1 chat |
+| Vision inference | 300 | Multimodal requests with images |
+| Stream read | 3600 | Open SSE streams from Ollama |
+| Default | 30 | Tags, show, and other short API calls |
+
+Defined in `app/routes/proxy.py`. Raising these helps slow Ollama responses reach the proxy;
+they do **not** extend VS Code's client-side wait.
+
+**Workarounds:**
+
+1. **Pre-start the model** in the dashboard (**Start** on the model card) before sending a
+   Copilot message — cold loads can take minutes for large models.
+2. Use a **smaller or faster model** for Copilot (for example `gemma4:latest` instead of
+   `gemma4:26b`).
+3. Check **`http://127.0.0.1:5000/ollama/copilot-debug`** or `data/copilot_proxy.log` to see
+   whether VS Code disconnected before Ollama finished loading.
+
+See also [GUIDE.md — VS Code Copilot](GUIDE.md#vs-code-copilot-ollama).
+
 ## Dashboard won't start or stop (Windows, port 5000)
 
 | Symptom | What to do |

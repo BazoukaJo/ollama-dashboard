@@ -306,6 +306,7 @@ def test_v1_chat_completions_bridges_to_native_api_chat(tmp_path, monkeypatch):
             'stream': True,
             'parallel_tool_calls': True,
             'max_completion_tokens': 50000,
+            'reasoning_effort': 'medium',
         })
         resp.get_data()
 
@@ -313,7 +314,67 @@ def test_v1_chat_completions_bridges_to_native_api_chat(tmp_path, monkeypatch):
     assert captured['url'] == 'http://localhost:11434/api/chat'
     assert captured['json']['options']['temperature'] == 0.55
     assert captured['json']['options']['num_ctx'] == 16384
-    assert captured['json']['options']['num_predict'] == 4096
+    assert captured['json']['options']['num_predict'] == 16384
+    assert captured['json']['think'] is False
+    assert 'reasoning_effort' not in captured['json']
+    assert 'tools' not in captured['json']
+
+
+def test_native_api_chat_preserves_client_think(tmp_path, monkeypatch):
+    """Native /ollama/api/chat must not force think:false — non-Copilot clients use it."""
+    app = _create_app_for_proxy_tests(tmp_path, monkeypatch, model_name='qwen3:14b', settings={})
+    client = app.test_client()
+    captured = {}
+
+    def fake_post(url, json=None, **kwargs):
+        captured['json'] = json
+        return FakeUpstream()
+
+    with patch('requests.post', side_effect=fake_post):
+        resp = client.post('/ollama/api/chat', json={
+            'model': 'qwen3:14b',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            'think': True,
+            'stream': True,
+        })
+        resp.get_data()
+
+    assert resp.status_code == 200
+    assert captured['json']['think'] is True
+
+
+def test_v1_chat_non_stream_returns_openai_completion_shape(tmp_path, monkeypatch):
+    """Non-streaming Copilot BYOK gets chat.completion JSON, not raw Ollama NDJSON."""
+    app = _create_app_for_proxy_tests(tmp_path, monkeypatch, model_name='ns-test', settings={})
+    client = app.test_client()
+
+    class Resp:
+        status_code = 200
+        content = b'{}'
+        headers = {'Content-Type': 'application/json'}
+
+        def json(self):
+            return {
+                'model': 'ns-test',
+                'message': {'role': 'assistant', 'content': 'Hello from Ollama'},
+                'done': True,
+                'prompt_eval_count': 12,
+                'eval_count': 4,
+            }
+
+    with patch('requests.post', return_value=Resp()), \
+         patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()):
+        resp = client.post('/ollama/v1/chat/completions', json={
+            'model': 'ns-test',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            'stream': False,
+        })
+
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body['object'] == 'chat.completion'
+    assert body['choices'][0]['message']['content'] == 'Hello from Ollama'
+    assert body['usage']['total_tokens'] == 16
 
 
 def test_v1_chat_non_stream_truncates_huge_response(tmp_path, monkeypatch):
@@ -375,8 +436,32 @@ def test_v1_chat_stream_upstream_error_returns_sse(tmp_path, monkeypatch):
 
     assert resp.status_code == 503
     assert 'text/event-stream' in (resp.headers.get('Content-Type') or '')
-    assert 'model not found' in body
-    assert 'data: [DONE]' in body
+    assert resp.headers.get('Connection') is None
+    assert 'upstream_error' in body
+
+
+def test_v1_chat_stream_sse_omits_hop_by_hop_headers(tmp_path, monkeypatch):
+    """Waitress rejects Connection on WSGI responses — SSE must not set hop-by-hop headers."""
+    app = _create_app_for_proxy_tests(tmp_path, monkeypatch, model_name='copilot-test', settings={})
+    client = app.test_client()
+
+    class OkStream:
+        status_code = 200
+
+        def iter_lines(self):
+            yield b'{"message":{"role":"assistant","content":"ok"},"done":true}'
+
+    with patch('requests.post', return_value=OkStream()):
+        resp = client.post('/ollama/v1/chat/completions', json={
+            'model': 'copilot-test',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            'stream': True,
+        })
+        resp.get_data()
+
+    assert resp.status_code == 200
+    assert resp.headers.get('Connection') is None
+    assert resp.headers.get('Transfer-Encoding') is None
 
 
 def test_v1_chat_uses_settings_fallback_without_saved_entry(tmp_path, monkeypatch):
@@ -559,7 +644,8 @@ def test_v1_chat_forwards_vision_images_to_native(tmp_path, monkeypatch):
     assert msg['images'] == [b64]
 
 
-def test_v1_chat_forwards_tools(tmp_path, monkeypatch):
+def test_v1_chat_forwards_tools_for_agent_mode(tmp_path, monkeypatch):
+    """Copilot Agent mode sends tools — proxy must forward them to native /api/chat."""
     app = _create_app_for_proxy_tests(tmp_path, monkeypatch, model_name='tool-test', settings={})
     client = app.test_client()
     captured = {}
@@ -570,7 +656,7 @@ def test_v1_chat_forwards_tools(tmp_path, monkeypatch):
             class StreamResp:
                 status_code = 200
                 def iter_lines(self):
-                    yield b'{"message":{"role":"assistant","content":"ok"},"done":true}'
+                    yield b'{"message":{"role":"assistant","tool_calls":[{"id":"c1","function":{"name":"read_file","arguments":{}}}],"content":""},"done":true}'
             return StreamResp()
         raise AssertionError('expected stream')
 
@@ -588,10 +674,14 @@ def test_v1_chat_forwards_tools(tmp_path, monkeypatch):
             'tool_choice': 'auto',
             'stream': True,
         })
-        resp.get_data()
+        body = resp.get_data(as_text=True)
 
     assert captured['json']['tools'] == tools
     assert captured['json']['tool_choice'] == 'auto'
+    assert 'think' not in captured['json']
+    assert '"tool_calls"' in body
+    assert '"name": "read_file"' in body or '"name":"read_file"' in body
+    assert 'Hello there' not in body
 
 
 def test_v1_completions_caps_and_resolves_model(tmp_path, monkeypatch):
@@ -627,7 +717,7 @@ def test_v1_completions_caps_and_resolves_model(tmp_path, monkeypatch):
         resp.get_data()
 
     assert captured['json']['model'] == 'qwen3:14b'
-    assert captured['json']['options']['num_predict'] == 4096
+    assert captured['json']['options']['num_predict'] == 16384
 
 
 def test_api_embed_passthrough(tmp_path, monkeypatch):

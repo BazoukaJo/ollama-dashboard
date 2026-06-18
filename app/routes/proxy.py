@@ -20,9 +20,10 @@ from app.services.client_payload_compat import (
     messages_have_images,
     native_api_should_cap_predict,
     prepare_native_api_payload,
+    sanitize_v1_chat_payload,
 )
 from app.services.copilot_pipeline import prepare_copilot_payload
-from app.services.copilot_prewarm import record_model_activity, schedule_context_preload, touch_keep_alive
+from app.services.copilot_prewarm import record_model_activity
 from app.services.copilot_proxy import log_copilot_request, log_ollama_proxy_hit
 from app.services.model_settings_helpers import (
     compute_fresh_recommended_settings_entry,
@@ -33,12 +34,14 @@ from app.services.model_settings_helpers import (
 from app.services.settings_cache import load_settings_file
 from app.services.v1_model_resolve import resolve_v1_model_name
 from app.services.v1_native_bridge import (
+    apply_copilot_native_defaults,
     merge_v1_payload_options,
     native_chat_response_to_openai,
     native_generate_response_to_openai,
     openai_chat_to_native,
     openai_completion_to_native,
     openai_error_sse_lines,
+    openai_sse_stream_opening,
     prepare_v1_chat_completions_payload,
     stream_native_chat_lines_to_openai_sse,
     stream_native_generate_lines_to_openai_sse,
@@ -62,12 +65,7 @@ def _log_incoming_ollama_request():
     )
 
 
-# Waitress (and PEP 3333) reject hop-by-hop headers on WSGI responses. Ollama often
-# sends Transfer-Encoding / Connection; forwarding them causes 500 Internal Server Error.
-_HOP_BY_HOP_HEADERS = frozenset({
-    'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
-    'te', 'trailers', 'transfer-encoding', 'upgrade',
-})
+from app.wsgi_safe import HOP_BY_HOP_HEADERS, strip_hop_by_hop_headers
 
 # Upstream Ollama HTTP timeouts (seconds).
 _UPSTREAM_CONNECT_TIMEOUT = 30
@@ -102,7 +100,7 @@ def _filter_upstream_response_headers(headers):
     """Return header pairs safe to pass through a WSGI Response."""
     safe = []
     for key, value in headers.items():
-        if key.lower() in _HOP_BY_HOP_HEADERS:
+        if key.lower() in HOP_BY_HOP_HEADERS:
             continue
         if key.lower() == 'content-encoding':
             continue
@@ -306,7 +304,7 @@ def _sse_response(stream_body, *, status=200):
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Cache-Control'] = 'no-cache, no-transform'
     response.headers['X-Accel-Buffering'] = 'no'
-    return response
+    return strip_hop_by_hop_headers(response)
 
 
 def _forward_v1_chat_passthrough(payload):
@@ -363,28 +361,31 @@ def _handle_v1_chat_completions():
     use_passthrough = os.getenv('OLLAMA_V1_PASSTHROUGH', 'false').strip().lower() in ('1', 'true', 'yes')
     if use_passthrough:
         passthrough_payload = prepare_v1_chat_completions_payload(payload, settings_dict)
+        passthrough_payload, _sanitize_meta = sanitize_v1_chat_payload(passthrough_payload)
         passthrough_payload, _cap_meta = cap_num_predict(passthrough_payload, settings_dict)
+        logger.warning(
+            'OLLAMA_V1_PASSTHROUGH enabled: v1 chat bypasses Copilot SSE hardening '
+            '(delta.reasoning may reach clients). Use default bridge for VS Code Copilot.',
+        )
         return _forward_v1_chat_passthrough(passthrough_payload)
 
     merged_payload, pipeline_meta = prepare_copilot_payload(payload, settings_entry)
+
+    native_payload = openai_chat_to_native(merged_payload, {})
+    apply_copilot_native_defaults(native_payload, merged_payload)
 
     log_copilot_request(
         merged_payload,
         path=request.path,
         resolved_model=merged_payload.get('model') or resolved_model or '',
         data_dir=current_app.config.get('DATA_DIR'),
-        pipeline=pipeline_meta,
+        pipeline={**(pipeline_meta or {}), 'native_think': native_payload.get('think')},
     )
 
     model_for_preload = merged_payload.get('model') or ''
-    options = merged_payload.get('options') or {}
-    if os.getenv('OLLAMA_COPILOT_PRELOAD_CTX', 'true').strip().lower() in ('1', 'true', 'yes'):
-        schedule_context_preload(ollama_url, model_for_preload, options)
     if model_for_preload:
         record_model_activity(model_for_preload)
-        touch_keep_alive(ollama_url, model_for_preload)
 
-    native_payload = openai_chat_to_native(merged_payload, {})
     return _forward_v1_chat_via_native(native_payload, merged_payload)
 
 
@@ -414,10 +415,16 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
             return _sse_response(error_stream, status=upstream.status_code)
 
         def stream_body():
+            opening, cid, created = openai_sse_stream_opening(model_name)
+            yield opening.encode('utf-8')
             for chunk in stream_native_chat_lines_to_openai_sse(
                 upstream.iter_lines(),
                 model=model_name,
                 include_usage=include_usage,
+                completion_id=cid,
+                stream_created=created,
+                omit_reasoning_deltas=True,
+                agent_mode=bool(native_payload.get('tools')),
             ):
                 yield chunk.encode('utf-8')
 
@@ -430,9 +437,16 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
         return _openai_error_response(response_data, model_name)
     try:
         native_body = response_data.json()
-    except ValueError:
+    except ValueError as err:
+        logger.warning(
+            'Upstream /api/chat returned non-JSON body (status=%s, model=%s): %s',
+            response_data.status_code, model_name, err,
+        )
         return _proxy_upstream_response(response_data)
-    openai_body = native_chat_response_to_openai(native_body)
+    openai_body = native_chat_response_to_openai(
+        native_body,
+        copilot_safe=not bool(native_payload.get('tools')),
+    )
     openai_body, _trunc_meta = cap_openai_chat_response(openai_body)
     response = Response(
         json.dumps(openai_body),
@@ -485,7 +499,11 @@ def _forward_v1_via_native_api(native_payload, native_endpoint, _openai_payload)
         return _openai_error_response(response_data, model_name)
     try:
         native_body = response_data.json()
-    except ValueError:
+    except ValueError as err:
+        logger.warning(
+            'Upstream %s returned non-JSON body (status=%s, model=%s): %s',
+            native_endpoint, response_data.status_code, model_name, err,
+        )
         return _proxy_upstream_response(response_data)
     openai_body = native_generate_response_to_openai(native_body)
     response = Response(

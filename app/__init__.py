@@ -157,12 +157,14 @@ def create_app(config_name='development'):
 
     @app.after_request
     def set_security_headers(response):
+        from app.wsgi_safe import strip_hop_by_hop_headers
+
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['X-XSS-Protection'] = '1; mode=block'
         if os.getenv('HTTPS_ENABLED', 'false').lower() == 'true':
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-        return response
+        return strip_hop_by_hop_headers(response)
 
     # ===== BLUEPRINT REGISTRATION =====
     # Settings-injecting /ollama/... proxy (native + /v1 for Copilot): app/routes/proxy.py

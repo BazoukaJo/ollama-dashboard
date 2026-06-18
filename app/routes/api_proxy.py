@@ -1,6 +1,7 @@
 """External API proxy — status, setup wizard, analytics, RAG routes."""
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from app.services.model_advisor import advise_from_hardware
 from app.services.model_settings_helpers import lookup_settings_entry
 from app.services.rag import index_workspace, rag_status
 from app.services.settings_cache import load_settings_file
+
+logger = logging.getLogger(__name__)
 
 bp = Blueprint('api_proxy_api', __name__)
 
@@ -100,7 +103,8 @@ def _wizard_payload():
         add('ollama_api_tags', tags_ok, f'GET /ollama/api/tags → {r_tags.status_code}')
         svc_ok = _svc().get_service_status()
         add('ollama_running', svc_ok, 'Ollama HTTP API reachable' if svc_ok else 'Start Ollama service')
-    except Exception as err:  # pylint: disable=broad-exception-caught
+    except (RuntimeError, OSError, ValueError, TypeError) as err:
+        logger.exception('Proxy wizard self-check failed')
         add('internal', False, str(err))
 
     add('proxy_url', True, f'Use {base} as the server / API base in your app', f'Copy: {base}')
@@ -121,7 +125,8 @@ def api_proxy_status():
     """Lightweight proxy activity for the dashboard header."""
     try:
         return jsonify(_status_payload())
-    except Exception as err:  # pylint: disable=broad-exception-caught
+    except (RuntimeError, OSError, ValueError, TypeError, KeyError) as err:
+        logger.exception('Proxy status endpoint failed')
         return jsonify({'ok': False, 'error': str(err)}), 500
 
 
@@ -141,7 +146,10 @@ def api_proxy_analytics():
 @bp.route('/api/proxy/debug-requests')
 @bp.route('/api/copilot/debug-requests')  # legacy
 def api_proxy_debug_requests():
-    limit = min(int(request.args.get('limit', 20)), 100)
+    try:
+        limit = min(int(request.args.get('limit', 20)), 100)
+    except (TypeError, ValueError):
+        limit = 20
     records = read_log_records(_data_dir(), limit=500)
     chat = [r for r in records if r.get('model_in') or r.get('model_resolved')]
     return jsonify({'requests': chat[-limit:], 'total': len(chat)})

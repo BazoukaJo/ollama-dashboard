@@ -1,4 +1,4 @@
-"""Phase 5 monitoring endpoints for performance tracking and metrics."""
+"""Monitoring endpoints for performance tracking and metrics."""
 
 import time
 

@@ -71,19 +71,19 @@ if (!window.getCapabilitiesHTML) {
     return { full, tag, pathPrefix, shortStem };
   }
 
-  /** Card title: optional scope line (registry path) + primary name + tag chip. */
+  /** Card title: optional registry path prefix + primary name + tag on one line. */
   function modelTitleMarkup(rawName) {
     const esc = window.escapeHtml || escapeHtml;
     const { full, tag, pathPrefix, shortStem } = parseModelTitleParts(rawName);
     const titleAttr = full ? ` title="${esc(full)}"` : "";
-    const scopeRow = pathPrefix
+    const scopePart = pathPrefix
       ? `<span class="model-title-scope-row"><span class="model-title-scope">${esc(pathPrefix)}</span></span>`
       : "";
-    const nameLine =
+    const nameCore =
       tag != null
         ? `<span class="model-title-name-core"><span class="model-title-base">${esc(shortStem)}</span><span class="model-title-colon" aria-hidden="true">:</span><span class="model-title-tag">${esc(tag)}</span></span>`
         : `<span class="model-title-name-core model-title-name-core--full"><span class="model-title-full">${esc(shortStem)}</span></span>`;
-    const inner = `<span class="model-title-stack">${scopeRow}<span class="model-title-name-line">${nameLine}</span></span>`;
+    const inner = `<span class="model-title-stack"><span class="model-title-name-line">${scopePart}${nameCore}</span></span>`;
     return `<div class="model-title"><span class="model-title-display"${titleAttr} aria-label="${esc(full)}">${inner}</span></div>`;
   }
 
@@ -180,6 +180,45 @@ if (!window.getCapabilitiesHTML) {
             </div>
         </div>`;
   }
+
+  const MARQUEE_PX_PER_SEC = 26;
+  const marqueeObservers = new WeakMap();
+
+  function setupTitleMarquee(display) {
+    if (!display) return;
+    const stack = display.querySelector(".model-title-stack");
+    if (!stack) return;
+
+    display.classList.remove("is-marquee");
+    display.style.removeProperty("--marquee-shift");
+    display.style.removeProperty("--marquee-duration");
+    stack.style.transform = "";
+
+    const overflow = stack.scrollWidth - display.clientWidth;
+    if (overflow <= 4) return;
+
+    const duration = Math.max(12, Math.min(40, overflow / MARQUEE_PX_PER_SEC + 8));
+    display.style.setProperty("--marquee-shift", `${-overflow}px`);
+    display.style.setProperty("--marquee-duration", `${duration}s`);
+    display.classList.add("is-marquee");
+  }
+
+  function observeTitleMarquee(display) {
+    if (!display) return;
+    setupTitleMarquee(display);
+    if (marqueeObservers.has(display)) return;
+    const ro = new ResizeObserver(() => setupTitleMarquee(display));
+    ro.observe(display);
+    const stack = display.querySelector(".model-title-stack");
+    if (stack) ro.observe(stack);
+    marqueeObservers.set(display, ro);
+  }
+
+  function setupAllTitleMarquees(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll(".model-card .model-title-display").forEach(observeTitleMarquee);
+  }
+
   window.modelCards = window.modelCards || {};
   window.modelCards.buildDownloadableModelCardHTML =
     buildDownloadableModelCardHTML;
@@ -187,4 +226,6 @@ if (!window.getCapabilitiesHTML) {
   window.modelCards.modelActionSettingsButtonInner =
     modelActionSettingsButtonInner;
   window.modelCards.parseModelTitleParts = parseModelTitleParts;
+  window.modelCards.setupTitleMarquee = setupTitleMarquee;
+  window.modelCards.setupAllTitleMarquees = setupAllTitleMarquees;
 })();

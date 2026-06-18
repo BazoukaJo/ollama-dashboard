@@ -4,9 +4,14 @@
 **Purpose:** Guide AI agents to be immediately productive in this codebase. Follow established patterns; do not introduce new architectural layers.
 
 ## Architecture & Data Flow
-- Single Flask app with one blueprint (`app/routes/main.py`).
+- Single Flask app with three blueprints registered in `app/routes/main.py` `init_app()`:
+  - **`main`** (`app/routes/main.py`) — dashboard UI and `/api/...` routes
+  - **`proxy`** (`app/routes/proxy.py`) — settings-injecting `/ollama/...` proxy for external clients
+  - **`api_proxy_api`** (`app/routes/api_proxy.py`) — Connect app wizard, proxy status/analytics, RAG/prewarm helpers
+- Monitoring routes (`/api/metrics/...`) attach to the `main` blueprint via `app/routes/monitoring.py`.
 - Core logic in `OllamaService` (`app/services/ollama.py`): handles HTTP to Ollama, caching, capability detection, per-model settings, atomic JSON persistence, health reporting.
-- Background thread updates system stats cache (~1s), health ping (~15s), and related caches. Model lists are not polled on a background interval; they refresh from the UI. Restart the process after service/capability/JS edits when caches might be stale.
+- External client proxy pipeline: `copilot_pipeline.py` orchestrates `client_payload_compat.py` (sanitize/cap output), `context_budget.py` (auto-trim prompts), `v1_native_bridge.py` (OpenAI ↔ native), and `model_settings_helpers.py` (merge saved options).
+- Background thread updates system stats cache (~1s), health ping (~15s). Model lists are not polled in the background; they refresh from the UI. Restart the process after service/capability/JS edits when caches might be stale.
 - API routes: input validation -> service method -> standardized JSON response.
 - **Windows production**: Waitress WSGI server via `start.bat`.
 - **Docker/Linux production**: Gunicorn via `wsgi.py`.
@@ -36,7 +41,11 @@
 - Start/stop/restart logic in `OllamaService` only; routes wrap and return JSON.
 
 ## Persistence Files
-- `chat_history.json` (bounded 100 sessions), `model_settings.json` (per-model defaults), `system_stats_history.json`. All use atomic write pattern.
+- `history.json` — model-list snapshots (`MAX_HISTORY`, default 50)
+- `chat_history.json` — Ask? chat sessions (max 100)
+- `model_settings.json` — per-model defaults
+- `system_stats_history.json` — sparkline history
+- All use atomic write pattern (`.tmp` then `os.replace`).
 
 ## Model Lists & Aliases
 - Curated lists in `get_best_models`/`get_all_downloadable_models` (in `app/services/model_catalog.py`). Live models fetched from ollama.com/library via `model_fetcher.py`.
@@ -59,6 +68,7 @@
 - New capability: extend `_detect_model_capabilities` + add UI icon logic (JS).
 - New periodic data: background worker + health exposure.
 - New model default heuristic: adjust `_recommend_settings_for_model` (retain normalization + locking).
+- External client / Copilot behavior: change `copilot_pipeline.py`, `client_payload_compat.py`, or `context_budget.py`; route wiring lives in `app/routes/proxy.py`.
 - Avoid: direct Ollama HTTP in routes/JS, extra threads in request handlers, bypassing warm start logic, non-atomic JSON writes.
 
 ## Quick Commands

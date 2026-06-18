@@ -10,13 +10,30 @@ _HARD_KEYWORDS = re.compile(
 )
 
 
+def _message_text_content(message: dict[str, Any]) -> str:
+    """Extract plain text from a message for routing heuristics."""
+    content = message.get('content')
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict):
+                if block.get('text'):
+                    parts.append(str(block['text']))
+                elif block.get('type') in ('text', 'input_text') and block.get('text'):
+                    parts.append(str(block['text']))
+        return '\n'.join(parts)
+    return ''
+
+
 def should_route_to_reasoning(messages: list[Any]) -> bool:
     """Heuristic: long or complex prompts may benefit from a reasoning model."""
     if not messages:
         return False
     last = messages[-1] if isinstance(messages[-1], dict) else {}
-    text = last.get('content')
-    if not isinstance(text, str):
+    text = _message_text_content(last)
+    if not text:
         return False
     if len(text) > 4000:
         return True
