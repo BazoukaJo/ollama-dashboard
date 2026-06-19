@@ -10,10 +10,7 @@ _CHARS_PER_TOKEN = 4
 _DEFAULT_RESERVE_RATIO = 0.2
 _TOKENS_PER_IMAGE = 256
 _MAX_TRUNCATION_PASSES = 32
-<<<<<<< HEAD
 _MIN_LAST_TURN_TOKENS = 512
-=======
->>>>>>> f6eb4bf18a980a871f98312bb619c08d6fa148b6
 _TRUNCATION_MARKER = '\n\n[... trimmed by ollama-dashboard proxy to fit context window ...]'
 
 
@@ -206,7 +203,6 @@ def trim_messages_to_budget(
         rest.pop(0)
         meta['messages_removed'] += 1
 
-<<<<<<< HEAD
     # Phase 2: shrink system prompts before truncating the latest user turn to nothing.
     for _ in range(_MAX_TRUNCATION_PASSES):
         if _messages_fit(system_msgs, rest, budget) or not system_msgs:
@@ -227,9 +223,6 @@ def trim_messages_to_budget(
         meta['content_truncated'] += 1
 
     # Phase 3: truncate non-system bodies (keep the last user turn usable).
-=======
-    # Phase 2: truncate non-system bodies (keep the last user turn).
->>>>>>> f6eb4bf18a980a871f98312bb619c08d6fa148b6
     for _ in range(_MAX_TRUNCATION_PASSES):
         if _messages_fit(system_msgs, rest, budget) or not rest:
             break
@@ -239,23 +232,15 @@ def trim_messages_to_budget(
             break
         current = rest[0]
         before_msg = estimate_messages_tokens([current])
-<<<<<<< HEAD
         min_turn = _MIN_LAST_TURN_TOKENS if len(rest) == 1 else 16
         target_tokens = max(min_turn, remaining - 4 - _image_token_cost(current))
-=======
-        target_tokens = max(16, remaining - 4 - _image_token_cost(current))
->>>>>>> f6eb4bf18a980a871f98312bb619c08d6fa148b6
         truncated = _truncate_message_content(current, target_tokens)
         if estimate_messages_tokens([truncated]) >= before_msg:
             break
         rest[0] = truncated
         meta['content_truncated'] += 1
 
-<<<<<<< HEAD
     # Phase 4: last resort — shrink system again if the user turn still does not fit.
-=======
-    # Phase 3: shrink system prompts when they leave no room for the user turn.
->>>>>>> f6eb4bf18a980a871f98312bb619c08d6fa148b6
     for _ in range(_MAX_TRUNCATION_PASSES):
         if _messages_fit(system_msgs, rest, budget) or not system_msgs:
             break

@@ -76,7 +76,6 @@ def test_pipeline_caps_output_for_external_clients():
     assert merged['max_tokens'] == 16384
     assert 'parallel_tool_calls' not in merged
     assert meta.get('client_compat', {}).get('num_predict_capped') == 16384
-<<<<<<< HEAD
 
 
 def test_pipeline_forwards_tools_for_agent_mode():
@@ -90,5 +89,3 @@ def test_pipeline_forwards_tools_for_agent_mode():
     assert merged['tools'] == payload['tools']
     assert merged['tool_choice'] == 'auto'
     assert meta.get('agent_tools') is True
-=======
->>>>>>> f6eb4bf18a980a871f98312bb619c08d6fa148b6
