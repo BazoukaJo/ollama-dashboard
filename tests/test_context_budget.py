@@ -76,6 +76,7 @@ def test_trim_truncates_oversized_system_prompt():
     assert estimate_messages_tokens(trimmed) <= meta['budget']
 
 
+<<<<<<< HEAD
 def test_trim_huge_system_does_not_crush_user_to_few_tokens():
     """Copilot-sized system prompts must not leave only a handful of user tokens."""
     msgs = [
@@ -86,6 +87,9 @@ def test_trim_huge_system_does_not_crush_user_to_few_tokens():
     assert trimmed[-1]['content'] == 'What is 2+2?'
     assert estimate_messages_tokens(trimmed) >= 128
     assert meta['trimmed'] is True
+=======
+def test_trim_tool_calls_message_survives_budget():
+>>>>>>> f6eb4bf18a980a871f98312bb619c08d6fa148b6
     big_args = '{"body": "' + ('z' * 20000) + '"}'
     msgs = [
         {'role': 'assistant', 'content': '', 'tool_calls': [

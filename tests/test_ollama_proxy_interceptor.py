@@ -315,6 +315,7 @@ def test_v1_chat_completions_bridges_to_native_api_chat(tmp_path, monkeypatch):
     assert captured['json']['options']['temperature'] == 0.55
     assert captured['json']['options']['num_ctx'] == 16384
     assert captured['json']['options']['num_predict'] == 16384
+<<<<<<< HEAD
     assert captured['json']['think'] is False
     assert 'reasoning_effort' not in captured['json']
     assert 'tools' not in captured['json']
@@ -375,6 +376,8 @@ def test_v1_chat_non_stream_returns_openai_completion_shape(tmp_path, monkeypatc
     assert body['object'] == 'chat.completion'
     assert body['choices'][0]['message']['content'] == 'Hello from Ollama'
     assert body['usage']['total_tokens'] == 16
+=======
+>>>>>>> f6eb4bf18a980a871f98312bb619c08d6fa148b6
 
 
 def test_v1_chat_non_stream_truncates_huge_response(tmp_path, monkeypatch):
