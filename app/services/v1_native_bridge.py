@@ -108,7 +108,8 @@ def _native_tool_calls_to_openai(native_calls: Any) -> list[dict[str, Any]]:
     for i, tc in enumerate(native_calls):
         if not isinstance(tc, dict):
             continue
-        fn = tc.get('function') if isinstance(tc.get('function'), dict) else {}
+        raw_fn = tc.get('function')
+        fn = raw_fn if isinstance(raw_fn, dict) else {}
         args = fn.get('arguments')
         if isinstance(args, dict):
             args_str = json.dumps(args, ensure_ascii=False)
@@ -184,20 +185,17 @@ def apply_copilot_native_defaults(
     Plain chat: force ``think: false`` so Copilot BYOK does not show a lone ``I`` from
     reasoning tokens (it only renders ``delta.content``).
 
-    Agent requests (``tools`` present): leave ``think`` unset unless the client explicitly
-    requested a reasoning level, so tool-capable models keep their default behavior.
+    Agent requests (``tools`` present): also force ``think: false`` by default. Copilot sends
+    ``reasoning_effort`` on every Agent turn; leaving ``think`` unset re-enables model-default
+    thinking (e.g. gemma4) which streams only ``delta.reasoning`` that Copilot ignores — users
+    see **Sorry, no response was returned** until tool_calls arrive or the client times out.
     """
     allow_thinking = os.getenv('OLLAMA_COPILOT_ALLOW_THINKING', '').strip().lower() in (
         '1', 'true', 'yes',
     )
-    has_tools = bool(native.get('tools'))
     think = _resolve_think_from_openai_payload(openai_payload)
     if allow_thinking and think is not None:
         native['think'] = think
-    elif has_tools:
-        # Agent/tool requests: keep the model's default tool behavior. Copilot sends
-        # reasoning_effort on every turn; do not map that to native think here.
-        pass
     else:
         native['think'] = False
     return native
@@ -249,7 +247,8 @@ def native_chat_response_to_openai(
 ) -> dict[str, Any]:
     """Convert a non-streaming ``/api/chat`` response to OpenAI chat.completion JSON."""
     cid = completion_id or _completion_id()
-    message = native.get('message') if isinstance(native.get('message'), dict) else {}
+    raw_message = native.get('message')
+    message = raw_message if isinstance(raw_message, dict) else {}
     content = message.get('content')
     if content is None:
         content = ''
@@ -501,7 +500,8 @@ def stream_native_chat_lines_to_openai_sse(
         if not isinstance(native, dict):
             continue
         last_native = native
-        msg = native.get('message') if isinstance(native.get('message'), dict) else {}
+        raw_msg = native.get('message')
+        msg = raw_msg if isinstance(raw_msg, dict) else {}
         reasoning = _assistant_reasoning_piece(msg)
         content_piece = msg.get('content')
         content_s = str(content_piece) if content_piece is not None else ''
@@ -630,7 +630,8 @@ def stream_native_chat_lines_to_openai_sse(
             cid, model, _openai_chat_finish_delta(), finish_reason='stop', created=created,
         )
     elif not yielded_substance:
-        msg = last_native.get('message') if isinstance(last_native.get('message'), dict) else {}
+        raw_msg = last_native.get('message')
+        msg = raw_msg if isinstance(raw_msg, dict) else {}
         final_delta = _openai_chat_delta_from_native_message(
             msg, mirror_thinking_to_content=mirror_thinking_to_content or True,
         )

@@ -9,14 +9,14 @@ from app.services.v1_native_bridge import (
 )
 
 
-def test_apply_copilot_native_defaults_preserves_agent_model_defaults():
+def test_apply_copilot_native_defaults_disables_thinking_for_agent():
     native = {
         'model': 'qwen3:14b',
         'messages': [],
         'tools': [{'type': 'function', 'function': {'name': 'read_file', 'parameters': {}}}],
     }
     apply_copilot_native_defaults(native, {'model': 'qwen3:14b', 'messages': [], 'reasoning_effort': 'medium'})
-    assert 'think' not in native
+    assert native['think'] is False
 
 
 def test_apply_copilot_native_defaults_disables_thinking():

@@ -74,14 +74,20 @@ def get_mcp_asgi_app():
 def mount_mcp_on_flask_app(flask_app) -> None:
     """Mount MCP at /mcp via WSGI dispatcher (same port as dashboard)."""
     try:
+        from typing import cast
+
         from a2wsgi import ASGIMiddleware
+        from a2wsgi.asgi_typing import ASGIApp
         from werkzeug.middleware.dispatcher import DispatcherMiddleware
     except ImportError as err:
         logger.warning('MCP mount skipped (missing dependency): %s', err)
         return
 
-    mcp_wsgi = ASGIMiddleware(get_mcp_asgi_app())
-    flask_app.wsgi_app = DispatcherMiddleware(flask_app.wsgi_app, {'/mcp': mcp_wsgi})
+    mcp_wsgi = ASGIMiddleware(cast(ASGIApp, get_mcp_asgi_app()))
+    flask_app.wsgi_app = DispatcherMiddleware(
+        flask_app.wsgi_app,
+        {'/mcp': cast(Any, mcp_wsgi)},
+    )
     logger.info('MCP Streamable HTTP mounted at /mcp')
 
 

@@ -250,6 +250,12 @@ in OpenAI SSE shape (`role`, empty `content`, stringified `arguments`), Copilot 
 as empty. Older proxy builds also flushed buffered thinking into `content` on tool-call turns,
 which corrupted agent responses.
 
+**Thinking models (for example `gemma4`):** Agent turns used to leave native **`think` unset**,
+so Ollama defaulted to long internal reasoning before any **`tool_calls`**. Copilot BYOK only
+renders **`delta.content`**, so the chat looked empty until the client timed out. Current proxy
+builds force **`think: false`** on Agent requests too (unless
+`OLLAMA_COPILOT_ALLOW_THINKING=true`).
+
 **Fix (dashboard proxy):**
 
 1. **Restart the dashboard** (`restart_app.bat`).
