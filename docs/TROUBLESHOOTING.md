@@ -232,8 +232,44 @@ thinking was mirrored into content, users often saw only the first thinking toke
 4. Check **`http://127.0.0.1:5000/ollama/copilot-debug`** — recent chat entries should show
    `"native_think": false` in the pipeline metadata.
 
-Optional: set `OLLAMA_COPILOT_ALLOW_THINKING=true` before starting the dashboard if you
-explicitly want thinking models for Copilot (most users should leave this off).
+**Want the reasoning instead?** To deliberately use a thinking model's reasoning in Copilot,
+open the model's **Settings** in the dashboard and set **Reasoning for external clients
+(Copilot)** to **On** — the proxy then mirrors the reasoning into the visible answer (Copilot
+only renders `delta.content`). **Auto** follows the client's `reasoning_effort`. The legacy
+global `OLLAMA_COPILOT_ALLOW_THINKING=true` still works as an **Auto** default. Agent/tool turns
+always run with thinking off regardless.
+
+**Second cause — slow first token on big models (the most common case now that thinking is
+off):** Large models that don't fit in VRAM (for example `gemma4:31b` / `qwen3.6:35b` on a
+16 GB GPU) run **CPU-offloaded**. With a real Agent-mode payload (large system prompt + tool
+definitions + history, ~6 k+ tokens) the **prefill alone can take ~50 s** before the first
+token, and a full answer can take **2-4 minutes**. VS Code's Ollama client gives up shortly
+after the first token and shows just **`I`** (whatever arrived first), even though the proxy
+keeps streaming the complete answer.
+
+**Fix (dashboard proxy):** during slow loads/prefill the proxy now sends keep-alives as
+**real empty-content data chunks** (not just SSE comments) every ~5 s, so VS Code's chunk
+parser counts them as activity and stays connected until the real first token. It also injects
+`keep_alive` (default 15 min, `COPILOT_KEEP_ALIVE_MINUTES`) so a big model is **not reloaded**
+on every turn.
+
+**Confirm the real cause** in `data/copilot_proxy.log` — look for a `"kind": "response"` line
+for the failed turn:
+
+- `content_chars` large + `finish_reason: "stop"` → the proxy streamed the **full** answer; a
+  lone `I` in VS Code is the client timing out. Tune `OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS`.
+- `content_chars: 1` + `agent: true` → **the model itself returned one token then stopped**.
+  This is a model-side degeneracy that oversized, CPU-offloaded reasoning models (`gemma4:31b`,
+  `qwen3.6:35b` on 16 GB VRAM) hit on complex **Agent** tool-result turns. The proxy relayed
+  exactly what the model produced — it is not a proxy bug.
+
+**Workarounds for the one-token Agent degeneracy:**
+
+1. **Use Ask mode, not Agent mode,** with these big models. Agent tool-result turns are where
+   they degenerate and are slowest; in Ask mode they return full, coherent answers. Set the
+   model's **Reasoning for external clients (Copilot)** to **On** to use its reasoning fully.
+2. **Or use a model that fits in VRAM** for Agent mode (first token in ~1-3 s, no degeneracy):
+   e.g. `qwen2.5-coder:14b`, `qwen3:14b`, `qwen3.5:9b`.
 
 See also [GUIDE.md — VS Code Copilot](GUIDE.md#vs-code-copilot-ollama).
 
@@ -250,11 +286,12 @@ in OpenAI SSE shape (`role`, empty `content`, stringified `arguments`), Copilot 
 as empty. Older proxy builds also flushed buffered thinking into `content` on tool-call turns,
 which corrupted agent responses.
 
-**Thinking models (for example `gemma4`):** Agent turns used to leave native **`think` unset**,
-so Ollama defaulted to long internal reasoning before any **`tool_calls`**. Copilot BYOK only
-renders **`delta.content`**, so the chat looked empty until the client timed out. Current proxy
-builds force **`think: false`** on Agent requests too (unless
-`OLLAMA_COPILOT_ALLOW_THINKING=true`).
+**Thinking models (for example `gemma4`, `qwen3.6`):** Agent turns used to leave native
+**`think` unset**, so Ollama defaulted to long internal reasoning before any **`tool_calls`**.
+Copilot BYOK only renders **`delta.content`**, so the chat looked empty until the client timed
+out. Current proxy builds **always** force **`think: false`** on Agent/tool requests — even when
+a model's **Reasoning** setting is **On** or `OLLAMA_COPILOT_ALLOW_THINKING=true` — so the tool
+exchange is never corrupted by reasoning tokens.
 
 **Fix (dashboard proxy):**
 
@@ -330,13 +367,30 @@ for Ollama, not how long VS Code waits on the client:
 Defined in `app/routes/proxy.py`. Raising these helps slow Ollama responses reach the proxy;
 they do **not** extend VS Code's client-side wait.
 
+**Streaming keep-alive (cold loads no longer look empty)** — Ollama withholds its HTTP response
+until the model is loaded and generation starts, so a cold 20GB+ model used to send **zero
+bytes** for 30-90s, which VS Code surfaces as *"Sorry, no response was returned."* The proxy now
+commits the SSE response early and sends periodic **SSE comment heartbeats**
+(`: ollama-dashboard keep-alive`) while the model loads or stalls, keeping the connection open
+until the first token. Heartbeats are SSE comments, so OpenAI/SSE parsers ignore them — they
+never appear in chat text. Tunable (server-side, restart to apply):
+
+| Env var | Default | Meaning |
+|---------|---------|---------|
+| `OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS` | `10` | Idle seconds before sending a keep-alive comment (1-60) |
+| `OLLAMA_PROXY_STREAM_FIRST_BYTE_GRACE_SECONDS` | `3` | How long to wait for a fast upstream error before committing the stream (0.5-30) |
+
 **Workarounds:**
 
 1. **Pre-start the model** in the dashboard (**Start** on the model card) before sending a
-   Copilot message — cold loads can take minutes for large models.
-2. Use a **smaller or faster model** for Copilot (for example `gemma4:latest` instead of
-   `gemma4:26b`).
-3. Check **`http://127.0.0.1:5000/ollama/copilot-debug`** or `data/copilot_proxy.log` to see
+   Copilot message — avoids the cold-load wait entirely (heartbeats cover it otherwise).
+2. Large models that exceed your VRAM (for example `gemma4:31b` ~20 GB or `qwen3.6:35b` ~24 GB on
+   a 16 GB GPU) **are fully supported** — Ollama offloads the overflow to system RAM — they are
+   just slower to load and generate. The heartbeats keep Copilot connected; for the fastest
+   experience pre-start them or pick a model that fits VRAM.
+3. If your client still gives up during very long loads, lower
+   `OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS` (for example `5`) and restart the dashboard.
+4. Check **`http://127.0.0.1:5000/ollama/proxy-debug`** or `data/copilot_proxy.log` to see
    whether VS Code disconnected before Ollama finished loading.
 
 See also [GUIDE.md — VS Code Copilot](GUIDE.md#vs-code-copilot-ollama).

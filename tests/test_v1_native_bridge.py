@@ -1,9 +1,13 @@
 """Tests for OpenAI v1 → native Ollama bridge."""
+import json
+
 from app.services.v1_native_bridge import (
+    STREAM_HEARTBEAT,
     apply_copilot_native_defaults,
     merge_v1_payload_options,
     native_chat_response_to_openai,
     openai_chat_to_native,
+    openai_sse_stream_opening,
     prepare_v1_chat_completions_payload,
     stream_native_chat_lines_to_openai_sse,
 )
@@ -53,6 +57,38 @@ def test_apply_copilot_native_defaults_respects_client_reasoning(monkeypatch):
     )
     apply_copilot_native_defaults(native, {'reasoning_effort': 'high'})
     assert native['think'] == 'high'
+
+
+def test_think_mode_on_forces_thinking_for_plain_chat():
+    native = openai_chat_to_native(
+        {'model': 'gemma4:31b', 'messages': [{'role': 'user', 'content': 'hi'}]}, {},
+    )
+    apply_copilot_native_defaults(native, {'model': 'gemma4:31b', 'messages': []}, think_mode='on')
+    assert native['think'] is True
+
+
+def test_think_mode_on_still_disabled_for_agent_tools():
+    native = {
+        'model': 'qwen3.6:35b',
+        'messages': [],
+        'tools': [{'type': 'function', 'function': {'name': 'write_file', 'parameters': {}}}],
+    }
+    apply_copilot_native_defaults(
+        native, {'model': 'qwen3.6:35b', 'messages': [], 'reasoning_effort': 'high'}, think_mode='on',
+    )
+    assert native['think'] is False
+
+
+def test_think_mode_auto_respects_client_effort_without_env():
+    native = openai_chat_to_native({'model': 'qwen3.6:35b', 'messages': []}, {})
+    apply_copilot_native_defaults(native, {'reasoning_effort': 'high'}, think_mode='auto')
+    assert native['think'] == 'high'
+
+
+def test_think_mode_auto_off_when_client_silent():
+    native = openai_chat_to_native({'model': 'qwen3.6:35b', 'messages': []}, {})
+    apply_copilot_native_defaults(native, {'model': 'qwen3.6:35b', 'messages': []}, think_mode='auto')
+    assert native['think'] is False
 
 
 def test_openai_chat_to_native_merges_dashboard_num_ctx():
@@ -362,3 +398,73 @@ def test_stream_flushes_thinking_to_content_when_no_answer():
     out = ''.join(stream_native_chat_lines_to_openai_sse(iter(lines), model='qwen3-vl:8b'))
     assert 'Only thinking' in out
     assert 'data: [DONE]' in out
+
+
+def test_stream_emits_heartbeat_comment_for_sentinel():
+    """STREAM_HEARTBEAT keeps IDE clients alive during cold load / slow prefill.
+
+    It emits BOTH an SSE comment (for raw proxies) AND an empty-content data chunk, because
+    VS Code Copilot's BYOK parser skips comment lines and would otherwise time out before the
+    model's first token on slow, CPU-offloaded models.
+    """
+    lines = [
+        STREAM_HEARTBEAT,
+        STREAM_HEARTBEAT,
+        b'{"message":{"role":"assistant","content":"Hi"},"done":true}',
+    ]
+    out = ''.join(stream_native_chat_lines_to_openai_sse(iter(lines), model='m'))
+    assert ': ollama-dashboard keep-alive' in out
+    assert 'Hi' in out
+    assert 'data: [DONE]' in out
+    # Heartbeats are SSE comments (leading ':'), never data events the parser would choke on.
+    assert 'data: : ollama' not in out
+    # Each heartbeat also yields a well-formed empty-content delta the client counts as activity.
+    keepalive_chunks = [
+        json.loads(part[len('data: '):])
+        for part in out.split('\n\n')
+        if part.strip().startswith('data: ') and part.strip() != 'data: [DONE]'
+        and json.loads(part.strip()[len('data: '):])['choices'][0]['delta'].get('content') == ''
+        and not json.loads(part.strip()[len('data: '):])['choices'][0].get('finish_reason')
+    ]
+    # Two heartbeats -> at least two empty-content keepalive data chunks.
+    assert len(keepalive_chunks) >= 2
+    assert all(c['object'] == 'chat.completion.chunk' for c in keepalive_chunks)
+
+
+def test_stream_heartbeat_does_not_break_content_or_finish():
+    """Interleaved heartbeats must not corrupt content order or the finish/usage chunk."""
+    lines = [
+        b'{"message":{"role":"assistant","content":"Hel"},"done":false}',
+        STREAM_HEARTBEAT,
+        b'{"message":{"role":"assistant","content":"lo"},"done":true}',
+    ]
+    chunks = list(stream_native_chat_lines_to_openai_sse(
+        iter(lines), model='m', include_usage=False,
+    ))
+    out = ''.join(chunks)
+    content = ''
+    finish = None
+    for part in out.split('\n\n'):
+        part = part.strip()
+        if not part.startswith('data: ') or part == 'data: [DONE]':
+            continue
+        obj = json.loads(part[len('data: '):])
+        delta = obj['choices'][0]['delta']
+        if delta.get('content'):
+            content += delta['content']
+        if obj['choices'][0].get('finish_reason'):
+            finish = obj['choices'][0]['finish_reason']
+    assert content == 'Hello'
+    assert finish == 'stop'
+
+
+def test_openai_sse_stream_opening_includes_empty_content():
+    """First streamed delta must be a well-formed {role, content:""} for strict parsers."""
+    line, cid, created = openai_sse_stream_opening('m')
+    assert line.startswith('data: ')
+    chunk = json.loads(line[len('data: '):].strip())
+    delta = chunk['choices'][0]['delta']
+    assert delta['role'] == 'assistant'
+    assert delta['content'] == ''
+    assert chunk['id'] == cid
+    assert chunk['created'] == created

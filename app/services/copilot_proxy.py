@@ -92,7 +92,8 @@ def log_copilot_request(
                 k: pipeline[k]
                 for k in (
                     'routed_model', 'route_reason', 'system_prompt_injected',
-                    'context_trim', 'num_ctx', 'rag', 'native_think', 'agent_tools',
+                    'context_trim', 'num_ctx', 'rag', 'native_think', 'copilot_think',
+                    'agent_tools',
                 )
                 if k in pipeline
             }
@@ -102,6 +103,33 @@ def log_copilot_request(
             handle.write(json.dumps(record, ensure_ascii=False) + '\n')
     except OSError as err:
         logger.debug('Copilot proxy log write failed: %s', err)
+
+
+def log_copilot_response(
+    *,
+    path: str,
+    model: str,
+    summary: dict[str, Any],
+    data_dir: str | None = None,
+) -> None:
+    """Append a summary of what the proxy actually streamed back (diagnoses empty/lone-token replies)."""
+    base = data_dir or os.getenv('OLLAMA_DASHBOARD_DATA') or os.getenv('DATA_DIR') or '.'
+    try:
+        log_file = Path(base) / 'copilot_proxy.log'
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        if log_file.exists() and log_file.stat().st_size > _LOG_MAX_BYTES:
+            log_file.write_text('', encoding='utf-8')
+        record: dict[str, Any] = {
+            'ts': datetime.now(timezone.utc).isoformat(),
+            'kind': 'response',
+            'path': path,
+            'model': model,
+        }
+        record.update(summary)
+        with open(log_file, 'a', encoding='utf-8') as handle:
+            handle.write(json.dumps(record, ensure_ascii=False) + '\n')
+    except OSError as err:
+        logger.debug('Copilot proxy response log write failed: %s', err)
 
 
 def _fetch_ps_models(ollama_base_url: str) -> list[dict]:

@@ -43,6 +43,17 @@ Open **http://localhost:5000** in your browser.
 
 For development with auto-reload, use `start_dev.bat` instead of `start.bat`.
 
+**Optional — connect VS Code Copilot to the dashboard proxy** so Copilot uses your saved
+per-model settings (adds the dashboard as an Ollama provider in `chatLanguageModels.json` plus a
+few context-reduction settings, with a backup):
+
+```bash
+python scripts/setup_vscode.py
+```
+
+See [Complete Guide — VS Code Copilot](docs/GUIDE.md#vs-code-copilot-ollama) for the manual
+steps and options.
+
 **Manage the running instance (Windows):**
 
 | Script | Purpose |

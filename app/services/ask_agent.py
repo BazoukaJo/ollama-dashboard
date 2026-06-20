@@ -19,6 +19,49 @@ def _max_iterations() -> int:
         return 8
 
 
+def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
+    try:
+        return max(minimum, min(int(os.getenv(name, str(default))), maximum))
+    except (TypeError, ValueError):
+        return default
+
+
+def _max_consecutive_tool_errors() -> int:
+    """Stop the agent after this many turns where every tool call returned an error."""
+    return _env_int('ASK_AGENT_MAX_TOOL_ERRORS', 3, minimum=1, maximum=10)
+
+
+def _max_tool_call_repeats() -> int:
+    """Stop the agent after the model repeats the exact same tool call(s) this many times."""
+    return _env_int('ASK_AGENT_MAX_TOOL_REPEATS', 3, minimum=2, maximum=10)
+
+
+def _tool_calls_signature(tool_calls: list[dict[str, Any]]) -> str | None:
+    """Stable signature of a turn's tool calls so we can detect a no-progress loop."""
+    try:
+        parts = sorted(
+            (
+                str(tc['function']['name']),
+                json.dumps(tc['function']['arguments'], sort_keys=True, ensure_ascii=False),
+            )
+            for tc in tool_calls
+        )
+        return json.dumps(parts, ensure_ascii=False)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _tool_result_is_error(result: str) -> bool:
+    """True when a tool result JSON signals failure (``error`` key or ``success: false``)."""
+    try:
+        obj = json.loads(result)
+    except (TypeError, ValueError):
+        return False
+    if isinstance(obj, dict):
+        return bool(obj.get('error')) or obj.get('success') is False
+    return False
+
+
 def _parse_tool_arguments(raw: Any) -> dict[str, Any]:
     if isinstance(raw, dict):
         return raw
@@ -121,6 +164,11 @@ def stream_ask_agent(
 ) -> Iterator[str]:
     """Yield NDJSON event lines for the Ask? agent UI."""
     working_messages = list(messages)
+    max_tool_errors = _max_consecutive_tool_errors()
+    max_repeats = _max_tool_call_repeats()
+    consecutive_error_turns = 0
+    last_signature: str | None = None
+    repeat_count = 0
 
     try:
         for _ in range(_max_iterations()):
@@ -139,6 +187,27 @@ def stream_ask_agent(
                 yield json.dumps({'type': 'done'}, ensure_ascii=False) + '\n'
                 return
 
+            # Loop breaker: the model asking for the exact same tool call(s) over and over makes
+            # no progress and would otherwise burn every iteration — stop early with a clear note.
+            signature = _tool_calls_signature(tool_calls)
+            if signature is not None and signature == last_signature:
+                repeat_count += 1
+            else:
+                repeat_count = 1
+                last_signature = signature
+            if repeat_count >= max_repeats:
+                yield json.dumps(
+                    {
+                        'type': 'error',
+                        'message': (
+                            'Agent stopped: the model repeated the same tool call '
+                            f'{repeat_count} times without making progress.'
+                        ),
+                    },
+                    ensure_ascii=False,
+                ) + '\n'
+                return
+
             assistant_msg: dict[str, Any] = {'role': 'assistant', 'content': content or ''}
             assistant_msg['tool_calls'] = [
                 {
@@ -153,6 +222,7 @@ def stream_ask_agent(
             ]
             working_messages.append(assistant_msg)
 
+            turn_error_count = 0
             for tc in tool_calls:
                 fn = tc['function']
                 name = fn['name']
@@ -163,6 +233,8 @@ def stream_ask_agent(
                     ensure_ascii=False,
                 ) + '\n'
                 result = execute_tool(name, args, allow_write=allow_write)
+                if _tool_result_is_error(result):
+                    turn_error_count += 1
                 yield json.dumps(
                     {'type': 'tool_result', 'name': name, 'content': result},
                     ensure_ascii=False,
@@ -172,6 +244,25 @@ def stream_ask_agent(
                     'tool_call_id': call_id,
                     'content': result,
                 })
+
+            # Error breaker: if every tool in a turn failed, several turns running, the model is
+            # unlikely to recover on its own — stop instead of looping to the iteration cap.
+            if tool_calls and turn_error_count == len(tool_calls):
+                consecutive_error_turns += 1
+            else:
+                consecutive_error_turns = 0
+            if consecutive_error_turns >= max_tool_errors:
+                yield json.dumps(
+                    {
+                        'type': 'error',
+                        'message': (
+                            'Agent stopped: tool calls failed '
+                            f'{consecutive_error_turns} turns in a row.'
+                        ),
+                    },
+                    ensure_ascii=False,
+                ) + '\n'
+                return
 
         yield json.dumps(
             {'type': 'error', 'message': 'Agent stopped: maximum tool iterations reached'},

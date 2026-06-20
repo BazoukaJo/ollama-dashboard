@@ -15,9 +15,12 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-# VS Code Copilot rejects very large completions client-side; stay under a safe ceiling.
-_DEFAULT_MAX_PREDICT = 4096
-_MAX_PREDICT_CEILING = 8192
+# Plain-chat output ceiling for external clients. 8192 matches the saved default for capable
+# reasoning models (gemma4:31b, qwen3.6:35b) so their answers are not silently halved, while
+# staying well under the per-response character cap that picky IDE clients enforce. Raise via
+# OLLAMA_PROXY_MAX_PREDICT (up to the ceiling) for even longer plain-chat completions.
+_DEFAULT_MAX_PREDICT = 8192
+_MAX_PREDICT_CEILING = 16384
 _MIN_PREDICT = 64
 
 # Agent/tool turns (file edits, multi-step refactors) need far more output room than plain chat,

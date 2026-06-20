@@ -63,7 +63,7 @@ def _mcp_client_examples(mcp_url: str, proxy_url: str) -> list[dict[str, str]]:
             'name': 'VS Code — MCP extension',
             'field': 'mcp.servers (settings JSON)',
             'value': vscode_json,
-            'hint': 'Same MCP URL; pair with github.copilot.chat.byok.ollamaEndpoint for models.',
+            'hint': 'Same MCP URL; pair with the Ollama provider URL (Chat: Manage Language Models) for models.',
         },
         {
             'name': 'Combined IDE setup',
@@ -106,10 +106,11 @@ def _client_examples(base: str) -> list[dict[str, str]]:
             'hint': 'For libraries that expect https://api.openai.com/v1 — use chat.completions.',
         },
         {
-            'name': 'VS Code — GitHub Copilot (Ollama provider)',
-            'field': 'github.copilot.chat.byok.ollamaEndpoint',
+            'name': 'VS Code — Copilot Chat (Ollama provider)',
+            'field': 'Chat: Manage Language Models → Ollama',
             'value': base,
-            'hint': 'Settings JSON; do not add /v1 — the extension appends paths.',
+            'hint': 'VS Code 1.122+: add an Ollama provider with this URL (stored in '
+                    'chatLanguageModels.json), or run scripts/setup_vscode.py. Do not add /v1.',
         },
         {
             'name': 'Continue extension',

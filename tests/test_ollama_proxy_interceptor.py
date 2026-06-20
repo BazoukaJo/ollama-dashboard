@@ -10,8 +10,12 @@ merging the whole stored entry instead of its inner "settings" dict, resolving
 settings_path against the wrong base directory, and double-porting the upstream URL
 when OLLAMA_HOST itself carries a port.
 """
+import threading
 from unittest.mock import patch
 
+import requests
+
+import app.routes.proxy as proxy
 from app import create_app
 
 
@@ -314,7 +318,7 @@ def test_v1_chat_completions_bridges_to_native_api_chat(tmp_path, monkeypatch):
     assert captured['url'] == 'http://localhost:11434/api/chat'
     assert captured['json']['options']['temperature'] == 0.55
     assert captured['json']['options']['num_ctx'] == 16384
-    assert captured['json']['options']['num_predict'] == 4096
+    assert captured['json']['options']['num_predict'] == 8192
     assert captured['json']['think'] is False
     assert 'reasoning_effort' not in captured['json']
     assert 'tools' not in captured['json']
@@ -678,7 +682,11 @@ def test_v1_chat_forwards_tools_for_agent_mode(tmp_path, monkeypatch):
 
     assert captured['json']['tools'] == tools
     assert captured['json']['tool_choice'] == 'auto'
-    assert 'think' not in captured['json']
+    # Agent turns are bridged with think:false — Copilot ignores delta.reasoning, so leaving
+    # thinking on (gemma4 etc.) streams only reasoning and shows "no response was returned".
+    assert captured['json']['think'] is False
+    # Model is kept resident between IDE turns so large models aren't reloaded on every request.
+    assert captured['json']['keep_alive'] == '15m'
     assert '"tool_calls"' in body
     assert '"name": "read_file"' in body or '"name":"read_file"' in body
     assert 'Hello there' not in body
@@ -717,7 +725,7 @@ def test_v1_completions_caps_and_resolves_model(tmp_path, monkeypatch):
         resp.get_data()
 
     assert captured['json']['model'] == 'qwen3:14b'
-    assert captured['json']['options']['num_predict'] == 4096
+    assert captured['json']['options']['num_predict'] == 8192
 
 
 def test_api_embed_passthrough(tmp_path, monkeypatch):
@@ -735,3 +743,142 @@ def test_api_embed_passthrough(tmp_path, monkeypatch):
 
     assert resp.status_code == 200
     assert captured['url'] == 'http://localhost:11434/api/embed'
+
+
+def test_proxy_general_drops_stale_content_length_and_encoding(tmp_path, monkeypatch):
+    """A compressed upstream Content-Length/Encoding must not reach the client.
+
+    ``requests`` decodes the body we forward, so a stale (compressed) Content-Length would
+    truncate VS Code's model-discovery JSON. The proxy drops both and lets Werkzeug recompute
+    the length from the actual bytes.
+    """
+    app = _create_app_for_proxy_tests(tmp_path, monkeypatch)
+    client = app.test_client()
+
+    class GzipLikeResponse:
+        status_code = 200
+        content = b'{"models": [{"name": "m"}]}'
+        headers = {
+            'Content-Type': 'application/json',
+            'Content-Encoding': 'gzip',   # body already decoded by requests
+            'Content-Length': '7',        # stale compressed length
+        }
+
+    with patch('requests.request', return_value=GzipLikeResponse()):
+        resp = client.get('/ollama/api/tags')
+
+    assert resp.status_code == 200
+    assert resp.headers.get('Content-Encoding') is None
+    assert resp.headers.get('Content-Length') == str(len(GzipLikeResponse.content))
+    assert resp.get_json() == {'models': [{'name': 'm'}]}
+
+
+# ---- _NativeChatStream: keep-alive + fail-fast for VS Code Copilot streaming ----
+
+class _SlowStream:
+    """status 200; first line is gated on an Event so the cold-load path is exercised."""
+    status_code = 200
+
+    def __init__(self, release):
+        self._release = release
+
+    def iter_lines(self):
+        self._release.wait(3.0)
+        yield b'{"message":{"role":"assistant","content":"hi"},"done":true}'
+
+    def close(self):
+        pass
+
+
+def test_native_chat_stream_emits_heartbeat_while_model_loads(monkeypatch):
+    release = threading.Event()
+    monkeypatch.setattr(proxy, '_upstream_post', lambda *a, **k: _SlowStream(release))
+    chat_stream = proxy._NativeChatStream('u', {}, heartbeat_seconds=0.05, timeout=1)
+    try:
+        # Still loading: no immediate error within the grace window.
+        assert chat_stream.peek_error(0.15) is None
+        raw_iter = chat_stream.iter_raw()
+        first = next(raw_iter)
+        assert first is proxy.STREAM_HEARTBEAT
+        release.set()
+        rest = list(raw_iter)
+        assert any(item is not proxy.STREAM_HEARTBEAT for item in rest)
+    finally:
+        release.set()
+
+
+def test_native_chat_stream_peek_returns_status_error(monkeypatch):
+    class FailStream:
+        status_code = 503
+        text = 'model not found'
+        reason = 'Service Unavailable'
+
+        def iter_lines(self):
+            return iter([])
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(proxy, '_upstream_post', lambda *a, **k: FailStream())
+    chat_stream = proxy._NativeChatStream('u', {}, heartbeat_seconds=1, timeout=1)
+    err = chat_stream.peek_error(1.0)
+    assert isinstance(err, proxy._UpstreamStatusError)
+    assert err.status_code == 503
+    assert 'model not found' in err.text
+
+
+def test_native_chat_stream_peek_returns_connection_error(monkeypatch):
+    def boom(*a, **k):
+        raise requests.ConnectionError('connection refused')
+
+    monkeypatch.setattr(proxy, '_upstream_post', boom)
+    chat_stream = proxy._NativeChatStream('u', {}, heartbeat_seconds=1, timeout=1)
+    err = chat_stream.peek_error(1.0)
+    assert isinstance(err, requests.ConnectionError)
+
+
+def test_native_chat_stream_yields_lines_then_ends(monkeypatch):
+    class OkStream:
+        status_code = 200
+
+        def iter_lines(self):
+            yield b'line-a'
+            yield b'line-b'
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(proxy, '_upstream_post', lambda *a, **k: OkStream())
+    chat_stream = proxy._NativeChatStream('u', {}, heartbeat_seconds=1, timeout=1)
+    assert chat_stream.peek_error(1.0) is None  # first line peeked + stashed for replay
+    out = [item for item in chat_stream.iter_raw() if item is not proxy.STREAM_HEARTBEAT]
+    assert out == [b'line-a', b'line-b']
+
+
+def test_v1_chat_stream_first_chunk_has_empty_content(tmp_path, monkeypatch):
+    """The committed SSE stream opens with a well-formed assistant delta for strict clients."""
+    import json as _json
+
+    app = _create_app_for_proxy_tests(tmp_path, monkeypatch, model_name='copilot-test', settings={})
+    client = app.test_client()
+
+    class OkStream:
+        status_code = 200
+
+        def iter_lines(self):
+            yield b'{"message":{"role":"assistant","content":"ok"},"done":true}'
+
+    with patch('requests.post', return_value=OkStream()):
+        resp = client.post('/ollama/v1/chat/completions', json={
+            'model': 'copilot-test',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            'stream': True,
+        })
+        body = resp.get_data(as_text=True)
+
+    first = body.split('\n\n', 1)[0]
+    assert first.startswith('data: ')
+    delta = _json.loads(first[len('data: '):])['choices'][0]['delta']
+    assert delta['role'] == 'assistant'
+    assert delta['content'] == ''
+    assert 'data: [DONE]' in body

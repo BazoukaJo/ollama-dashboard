@@ -101,23 +101,64 @@ Examples (default port **5000**):
 
 ### VS Code Copilot (Ollama)
 
-Optional setting in **User Settings (JSON)** (`Ctrl+Shift+P` → **Preferences: Open User
-Settings (JSON)**):
+**VS Code 1.122+ (recommended).** GitHub Copilot Chat's built-in BYOK ships an **Ollama /
+Custom Endpoint** provider. Point it at the dashboard proxy:
+
+1. `Ctrl+Shift+P` → **Chat: Manage Language Models** → **Add** → **Ollama**.
+2. Enter the endpoint **`http://127.0.0.1:5000/ollama`** (the dashboard proxy — not `:11434`).
+3. Select a dashboard model in Copilot Chat.
+
+VS Code stores providers in **`chatLanguageModels.json`** (next to `settings.json`):
 
 ```json
-"github.copilot.chat.byok.ollamaEndpoint": "http://127.0.0.1:5000/ollama"
+[
+  { "name": "OllamaDashboard", "vendor": "ollama", "url": "http://127.0.0.1:5000/ollama" }
+]
 ```
 
-There is **no VS Code setting** to change how long Copilot waits for Ollama responses. Only
-the endpoint URL is configurable; request timeouts are fixed inside the Copilot extension. If
-chat fails on cold start or large models, pre-start the model in the dashboard and see
+**One-step setup:** from the repo root, run the helper — it writes the provider entry plus a few
+context-reduction settings (`chat.tools.compressOutput.enabled`, `files.exclude`), with a backup:
+
+```bash
+python scripts/setup_vscode.py
+# options: --port 5000 | --endpoint <url> | --insiders | --dry-run
+```
+
+> **Legacy (pre-1.122):** older builds used the User Settings key
+> `"github.copilot.chat.byok.ollamaEndpoint": "http://127.0.0.1:5000/ollama"`. It is
+> **deprecated and silently removed** on current VS Code, so use the provider above instead.
+
+There is **no VS Code setting** to change how long Copilot waits for Ollama responses; request
+timeouts are fixed inside the extension. If chat fails on cold start or large models, pre-start
+the model in the dashboard and see
 [TROUBLESHOOTING.md — VS Code Copilot: request timeout](TROUBLESHOOTING.md#vs-code-copilot-request-timeout-or-model-wont-load).
 
 **Agent mode:** Copilot Agent sends tool definitions on every request. The dashboard proxy
 forwards those tools to native `/api/chat` and streams `tool_calls` back in OpenAI SSE shape.
-Use a model Ollama lists with tool support (for example Qwen3 or Llama 3.1+). Plain chat still
-disables thinking by default so you do not see a lone `I` from reasoning tokens; agent requests
-keep each model's default tool behavior.
+Use a model Ollama lists with tool support (for example Qwen3, gemma4, or Llama 3.1+). Agent /
+tool turns always run with thinking **off** so reasoning tokens never corrupt the tool exchange.
+
+**Reasoning / thinking models (gemma4, qwen3):** Copilot BYOK renders `delta.content` only and
+ignores `delta.reasoning`, so by default plain chat runs with `think: false` (you would otherwise
+see a lone `I` and "Sorry, no response was returned"). To actually use a model's reasoning in
+Copilot, open the model's **Settings** in the dashboard and set **Reasoning for external clients
+(Copilot)**:
+
+| Mode | Behavior (plain chat) |
+|------|-----------------------|
+| **Off** (default) | Force `think: false` — fast, direct answers. |
+| **Auto** | Follow the client's reasoning request (Copilot's `reasoning_effort`), else off. |
+| **On** | Always think; the reasoning is **mirrored into the visible answer** since Copilot only renders content. |
+
+This is a per-model setting saved under the model's `client` block. The legacy environment
+variable `OLLAMA_COPILOT_ALLOW_THINKING=true` still works as a global **Auto** default.
+
+**Large models that exceed VRAM** (e.g. `gemma4:31b` ~20 GB, `qwen3.6:35b` ~24 GB on a 16 GB
+GPU): Ollama transparently offloads the overflow to system RAM, so the first request is slow
+(30–90 s cold load) — the proxy holds the connection open with SSE heartbeats so VS Code does not
+time out. These models support a 256K context; the dashboard's recommended `num_ctx` stays
+conservative for speed, but if you have spare system RAM you can raise **Context (num_ctx)** in
+the model's Settings and the proxy will honor it (it bridges to native `/api/chat`).
 
 **Continue** example:
 
@@ -226,8 +267,12 @@ Implementation: `app/services/mcp_tools.py` (shared registry),
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `OLLAMA_PROXY_MAX_PREDICT` | `4096` | Max output tokens for external clients |
+| `OLLAMA_PROXY_MAX_PREDICT` | `8192` | Max output tokens for external clients (plain chat); raise up to 16384 for longer answers |
+| `OLLAMA_PROXY_MAX_PREDICT_AGENT` | `32768` | Max output tokens for agent/tool turns (long edits) |
+| `OLLAMA_COPILOT_ALLOW_THINKING` | `false` | Global default for **Auto** reasoning (per-model **Reasoning** setting overrides) |
 | `OLLAMA_PROXY_MAX_RESPONSE_CHARS` | `96000` | Max chars in non-streaming responses returned to IDEs |
+| `OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS` | `10` | Idle seconds before sending an SSE keep-alive comment while a model loads/stalls (keeps VS Code Copilot from timing out on cold loads) |
+| `OLLAMA_PROXY_STREAM_FIRST_BYTE_GRACE_SECONDS` | `3` | Seconds to wait for a fast upstream error before committing the keep-alive stream |
 | `OLLAMA_V1_PASSTHROUGH` | `false` | Set `true` to forward `/v1/chat/completions` to Ollama `/v1` instead of bridging to `/api/chat` |
 | `CONTEXT_TRIM_ENABLED` | `true` | Auto-trim long prompts to fit `num_ctx` |
 | `OLLAMA_COPILOT_PRELOAD_CTX` | `true` | Preload model context before first v1 chat request |

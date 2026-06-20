@@ -64,6 +64,15 @@
                   <label class="form-check-label" for="ms-client-trim">Auto-trim long prompts to fit context (proxy)</label>
                 </div>
                 <div class="mb-3">
+                  <label class="form-label">Reasoning for external clients (Copilot)</label>
+                  <select class="form-select" id="ms-client-think">
+                    <option value="off" ${(client.copilot_think||'off')==='off'?'selected':''}>Off — fast, direct answers (recommended)</option>
+                    <option value="auto" ${client.copilot_think==='auto'?'selected':''}>Auto — follow the client's reasoning request</option>
+                    <option value="on" ${client.copilot_think==='on'?'selected':''}>On — always think (reasoning shown in the reply)</option>
+                  </select>
+                  <div class="form-text text-muted">For thinking models (gemma4, qwen3) via the <code>/ollama</code> proxy. <strong>On</strong> streams the model's reasoning into the visible answer since Copilot only renders content; tool/agent turns always run without thinking.</div>
+                </div>
+                <div class="mb-3">
                   <label class="form-label">Seed</label>
                   <input type="number" class="form-control" id="ms-seed" value="${settings.seed ?? 0}">
                 </div>
@@ -188,6 +197,7 @@
     const presetEl = g('ms-client-preset');
     const customEl = g('ms-client-custom');
     const trimEl = g('ms-client-trim');
+    const thinkEl = g('ms-client-think');
     return {
       temperature: safeFloat('ms-temperature', 0.75),
       top_k: safeInt('ms-top-k', 40),
@@ -210,6 +220,7 @@
         system_prompt_preset: presetEl ? presetEl.value : 'none',
         system_prompt_custom: customEl ? customEl.value.trim() : '',
         context_trim_enabled: trimEl ? !!trimEl.checked : true,
+        copilot_think: thinkEl ? thinkEl.value : 'off',
       },
     };
   }

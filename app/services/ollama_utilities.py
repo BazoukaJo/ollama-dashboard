@@ -474,8 +474,17 @@ class OllamaServiceUtilities:
             copilot = settings_dict.pop('client')
         if copilot is None and isinstance(settings_dict.get('copilot'), dict):
             copilot = settings_dict.pop('copilot')
+        # Preserve a model's already-tuned settings (num_ctx, sampling) when the caller omits
+        # them — e.g. a partial save that only updates the client/proxy block. Falling back to
+        # bare template defaults here would silently wipe a carefully tuned large model.
+        existing_entry = lookup_settings_entry(getattr(self, '_model_settings', {}), model_name)
+        existing_settings = (
+            existing_entry.get('settings') if isinstance(existing_entry, dict) else None
+        )
+        base = existing_settings if isinstance(existing_settings, dict) and existing_settings else template
         for key, default_val in template.items():
-            incoming = settings_dict.get(key, default_val)
+            fallback = base.get(key, default_val)
+            incoming = settings_dict.get(key, fallback)
             normalized[key] = normalize_setting_value(key, incoming, default_val)
 
         entry = {

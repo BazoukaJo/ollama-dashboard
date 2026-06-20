@@ -129,7 +129,7 @@ def test_stream_realistic_tool_call_arguments_preserved():
 # --------------------------------------------------------------------------- #
 def test_num_predict_agent_allows_more_than_plain_chat():
     plain, _ = cap_num_predict({'max_tokens': 16_000, 'options': {}})
-    assert plain['options']['num_predict'] == 4096  # plain chat ceiling unchanged
+    assert plain['options']['num_predict'] == 8192  # plain-chat ceiling (capable models)
     agent, meta = cap_num_predict({'max_tokens': 16_000, 'options': {}}, agent=True)
     assert agent['options']['num_predict'] == 16_000
     assert meta['num_predict_ceiling'] >= 16_000

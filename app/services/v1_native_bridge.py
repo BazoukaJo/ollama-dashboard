@@ -31,6 +31,15 @@ _OPENAI_OPTION_KEYS = frozenset({
     'penalize_newline',
 })
 
+# Sentinel a streaming line source can yield while Ollama loads a large model (no bytes flow
+# until generation starts). The converter turns it into an SSE *comment* line, which keeps the
+# HTTP connection alive for IDE clients (VS Code Copilot, Continue) without injecting any
+# `data:` event — OpenAI/SSE parsers ignore lines beginning with ``:``. This is what prevents
+# the "Sorry, no response was returned" empty reply when a cold 20GB+ model takes 30-90s to
+# produce its first token.
+STREAM_HEARTBEAT = object()
+_SSE_HEARTBEAT_COMMENT = ': ollama-dashboard keep-alive\n\n'
+
 
 def _copilot_safe_finish_reason(native: dict[str, Any], *, tool_calls: bool = False) -> str:
     """VS Code Copilot errors on ``finish_reason: length`` — map to ``stop``."""
@@ -179,23 +188,40 @@ def openai_chat_to_native(
 def apply_copilot_native_defaults(
     native: dict[str, Any],
     openai_payload: dict[str, Any],
+    *,
+    think_mode: str | None = None,
 ) -> dict[str, Any]:
-    """Tune native ``/api/chat`` for IDE clients without disabling agent/tool models.
+    """Tune native ``/api/chat`` thinking for IDE clients (VS Code Copilot, Continue, ...).
 
-    Plain chat: force ``think: false`` so Copilot BYOK does not show a lone ``I`` from
-    reasoning tokens (it only renders ``delta.content``).
+    ``think_mode`` (per-model ``copilot_think`` setting) controls reasoning for **plain chat**:
 
-    Agent requests (``tools`` present): also force ``think: false`` by default. Copilot sends
-    ``reasoning_effort`` on every Agent turn; leaving ``think`` unset re-enables model-default
-    thinking (e.g. gemma4) which streams only ``delta.reasoning`` that Copilot ignores — users
-    see **Sorry, no response was returned** until tool_calls arrive or the client times out.
+    * ``off`` (default) — force ``think: false`` so Copilot BYOK never shows a lone ``I`` from
+      reasoning tokens (it renders ``delta.content`` only).
+    * ``auto`` — respect the client's ``reasoning_effort`` (Copilot/OpenAI), else off. The legacy
+      ``OLLAMA_COPILOT_ALLOW_THINKING`` env var maps to this so existing setups keep working.
+    * ``on`` — force ``think: true`` so capable reasoning models (gemma4, qwen3) actually think;
+      the caller mirrors the reasoning into ``delta.content`` so it is visible in Copilot.
+
+    Agent requests (``tools`` present) **always** force ``think: false`` regardless of mode:
+    leaving thinking on streams only ``delta.reasoning`` Copilot ignores (users see
+    **Sorry, no response was returned**) and risks corrupting the tool-call exchange.
     """
-    allow_thinking = os.getenv('OLLAMA_COPILOT_ALLOW_THINKING', '').strip().lower() in (
+    mode = str(think_mode or 'off').strip().lower()
+    env_allow = os.getenv('OLLAMA_COPILOT_ALLOW_THINKING', '').strip().lower() in (
         '1', 'true', 'yes',
     )
-    think = _resolve_think_from_openai_payload(openai_payload)
-    if allow_thinking and think is not None:
-        native['think'] = think
+    if mode == 'off' and env_allow:
+        mode = 'auto'
+
+    if native.get('tools'):
+        native['think'] = False
+        return native
+
+    if mode == 'on':
+        native['think'] = True
+    elif mode == 'auto':
+        think = _resolve_think_from_openai_payload(openai_payload)
+        native['think'] = think if think is not None else False
     else:
         native['think'] = False
     return native
@@ -235,7 +261,9 @@ def openai_sse_stream_opening(
     """Return an immediate role SSE chunk while Ollama loads the model."""
     cid = completion_id or _completion_id()
     created = _created_ts()
-    line = _openai_chat_chunk(cid, model, {'role': 'assistant'}, created=created)
+    # Include an empty ``content`` so strict OpenAI SSE parsers (VS Code Copilot BYOK) always
+    # see a well-formed first delta even before the model emits its first token.
+    line = _openai_chat_chunk(cid, model, {'role': 'assistant', 'content': ''}, created=created)
     return line, cid, created
 
 
@@ -491,6 +519,18 @@ def stream_native_chat_lines_to_openai_sse(
     in_thinking_phase = False
 
     for raw in line_iter:
+        if raw is STREAM_HEARTBEAT:
+            # Keep the IDE client alive while the model loads / prefills a large context.
+            # Emit BOTH an SSE comment (helps raw proxies) AND an empty-content data chunk:
+            # VS Code Copilot's BYOK parser skips comment lines, so a comment alone does NOT
+            # reset its "waiting for the model" timeout. A well-formed empty delta counts as
+            # activity (matches Ollama's own ``content: ""`` chunks) and prevents the client
+            # from giving up after the first token on slow, CPU-offloaded models.
+            yield _SSE_HEARTBEAT_COMMENT
+            yield _openai_chat_chunk(
+                cid, model, {'role': 'assistant', 'content': ''}, created=created,
+            )
+            continue
         if not raw:
             continue
         try:
@@ -652,6 +692,20 @@ def stream_native_generate_lines_to_openai_sse(
     """Convert NDJSON ``/api/generate`` stream lines to OpenAI text completion SSE."""
     cid = completion_id or _completion_id()
     for raw in line_iter:
+        if raw is STREAM_HEARTBEAT:
+            # Comment for raw proxies + an empty-text data chunk so strict clients count it
+            # as activity during slow loads (see chat keepalive note above).
+            yield _SSE_HEARTBEAT_COMMENT
+            yield (
+                'data: ' + json.dumps({
+                    'id': cid,
+                    'object': 'text_completion',
+                    'created': _created_ts(),
+                    'model': model,
+                    'choices': [{'index': 0, 'text': '', 'finish_reason': None}],
+                }, ensure_ascii=False) + '\n\n'
+            )
+            continue
         if not raw:
             continue
         try:

@@ -37,6 +37,46 @@ def _migrate_legacy_root_data_files(base_dir: Path, data_dir: Path) -> None:
                 logger.warning("Could not migrate %s: %s", name, exc)
 
 
+def _schedule_startup_prewarm(app, ollama_service) -> None:
+    """Pre-load the configured default IDE model so the first Copilot turn is not a cold start.
+
+    Opt-in via ``COPILOT_PREWARM_MODEL`` (gated by ``COPILOT_PREWARM_ON_START``, default on); a
+    no-op when unset so existing setups are unaffected. Fully best-effort: any failure is logged
+    and never blocks or crashes startup.
+    """
+    model_name = os.getenv('COPILOT_PREWARM_MODEL', '').strip()
+    if not model_name:
+        return
+    try:
+        from app.services.copilot_prewarm import schedule_startup_prewarm
+        from app.services.model_settings_helpers import (
+            compute_fresh_recommended_settings_entry,
+            lookup_settings_entry,
+        )
+        from app.services.settings_cache import load_settings_file
+
+        entry = None
+        try:
+            entry = lookup_settings_entry(
+                load_settings_file(Path(app.config['MODEL_SETTINGS_FILE'])), model_name,
+            )
+        except (OSError, ValueError):
+            entry = None
+        if not entry:
+            with app.app_context():
+                try:
+                    entry = compute_fresh_recommended_settings_entry(ollama_service, model_name)
+                except Exception:  # noqa: BLE001 - recommendation is best-effort
+                    entry = None
+        options = (entry or {}).get('settings') or {}
+        host = app.config['OLLAMA_HOST']
+        port = app.config['OLLAMA_PORT']
+        schedule_startup_prewarm(f'http://{host}:{port}', model_name, options)
+        logger.info("🔥 Scheduled startup prewarm for %s", model_name)
+    except Exception as err:  # noqa: BLE001 - prewarm must never break startup
+        logger.warning("Startup prewarm skipped: %s", err)
+
+
 def create_app(config_name='development'):
     """Create and configure Flask application.
 
@@ -205,6 +245,9 @@ def create_app(config_name='development'):
 
     from app.services.mcp_server import mount_mcp_on_flask_app  # pylint: disable=import-outside-toplevel
     mount_mcp_on_flask_app(app)
+
+    # Optional: warm the default IDE model in the background so the first Copilot turn is fast.
+    _schedule_startup_prewarm(app, ollama_service)
 
     logger.info("✅ Application initialized successfully")
     return app

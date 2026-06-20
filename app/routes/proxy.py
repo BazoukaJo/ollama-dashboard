@@ -8,6 +8,9 @@ Saved per-model settings are merged into inference requests before forwarding.
 import json
 import logging
 import os
+import queue
+import threading
+import time
 from pathlib import Path
 
 import requests
@@ -25,7 +28,11 @@ from app.services.client_payload_compat import (
 )
 from app.services.copilot_pipeline import prepare_copilot_payload
 from app.services.copilot_prewarm import record_model_activity
-from app.services.copilot_proxy import log_copilot_request, log_ollama_proxy_hit
+from app.services.copilot_proxy import (
+    log_copilot_request,
+    log_copilot_response,
+    log_ollama_proxy_hit,
+)
 from app.services.model_settings_helpers import (
     compute_fresh_recommended_settings_entry,
     get_default_settings_template,
@@ -35,6 +42,7 @@ from app.services.model_settings_helpers import (
 from app.services.settings_cache import load_settings_file
 from app.services.v1_model_resolve import resolve_v1_model_name
 from app.services.v1_native_bridge import (
+    STREAM_HEARTBEAT,
     apply_copilot_native_defaults,
     merge_v1_payload_options,
     native_chat_response_to_openai,
@@ -76,12 +84,134 @@ _UPSTREAM_VISION_INFERENCE_TIMEOUT = 300
 _UPSTREAM_DEFAULT_TIMEOUT = 30
 _UPSTREAM_PULL_TIMEOUT = 600
 
+# Streaming keep-alive tuning for IDE clients (VS Code Copilot, Continue, etc.).
+# A cold 20GB+ model can take 30-90s to load before Ollama emits its first byte; during that
+# window we send SSE comment heartbeats so the client does not give up with an empty
+# "Sorry, no response was returned" reply.
+# 5s keeps strict IDE clients (VS Code Copilot) engaged through the slow prefill of large,
+# CPU-offloaded models (e.g. gemma4:31b on 16 GB VRAM can take ~50s to the first token).
+_DEFAULT_STREAM_HEARTBEAT_SECONDS = 5.0
+_DEFAULT_STREAM_FIRST_BYTE_GRACE_SECONDS = 3.0
+
+
+def _env_float(name, default, *, minimum, maximum):
+    raw = os.getenv(name, '').strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return min(max(value, minimum), maximum)
+
+
+def _env_int(name, default, *, minimum, maximum):
+    raw = os.getenv(name, '').strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return min(max(value, minimum), maximum)
+
+
+def _stream_heartbeat_seconds():
+    """How long to wait for an upstream line before emitting a keep-alive comment."""
+    return _env_float(
+        'OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS',
+        _DEFAULT_STREAM_HEARTBEAT_SECONDS,
+        minimum=1.0,
+        maximum=60.0,
+    )
+
+
+def _stream_first_byte_grace_seconds():
+    """How long to block before committing to the keep-alive stream.
+
+    Within this window an upstream connection error or non-200 status is surfaced as a proper
+    HTTP error response. Past it (a cold model still loading) we commit HTTP 200 and heartbeat.
+    """
+    return _env_float(
+        'OLLAMA_PROXY_STREAM_FIRST_BYTE_GRACE_SECONDS',
+        _DEFAULT_STREAM_FIRST_BYTE_GRACE_SECONDS,
+        minimum=0.5,
+        maximum=30.0,
+    )
+
+
+def _stream_first_token_timeout_seconds():
+    """Hard cap (seconds) for the model's first token after the stream commits.
+
+    Heartbeats keep the client alive through a cold load, but if the model never emits a token
+    we must abort with a clear error instead of heart-beating forever (a silent, infinite hang).
+    Generous by default so a large CPU-offloaded model can still finish loading.
+    """
+    return _env_float(
+        'OLLAMA_PROXY_FIRST_TOKEN_TIMEOUT_SECONDS', 300.0, minimum=15.0, maximum=3600.0,
+    )
+
+
+def _stream_stall_timeout_seconds():
+    """Max gap (seconds) between streamed tokens before the upstream is treated as stalled."""
+    return _env_float(
+        'OLLAMA_PROXY_STREAM_STALL_TIMEOUT_SECONDS', 120.0, minimum=5.0, maximum=3600.0,
+    )
+
+
+def _upstream_max_attempts():
+    """Total attempts for an upstream request that fails to connect before any byte is produced."""
+    return _env_int('OLLAMA_PROXY_UPSTREAM_MAX_ATTEMPTS', 3, minimum=1, maximum=6)
+
+
+def _upstream_retry_backoff_seconds():
+    """Base backoff (seconds) between upstream connection retries (scaled by attempt number)."""
+    return _env_float('OLLAMA_PROXY_UPSTREAM_RETRY_BACKOFF_SECONDS', 0.4, minimum=0.0, maximum=5.0)
+
+
+def _copilot_keep_alive():
+    """``keep_alive`` to inject for IDE chat turns so a model stays resident between requests.
+
+    Large models (e.g. ``gemma4:31b``) can take minutes to load; without this they are evicted
+    after Ollama's default 5 min idle and reloaded on the next turn. Returns ``None`` when
+    disabled (``COPILOT_KEEP_ALIVE=false``) so we fall back to Ollama's default.
+    """
+    if os.getenv('COPILOT_KEEP_ALIVE', 'true').strip().lower() not in ('1', 'true', 'yes'):
+        return None
+    raw = os.getenv('COPILOT_KEEP_ALIVE_MINUTES', '15').strip()
+    try:
+        minutes = max(int(raw), 1)
+    except ValueError:
+        minutes = 15
+    return f'{minutes}m'
+
 
 def _upstream_post(url, payload, *, stream=False, timeout=None):
     """POST JSON to Ollama; always passes an explicit timeout."""
     if timeout is None:
         timeout = _UPSTREAM_STREAM_TIMEOUT if stream else _UPSTREAM_INFERENCE_TIMEOUT
     return requests.post(url, json=payload, stream=stream, timeout=timeout)
+
+
+def _upstream_post_with_retry(url, payload, *, stream=False, timeout=None):
+    """POST JSON to Ollama, retrying only connection-level failures (Ollama down/restarting).
+
+    A momentarily unreachable Ollama (e.g. it is auto-restarting) recovers without any user
+    action. Non-2xx HTTP responses are returned as-is (the caller decides) and never retried.
+    """
+    attempts = _upstream_max_attempts()
+    backoff = _upstream_retry_backoff_seconds()
+    last_err: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return _upstream_post(url, payload, stream=stream, timeout=timeout)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
+            last_err = err
+            if attempt < attempts:
+                time.sleep(backoff * attempt)
+                continue
+            raise
+    raise last_err  # pragma: no cover - loop always returns or raises above
 
 
 def _upstream_request(method, url, **kwargs):
@@ -97,12 +227,20 @@ def _upstream_request(method, url, **kwargs):
 
 
 def _filter_upstream_response_headers(headers):
-    """Return header pairs safe to pass through a WSGI Response."""
+    """Return header pairs safe to pass through a WSGI Response.
+
+    ``requests`` transparently decompresses the body we forward (``response_data.content``), so
+    the upstream ``Content-Encoding`` and its ``Content-Length`` no longer describe what we send.
+    Drop both and let Werkzeug recompute ``Content-Length`` from the actual bytes — otherwise a
+    stale/compressed length truncates model lists and breaks VS Code's discovery JSON parsing
+    (e.g. behind a reverse proxy or a future Ollama that gzips ``/api/tags`` and ``/api/show``).
+    """
     safe = []
     for key, value in headers.items():
-        if key.lower() in HOP_BY_HOP_HEADERS:
+        key_lower = key.lower()
+        if key_lower in HOP_BY_HOP_HEADERS:
             continue
-        if key.lower() == 'content-encoding':
+        if key_lower in ('content-encoding', 'content-length'):
             continue
         safe.append((key, value))
     return safe
@@ -214,29 +352,57 @@ def _native_stream_response(stream_body, *, status=200):
 
 
 def _forward_json_post_with_settings(upstream_url, payload, *, default_stream=False, timeout=None):
-    """POST JSON upstream; stream when the client requested streaming."""
+    """POST JSON upstream; stream when the client requested streaming.
+
+    Streaming uses the resilient ``_NativeChatStream`` (auto-retry on connect failure, bounded
+    first-token / stall timeouts) so native NDJSON clients (incl. VS Code's Ollama provider) get
+    the same "never hang, self-heal" guarantees as the OpenAI bridge. Heartbeats are blank
+    newlines, which every NDJSON reader skips, so the wire stays valid while the model loads.
+    """
     stream = payload.get('stream') if 'stream' in payload else default_stream
-    if stream:
-        upstream = _upstream_post(upstream_url, payload, stream=True, timeout=timeout)
-        if upstream.status_code != 200:
-            err_body = upstream.content or json.dumps(
-                {'error': upstream.text or upstream.reason or 'Upstream error'},
-            ).encode('utf-8')
+    if not stream:
+        try:
+            response_data = _upstream_post_with_retry(upstream_url, payload, timeout=timeout)
+        except requests.RequestException as err:
+            logger.warning('Upstream %s connection failed: %s', upstream_url, err)
+            body = json.dumps({'error': _ollama_unreachable_text(err)}).encode('utf-8')
+            return _native_stream_response(lambda: iter([body]), status=502)
+        return _proxy_upstream_response(response_data)
 
-            def err_body_iter():
-                yield err_body
+    native_stream = _NativeChatStream(
+        upstream_url,
+        payload,
+        heartbeat_seconds=_stream_heartbeat_seconds(),
+        timeout=timeout or _UPSTREAM_STREAM_TIMEOUT,
+        first_token_timeout=_stream_first_token_timeout_seconds(),
+        stall_timeout=_stream_stall_timeout_seconds(),
+        max_attempts=_upstream_max_attempts(),
+        retry_backoff=_upstream_retry_backoff_seconds(),
+        mode='content',
+    )
+    first_error = native_stream.peek_error(_stream_first_byte_grace_seconds())
+    if isinstance(first_error, _UpstreamStatusError):
+        err_body = json.dumps({'error': first_error.text}).encode('utf-8')
+        return _native_stream_response(lambda: iter([err_body]), status=first_error.status_code)
+    if isinstance(first_error, BaseException):
+        logger.warning('Upstream %s stream connection failed: %s', upstream_url, first_error)
+        err_body = json.dumps({'error': _ollama_unreachable_text(first_error)}).encode('utf-8')
+        return _native_stream_response(lambda: iter([err_body]), status=502)
 
-            return _native_stream_response(err_body_iter, status=upstream.status_code)
+    def stream_body():
+        try:
+            for chunk in native_stream.iter_raw():
+                if chunk is STREAM_HEARTBEAT:
+                    yield b'\n'  # NDJSON-safe keep-alive (readers skip blank lines)
+                elif chunk:
+                    yield chunk if isinstance(chunk, (bytes, bytearray)) else str(chunk).encode('utf-8')
+        except _UpstreamStatusError as err:
+            yield json.dumps({'error': err.text}).encode('utf-8')
+        except Exception as err:  # noqa: BLE001 — surface mid-stream failures, never hang.
+            logger.warning('Native stream %s failed mid-flight: %s', upstream_url, err)
+            yield json.dumps({'error': _ollama_unreachable_text(err)}).encode('utf-8')
 
-        def stream_body():
-            for chunk in upstream.iter_content(chunk_size=1024):
-                if chunk:
-                    yield chunk
-
-        return _native_stream_response(stream_body)
-
-    response_data = _upstream_post(upstream_url, payload, timeout=timeout)
-    return _proxy_upstream_response(response_data)
+    return _native_stream_response(stream_body)
 
 
 def _merge_saved_settings_into_payload(payload):
@@ -400,15 +566,27 @@ def _handle_v1_chat_completions():
     native_payload = openai_chat_to_native(merged_payload, {})
     # Resolve thinking from the ORIGINAL request: prepare_copilot_payload() sanitizes away
     # reasoning/effort/think, so apply_copilot_native_defaults must see the raw payload for
-    # OLLAMA_COPILOT_ALLOW_THINKING to actually take effect (otherwise the toggle is dead).
-    apply_copilot_native_defaults(native_payload, payload)
+    # the per-model reasoning mode (and OLLAMA_COPILOT_ALLOW_THINKING) to take effect.
+    think_mode = (pipeline_meta.get('client_extras') or {}).get('copilot_think', 'off')
+    apply_copilot_native_defaults(native_payload, payload, think_mode=think_mode)
+
+    # Keep the model resident between IDE turns so large models are not evicted and reloaded on
+    # every request (a 20 GB reload can dominate the turn). Client-supplied keep_alive wins.
+    if native_payload.get('keep_alive') is None:
+        keep_alive = _copilot_keep_alive()
+        if keep_alive is not None:
+            native_payload['keep_alive'] = keep_alive
 
     log_copilot_request(
         merged_payload,
         path=request.path,
         resolved_model=merged_payload.get('model') or resolved_model or '',
         data_dir=current_app.config.get('DATA_DIR'),
-        pipeline={**(pipeline_meta or {}), 'native_think': native_payload.get('think')},
+        pipeline={
+            **(pipeline_meta or {}),
+            'native_think': native_payload.get('think'),
+            'copilot_think': think_mode,
+        },
     )
 
     model_for_preload = merged_payload.get('model') or ''
@@ -416,6 +594,241 @@ def _handle_v1_chat_completions():
         record_model_activity(model_for_preload)
 
     return _forward_v1_chat_via_native(native_payload, merged_payload)
+
+
+class _ResponseTally:
+    """Tally what the proxy actually streamed to the client (for diagnosing empty/lone-token replies)."""
+
+    def __init__(self):
+        self.content_chars = 0
+        self.reasoning_chars = 0
+        self.tool_calls = 0
+        self.heartbeats = 0
+        self.first_content = ''
+        self.finish_reason = None
+        self.error = None
+
+    def observe(self, chunk):
+        if not isinstance(chunk, str):
+            return
+        if chunk.startswith(':'):
+            self.heartbeats += 1
+            return
+        if not chunk.startswith('data:'):
+            return
+        data = chunk[5:].strip()
+        if not data or data == '[DONE]':
+            return
+        try:
+            obj = json.loads(data)
+        except (ValueError, TypeError):
+            return
+        choices = obj.get('choices')
+        if not isinstance(choices, list) or not choices:
+            return
+        choice = choices[0] if isinstance(choices[0], dict) else {}
+        delta = choice.get('delta') if isinstance(choice.get('delta'), dict) else {}
+        content = delta.get('content')
+        if isinstance(content, str) and content:
+            self.content_chars += len(content)
+            if len(self.first_content) < 80:
+                self.first_content = (self.first_content + content)[:80]
+        reasoning = delta.get('reasoning')
+        if isinstance(reasoning, str) and reasoning:
+            self.reasoning_chars += len(reasoning)
+        if delta.get('tool_calls'):
+            self.tool_calls += len(delta['tool_calls'])
+        if choice.get('finish_reason'):
+            self.finish_reason = choice['finish_reason']
+
+    def summary(self, *, agent, think):
+        return {
+            'agent': bool(agent),
+            'think': bool(think),
+            'content_chars': self.content_chars,
+            'reasoning_chars': self.reasoning_chars,
+            'tool_calls': self.tool_calls,
+            'heartbeats': self.heartbeats,
+            'finish_reason': self.finish_reason,
+            'first_content': self.first_content,
+            'error': self.error,
+        }
+
+
+class _UpstreamStatusError(Exception):
+    """Upstream returned a non-200 status while streaming /api/chat."""
+
+    def __init__(self, status_code, text):
+        super().__init__(text)
+        self.status_code = status_code
+        self.text = text
+
+
+class _NativeChatStream:
+    """Run a blocking streaming upstream POST in a worker thread, resiliently.
+
+    The worker feeds raw items onto a queue; the consumer yields them but emits a
+    ``STREAM_HEARTBEAT`` sentinel whenever no item arrives within ``heartbeat_seconds`` so the
+    connection to the IDE client stays alive while the model loads. ``peek_error`` lets the
+    caller fail fast (proper HTTP status) for an immediate connection/non-200 error before any
+    bytes are committed to the client.
+
+    Robustness for an "online provider"-grade local proxy:
+
+    * ``mode='lines'`` reads ``iter_lines()`` (for the OpenAI SSE bridge); ``mode='content'``
+      reads ``iter_content()`` (raw byte passthrough for native NDJSON clients).
+    * A connection-level failure *before the first byte is produced* is retried automatically
+      (up to ``max_attempts``) so a momentarily unreachable / restarting Ollama recovers with no
+      user action — the client only sees a few extra keep-alive heartbeats.
+    * ``first_token_timeout`` / ``stall_timeout`` bound how long the consumer ever waits, so the
+      stream can never hang indefinitely (``None`` disables a bound).
+    """
+
+    def __init__(self, url, payload, *, heartbeat_seconds, timeout,
+                 first_token_timeout=None, stall_timeout=None,
+                 max_attempts=1, retry_backoff=0.4, mode='lines', chunk_size=1024):
+        self._queue = queue.Queue()
+        self._cancel = threading.Event()
+        self._heartbeat_seconds = heartbeat_seconds
+        self._first_token_timeout = first_token_timeout
+        self._stall_timeout = stall_timeout
+        self._pending = None
+        self._finished = False
+        self._response = None
+        self._thread = threading.Thread(
+            target=self._worker,
+            args=(
+                url, payload, timeout,
+                max(1, int(max_attempts)), max(0.0, float(retry_backoff)),
+                mode, chunk_size,
+            ),
+            name='copilot-upstream-chat',
+            daemon=True,
+        )
+        self._thread.start()
+
+    def _read_iter(self, upstream, mode, chunk_size):
+        if mode == 'content':
+            return upstream.iter_content(chunk_size=chunk_size)
+        return upstream.iter_lines()
+
+    def _worker(self, url, payload, timeout, max_attempts, retry_backoff, mode, chunk_size):
+        produced = False
+        attempt = 0
+        while not self._cancel.is_set():
+            attempt += 1
+            upstream = None
+            try:
+                upstream = _upstream_post(url, payload, stream=True, timeout=timeout)
+                self._response = upstream
+                if upstream.status_code != 200:
+                    text = (upstream.text or upstream.reason or 'Upstream error')[:2000]
+                    self._queue.put(('status', upstream.status_code, text))
+                    return
+                for item in self._read_iter(upstream, mode, chunk_size):
+                    if self._cancel.is_set():
+                        break
+                    produced = True
+                    self._queue.put(('line', item, None))
+                self._queue.put(('end', None, None))
+                return
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
+                # Safe to retry only before the client has seen any real bytes (heartbeats only).
+                if attempt < max_attempts and not produced and not self._cancel.is_set():
+                    if self._cancel.wait(retry_backoff * attempt):
+                        return
+                    continue
+                self._queue.put(('exc', err, None))
+                return
+            except Exception as err:  # noqa: BLE001 — must always signal, else the consumer hangs.
+                self._queue.put(('exc', err, None))
+                return
+            finally:
+                if upstream is not None:
+                    try:
+                        upstream.close()
+                    except Exception:  # noqa: BLE001 — best-effort cleanup.
+                        pass
+
+    def close(self):
+        """Cancel the worker and unblock any in-flight upstream read (best-effort)."""
+        self._cancel.set()
+        resp = self._response
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:  # noqa: BLE001 — best-effort.
+                pass
+
+    def peek_error(self, grace_seconds):
+        """Block up to ``grace_seconds`` for the first item; return an error to fail fast, else None."""
+        try:
+            item = self._queue.get(timeout=grace_seconds)
+        except queue.Empty:
+            return None
+        kind = item[0]
+        if kind == 'status':
+            self._finished = True
+            return _UpstreamStatusError(item[1], item[2])
+        if kind == 'exc':
+            self._finished = True
+            return item[1]
+        self._pending = item
+        return None
+
+    def iter_raw(self):
+        """Yield raw items, interleaving STREAM_HEARTBEAT and bounding total/stall wait time."""
+        if self._finished:
+            return
+        start = time.monotonic()
+        last_activity = start
+        first_seen = False
+        try:
+            if self._pending is not None:
+                item, self._pending = self._pending, None
+                if item[0] == 'line':
+                    first_seen = True
+                    last_activity = time.monotonic()
+                    yield item[1]
+                elif item[0] == 'end':
+                    return
+            while True:
+                try:
+                    kind, first, _second = self._queue.get(timeout=self._heartbeat_seconds)
+                except queue.Empty:
+                    now = time.monotonic()
+                    if (
+                        not first_seen
+                        and self._first_token_timeout is not None
+                        and (now - start) >= self._first_token_timeout
+                    ):
+                        raise _UpstreamStatusError(
+                            504,
+                            'Model did not start generating within '
+                            f'{int(self._first_token_timeout)}s; aborted to avoid a hang. '
+                            'The model may still be loading — please retry.',
+                        )
+                    if (
+                        first_seen
+                        and self._stall_timeout is not None
+                        and (now - last_activity) >= self._stall_timeout
+                    ):
+                        # Mid-stream stall: end gracefully so any partial output is preserved.
+                        return
+                    yield STREAM_HEARTBEAT
+                    continue
+                if kind == 'line':
+                    first_seen = True
+                    last_activity = time.monotonic()
+                    yield first
+                elif kind == 'end':
+                    return
+                elif kind == 'status':
+                    raise _UpstreamStatusError(first, _second)
+                elif kind == 'exc':
+                    raise first
+        finally:
+            self.close()
 
 
 def _forward_v1_chat_via_native(native_payload, openai_payload):
@@ -438,35 +851,74 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
     )
 
     if stream:
-        try:
-            upstream = _upstream_post(upstream_url, native_payload, stream=True)
-        except requests.RequestException as err:
-            logger.warning('Upstream /api/chat stream connection failed (model=%s): %s', model_name, err)
-            return _openai_error_sse(_ollama_unreachable_text(err), model_name=model_name)
-        if upstream.status_code != 200:
-            err_text = (upstream.text or upstream.reason or 'Upstream error')[:2000]
-            return _openai_error_sse(err_text, status_code=upstream.status_code, model_name=model_name)
+        chat_stream = _NativeChatStream(
+            upstream_url,
+            native_payload,
+            heartbeat_seconds=_stream_heartbeat_seconds(),
+            timeout=_UPSTREAM_STREAM_TIMEOUT,
+            first_token_timeout=_stream_first_token_timeout_seconds(),
+            stall_timeout=_stream_stall_timeout_seconds(),
+            max_attempts=_upstream_max_attempts(),
+            retry_backoff=_upstream_retry_backoff_seconds(),
+        )
+        # Fail fast (proper HTTP status) for immediate errors; otherwise commit to the
+        # keep-alive stream so a cold model still loading does not look like an empty reply.
+        first_error = chat_stream.peek_error(_stream_first_byte_grace_seconds())
+        if isinstance(first_error, _UpstreamStatusError):
+            return _openai_error_sse(
+                first_error.text, status_code=first_error.status_code, model_name=model_name,
+            )
+        if isinstance(first_error, BaseException):
+            logger.warning(
+                'Upstream /api/chat stream connection failed (model=%s): %s', model_name, first_error,
+            )
+            return _openai_error_sse(_ollama_unreachable_text(first_error), model_name=model_name)
 
         def stream_body():
             opening, cid, created = openai_sse_stream_opening(model_name)
+            tally = _ResponseTally()
             yield opening.encode('utf-8')
-            for chunk in stream_native_chat_lines_to_openai_sse(
-                upstream.iter_lines(),
-                model=model_name,
-                include_usage=include_usage,
-                completion_id=cid,
-                stream_created=created,
-                omit_reasoning_deltas=not mirror_thinking,
-                mirror_thinking_to_content=mirror_thinking,
-                agent_mode=has_tools,
-                max_stream_chars=proxy_max_response_chars(),
-            ):
-                yield chunk.encode('utf-8')
+            try:
+                for chunk in stream_native_chat_lines_to_openai_sse(
+                    chat_stream.iter_raw(),
+                    model=model_name,
+                    include_usage=include_usage,
+                    completion_id=cid,
+                    stream_created=created,
+                    omit_reasoning_deltas=not mirror_thinking,
+                    mirror_thinking_to_content=mirror_thinking,
+                    agent_mode=has_tools,
+                    max_stream_chars=proxy_max_response_chars(),
+                ):
+                    tally.observe(chunk)
+                    yield chunk.encode('utf-8')
+            except _UpstreamStatusError as err:
+                tally.error = f'upstream_status_{err.status_code}'
+                for line in openai_error_sse_lines(
+                    err.text, status_code=err.status_code, model=model_name,
+                ):
+                    yield line.encode('utf-8')
+            except Exception as err:  # noqa: BLE001 — surface any mid-stream failure as SSE, not a hang.
+                tally.error = type(err).__name__
+                logger.warning(
+                    'Upstream /api/chat stream failed mid-flight (model=%s): %s', model_name, err,
+                )
+                for line in openai_error_sse_lines(
+                    _ollama_unreachable_text(err), model=model_name,
+                ):
+                    yield line.encode('utf-8')
+            finally:
+                log_copilot_response(
+                    path=request.path,
+                    model=model_name,
+                    summary=tally.summary(agent=has_tools, think=think_on),
+                    data_dir=current_app.config.get('DATA_DIR'),
+                )
 
         return _sse_response(stream_body)
 
     try:
-        response_data = _upstream_post(
+        response_data = _upstream_post_with_retry(
             upstream_url, native_payload, timeout=infer_timeout,
         )
     except requests.RequestException as err:
@@ -504,36 +956,57 @@ def _forward_v1_via_native_api(native_payload, native_endpoint, _openai_payload)
     model_name = native_payload.get('model') or ''
 
     if stream:
-        upstream = _upstream_post(upstream_url, native_payload, stream=True)
-        if upstream.status_code != 200:
-            err_text = (upstream.text or upstream.reason or 'Upstream error')[:2000]
+        gen_stream = _NativeChatStream(
+            upstream_url,
+            native_payload,
+            heartbeat_seconds=_stream_heartbeat_seconds(),
+            timeout=_UPSTREAM_STREAM_TIMEOUT,
+            first_token_timeout=_stream_first_token_timeout_seconds(),
+            stall_timeout=_stream_stall_timeout_seconds(),
+            max_attempts=_upstream_max_attempts(),
+            retry_backoff=_upstream_retry_backoff_seconds(),
+        )
+        first_error = gen_stream.peek_error(_stream_first_byte_grace_seconds())
+        if isinstance(first_error, _UpstreamStatusError):
+            return _openai_error_sse(
+                first_error.text, status_code=first_error.status_code, model_name=model_name,
+            )
+        if isinstance(first_error, BaseException):
+            logger.warning(
+                'Upstream %s stream connection failed (model=%s): %s',
+                native_endpoint, model_name, first_error,
+            )
+            return _openai_error_sse(_ollama_unreachable_text(first_error), model_name=model_name)
 
-            def error_stream():
+        def stream_body():
+            try:
+                for chunk in stream_native_generate_lines_to_openai_sse(
+                    gen_stream.iter_raw(),
+                    model=model_name,
+                ):
+                    yield chunk.encode('utf-8')
+            except _UpstreamStatusError as err:
                 for line in openai_error_sse_lines(
-                    err_text, status_code=upstream.status_code, model=model_name,
+                    err.text, status_code=err.status_code, model=model_name,
+                ):
+                    yield line.encode('utf-8')
+            except Exception as err:  # noqa: BLE001 — surface any mid-stream failure as SSE, not a hang.
+                logger.warning(
+                    'Upstream %s stream failed mid-flight (model=%s): %s',
+                    native_endpoint, model_name, err,
+                )
+                for line in openai_error_sse_lines(
+                    _ollama_unreachable_text(err), model=model_name,
                 ):
                     yield line.encode('utf-8')
 
-            response = Response(
-                stream_with_context(error_stream()),
-                status=upstream.status_code,
-                content_type='text/event-stream; charset=utf-8',
-            )
-            response.headers['Access-Control-Allow-Origin'] = '*'
-            response.headers['Cache-Control'] = 'no-cache, no-transform'
-            response.headers['X-Accel-Buffering'] = 'no'
-            return response
-
-        def stream_body():
-            for chunk in stream_native_generate_lines_to_openai_sse(
-                upstream.iter_lines(),
-                model=model_name,
-            ):
-                yield chunk.encode('utf-8')
-
         return _sse_response(stream_body)
 
-    response_data = _upstream_post(upstream_url, native_payload)
+    try:
+        response_data = _upstream_post_with_retry(upstream_url, native_payload)
+    except requests.RequestException as err:
+        logger.warning('Upstream %s connection failed (model=%s): %s', native_endpoint, model_name, err)
+        return _openai_error_json(_ollama_unreachable_text(err), model_name=model_name)
     if response_data.status_code != 200:
         return _openai_error_response(response_data, model_name)
     try:
