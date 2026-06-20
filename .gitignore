@@ -58,6 +58,10 @@ venv.bak/
 .coverage
 htmlcov/
 
+# Linters / tooling caches
+.ruff_cache/
+.mypy_cache/
+
 # Project specific
 history.json
 chat_history.json
@@ -65,3 +69,8 @@ model_settings.json
 saved_parameters.json
 system_stats_history.json
 node_modules
+
+# Runtime artifacts (atomic-write temp files, server logs, run-mode marker)
+*.tmp
+data/*.log
+data/dashboard.run-mode

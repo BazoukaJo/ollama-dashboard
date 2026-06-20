@@ -7,7 +7,8 @@
 - Single Flask app with three blueprints registered in `app/routes/main.py` `init_app()`:
   - **`main`** (`app/routes/main.py`) — dashboard UI and `/api/...` routes
   - **`proxy`** (`app/routes/proxy.py`) — settings-injecting `/ollama/...` proxy for external clients
-  - **`api_proxy_api`** (`app/routes/api_proxy.py`) — Connect app wizard, proxy status/analytics, RAG/prewarm helpers
+  - **`api_proxy_api`** (`app/routes/api_proxy.py`) — Connect app wizard, proxy status/analytics, MCP status, RAG/prewarm helpers
+- **MCP:** Streamable HTTP at `/mcp` (`app/services/mcp_server.py` + `mcp_tools.py`); Ask? agent mode via `POST /api/chat/agent` (`ask_agent.py`). Same tool registry for IDE MCP and dashboard agent loop.
 - Monitoring routes (`/api/metrics/...`) attach to the `main` blueprint via `app/routes/monitoring.py`.
 - Core logic in `OllamaService` (`app/services/ollama.py`): handles HTTP to Ollama, caching, capability detection, per-model settings, atomic JSON persistence, health reporting.
 - External client proxy pipeline: `copilot_pipeline.py` orchestrates `client_payload_compat.py` (sanitize/cap output), `context_budget.py` (auto-trim prompts), `v1_native_bridge.py` (OpenAI ↔ native), and `model_settings_helpers.py` (merge saved options).

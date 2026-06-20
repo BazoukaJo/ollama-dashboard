@@ -250,7 +250,7 @@ def append_system_stats_history(history_file_path):
     try:
         if os.path.exists(history_file_path):
             import json
-            with open(history_file_path) as f:
+            with open(history_file_path, encoding='utf-8') as f:
                 history = json.load(f)
         else:
             history = []
@@ -258,7 +258,7 @@ def append_system_stats_history(history_file_path):
         current['timestamp'] = datetime.now().isoformat()
         history.append(current)
         history = history[-100:]
-        with open(history_file_path, 'w') as f:
+        with open(history_file_path, 'w', encoding='utf-8') as f:
             import json
             json.dump(history, f, indent=2)
         return history

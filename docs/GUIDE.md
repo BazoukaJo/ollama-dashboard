@@ -1,6 +1,6 @@
 # Ollama Dashboard — Complete Guide
 
-Detailed setup, configuration, proxy integration, and development reference. For a quick start, see the [README](../README.md).
+Detailed setup, configuration, proxy and MCP integration, and development reference. For a quick start, see the [README](../README.md).
 
 ---
 
@@ -135,6 +135,92 @@ http://127.0.0.1:5000/ollama               → proxy health JSON
 ```
 
 Both model-list URLs should return JSON, not an HTML error page. Restart the dashboard after upgrades.
+
+### MCP tools server (`/mcp`)
+
+The dashboard also exposes a **Model Context Protocol (MCP)** server on the **same port** as the
+web UI. IDE agents (Cursor, VS Code MCP extension) can connect to dashboard tools — list models,
+read system stats, check proxy activity — without scraping the web UI.
+
+```text
+http://<dashboard-host>:<port>/mcp
+```
+
+Default: **`http://127.0.0.1:5000/mcp`**
+
+This is **separate from the Ollama proxy** above:
+
+| Connection | URL | Purpose |
+|------------|-----|---------|
+| **Ollama proxy** | `http://127.0.0.1:5000/ollama` | LLM inference (chat, completions) with saved settings |
+| **MCP tools** | `http://127.0.0.1:5000/mcp` | Dashboard tools (models, stats, proxy status) |
+
+Use **both** in Cursor or VS Code: proxy for the model, MCP for dashboard actions.
+
+**Dashboard UI:** open **Connect** in the header — the wizard shows the MCP URL, a tool catalog,
+and copy-paste JSON for Cursor (`.cursor/mcp.json`) and VS Code.
+
+**Cursor** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "ollama-dashboard": {
+      "url": "http://127.0.0.1:5000/mcp"
+    }
+  }
+}
+```
+
+**VS Code** (MCP extension / settings JSON — exact key depends on your extension):
+
+```json
+{
+  "servers": {
+    "ollama-dashboard": {
+      "type": "http",
+      "url": "http://127.0.0.1:5000/mcp"
+    }
+  }
+}
+```
+
+**Available tools (read-only by default):**
+
+| Tool | Description |
+|------|-------------|
+| `list_available_models` | Installed models and capability flags |
+| `list_running_models` | Models loaded in Ollama memory |
+| `get_model_info` | Metadata for one model tag |
+| `get_system_stats` | CPU, RAM, VRAM snapshot |
+| `get_proxy_status` | External IDE proxy activity |
+
+Optional **write** tools (`start_model`, `stop_model`) are off unless you set
+`MCP_ALLOW_WRITE=true` and restart the dashboard.
+
+**Ask? agent mode:** On the dashboard, **Ask?** on a model with **tool support** (`has_tools`)
+automatically uses the same tool registry via `POST /api/chat/agent` (server-side tool loop).
+The modal shows an **Agent mode** badge and live tool steps. Plain models still use
+`POST /api/chat` → Ollama `/api/generate` without tools.
+
+**Verify MCP:**
+
+```text
+GET http://127.0.0.1:5000/api/mcp/status   → JSON (URL, tool count, health)
+```
+
+The Connect wizard also runs an `mcp_endpoint` check.
+
+**MCP environment variables (optional):**
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MCP_ALLOW_WRITE` | `false` | Set `true` to expose `start_model` / `stop_model` |
+| `ASK_AGENT_MAX_ITERATIONS` | `8` | Max tool rounds per Ask? agent request (1–20) |
+
+Implementation: `app/services/mcp_tools.py` (shared registry),
+`app/services/mcp_server.py` (Streamable HTTP at `/mcp`),
+`app/services/ask_agent.py` (Ask? tool loop). See [Architecture](ARCHITECTURE.md#mcp-tools-server).
 
 **Proxy environment variables (optional):**
 
@@ -399,6 +485,8 @@ psutil==5.9.6          # System stats
 pytz==2023.3           # Timezone support
 pypdf>=4.0.0           # PDF text extraction (Ask? attachments)
 python-docx>=1.1.0     # DOCX text extraction (Ask? attachments)
+mcp>=1.27,<2           # MCP tools server (/mcp)
+a2wsgi>=1.10.0         # Mount MCP ASGI on same port as Flask
 ```
 
 Optional (for GPU monitoring):

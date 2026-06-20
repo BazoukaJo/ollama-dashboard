@@ -108,6 +108,18 @@ disable = [
   "broad-exception-caught",
   "global-statement",
   "raising-bad-type",
+  "invalid-name",
+  "import-error",
+  "reimported",
+  "wrong-import-position",
+  "useless-import-alias",
+  # Structural / Flask-app patterns — ruff covers correctness; splitting files adds risk, not quality.
+  "too-many-lines",
+  "too-many-instance-attributes",
+  "too-many-public-methods",
+  "attribute-defined-outside-init",
+  "cyclic-import",
+  "logging-fstring-interpolation",
 ]
 
 [tool.pylint.design]

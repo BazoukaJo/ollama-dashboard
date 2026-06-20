@@ -57,6 +57,17 @@ By default, CORS is permissive for local development. Restrict in production:
 CORS_ORIGINS=http://localhost:5000,http://127.0.0.1:5000
 ```
 
+The **`/ollama/*`** and **`/mcp/*`** routes allow any origin so local IDE clients can connect.
+If you expose the dashboard beyond localhost, treat **`/mcp`** like **`/api/*`**: it can list
+models, read system stats, and (when `MCP_ALLOW_WRITE=true`) start or stop models. Keep the
+dashboard on a trusted network or behind authentication (`ENABLE_AUTH=true`).
+
+### MCP write tools
+
+Read-only MCP tools are enabled by default. Set **`MCP_ALLOW_WRITE=true`** only when you accept
+that connected MCP clients may load or unload Ollama models. Restart the dashboard after
+changing this variable.
+
 ### Firewall Rules (Linux)
 
 ```bash

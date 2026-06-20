@@ -84,8 +84,15 @@ class TestAppInitialization:
         # Just verify attribute exists
 
     def test_cors_configured(self, app):
-        """CORS should be configured."""
-        assert 'CORS_ORIGINS' in app.config or app.config.get('DEBUG')
+        """CORS should be configured for /api/* (real contract IDE clients rely on).
+
+        CORS is wired via flask_cors.CORS(app, ...) using the CORS_ORIGINS env var, not a
+        Flask config key, so assert the actual Access-Control-Allow-Origin response header
+        for an allowed origin rather than an internal config attribute.
+        """
+        client = app.test_client()
+        resp = client.get('/api/health', headers={'Origin': 'http://localhost:5000'})
+        assert resp.headers.get('Access-Control-Allow-Origin') is not None
 
     def test_security_headers_present(self, client):
         """Security headers should be on responses."""
@@ -209,7 +216,8 @@ class TestModelEndpoints:
         """DELETE /api/models/delete/<model> should delete model."""
         class MockResponse:
             status_code = 200
-            def json(self): return {}
+            def json(self):
+                return {}
         mock_delete.return_value = MockResponse()
         try:
             client.delete('/api/models/delete/old-model')
@@ -371,9 +379,13 @@ class TestChatEndpoints:
     @patch('app.routes.main.ollama_service._session')
     def test_chat_endpoint(self, mock_session, mock_info, client):
         """POST /api/chat should handle chat requests."""
+
         class MockResponse:
             status_code = 200
-            def json(self): return {'response': 'Test response', 'model': 'llama3.1:8b'}
+
+            def json(self):
+                return {'response': 'Test response', 'model': 'llama3.1:8b'}
+
         mock_session.post.return_value = MockResponse()
         mock_info.return_value = {'name': 'llama3.1:8b'}
         response = client.post(

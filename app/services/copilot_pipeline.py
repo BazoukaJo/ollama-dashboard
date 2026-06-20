@@ -5,14 +5,14 @@ import logging
 import os
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from app.services.client_payload_compat import cap_num_predict, sanitize_v1_chat_payload
 from app.services.context_budget import trim_messages_to_budget
 from app.services.copilot_extras import get_client_extras
 from app.services.model_router import resolve_routed_model
 from app.services.system_prompts import inject_system_prompt, resolve_system_prompt
 from app.services.v1_native_bridge import prepare_v1_chat_completions_payload
+
+logger = logging.getLogger(__name__)
 
 
 def prepare_copilot_payload(
@@ -70,9 +70,11 @@ def prepare_copilot_payload(
 
     meta['num_ctx'] = (merged.get('options') or {}).get('num_ctx')
 
+    # Agent/tool turns get a higher output ceiling so large edits are not silently truncated.
     merged, cap_meta = cap_num_predict(
         merged,
         (settings_entry or {}).get('settings') or {},
+        agent=bool(merged.get('tools')),
     )
     meta['client_compat'] = {**sanitize_meta, **cap_meta}
     return merged, meta

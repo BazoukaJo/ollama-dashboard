@@ -6,7 +6,8 @@ param(
     [string]$Mode = 'any',
     [int]$Port = 5000,
     [int]$WaitSeconds = 12,
-    [string]$RepoRoot = ''
+    [string]$RepoRoot = '',
+    [switch]$CloseLaunchers
 )
 
 Set-StrictMode -Version Latest
@@ -184,6 +185,41 @@ function Stop-DashboardProcesses {
     return 0
 }
 
+function Get-DashboardLauncherProcessIds {
+    $ids = New-Object 'System.Collections.Generic.HashSet[int]'
+    $all = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue
+    foreach ($proc in $all) {
+        if ($proc.Name -ne 'cmd.exe') { continue }
+        $cmd = [string]$proc.CommandLine
+        if (-not $cmd) { continue }
+        if ($cmd -notlike "*$RepoRootNorm*") { continue }
+        if ($cmd -match 'start(_dev)?\.bat') {
+            [void]$ids.Add([int]$proc.ProcessId)
+        }
+    }
+    return @($ids)
+}
+
+function Stop-DashboardLaunchers {
+    param([int[]]$ProcessIds = @())
+
+    if ($ProcessIds.Count -eq 0) {
+        $ProcessIds = @(Get-DashboardLauncherProcessIds)
+    }
+
+    $stopped = 0
+    foreach ($launcherId in $ProcessIds) {
+        try {
+            & taskkill /PID $launcherId /T /F 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "Closed launcher window PID $launcherId"
+                $stopped++
+            }
+        } catch { }
+    }
+    return $stopped
+}
+
 function Wait-PortClear {
     for ($i = 0; $i -lt $WaitSeconds; $i++) {
         $busy = $false
@@ -196,7 +232,7 @@ function Wait-PortClear {
     return 1
 }
 
-function Ensure-PortForMode {
+function Initialize-PortForMode {
     param([string]$TargetMode)
     $status = Get-DashboardStatus
     if ($status.ForeignOnPort) { return 2 }
@@ -246,10 +282,18 @@ switch ($Action) {
         exit 0
     }
     'stop' {
+        $launcherIds = @()
+        if ($CloseLaunchers) {
+            $launcherIds = @(Get-DashboardLauncherProcessIds)
+        }
         $code = Stop-DashboardProcesses
+        if ($CloseLaunchers) {
+            Stop-DashboardLaunchers -ProcessIds $launcherIds | Out-Null
+            Stop-DashboardLaunchers | Out-Null
+        }
         if ($code -eq 0) { Wait-PortClear | Out-Null }
         exit $code
     }
     'wait-clear' { exit (Wait-PortClear) }
-    'ensure-port' { exit (Ensure-PortForMode -TargetMode $Mode) }
+    'ensure-port' { exit (Initialize-PortForMode -TargetMode $Mode) }
 }

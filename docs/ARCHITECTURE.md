@@ -29,8 +29,9 @@ Ollama Dashboard is a Flask-based web interface for monitoring and controlling O
 │        Route Layer                                  │
 │  • app/routes/main.py — dashboard UI, /api/...      │
 │  • app/routes/proxy.py — /ollama/... settings proxy │
-│  • app/routes/api_proxy.py — Connect app, analytics │
+│  • app/routes/api_proxy.py — Connect app, analytics, MCP status │
 │  • app/routes/monitoring.py — /api/metrics/...      │
+│  • /mcp — MCP Streamable HTTP (mounted on WSGI stack) │
 └─────────────────────────────────────────────────────┘
                         ↓
 ┌─────────────────────────────────────────────────────┐
@@ -58,6 +59,12 @@ Ollama Dashboard is a Flask-based web interface for monitoring and controlling O
 │  │  • context_budget.py (auto-trim prompts)       │ │
 │  │  • v1_native_bridge.py (OpenAI ↔ native)       │ │
 │  │  • model_settings_helpers.py (merge options)   │ │
+│  └────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────┐ │
+│  │ MCP & Ask? agent                               │ │
+│  │  • mcp_tools.py (shared tool registry)         │ │
+│  │  • mcp_server.py (FastMCP → /mcp)              │ │
+│  │  • ask_agent.py (server-side tool loop)        │ │
 │  └────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────┘
                         ↓
@@ -207,6 +214,33 @@ service: ollama_service.save_model_settings(model_name, settings)
 > 2. **Bake into Model** — `OllamaServiceUtilities.bake_model_settings`.
 > 3. **`server_with_proxy.js`** — same `model_settings.json`; mirrors API at proxy root;
 >    merges settings on `/api/chat`, `/api/generate`, and `/v1/chat/completions`.
+>
+> **MCP tools server:** Streamable HTTP at `http://<dashboard>:5000/mcp` (same port as the UI).
+> One registry in `mcp_tools.py` serves IDE MCP clients and Ask? agent mode (`POST
+> /api/chat/agent`). The Ollama proxy forwards IDE *model* tool calls to Ollama; MCP exposes
+> *dashboard* tools (list models, stats, etc.). See [GUIDE — MCP tools server](GUIDE.md#mcp-tools-server-mcp).
+
+---
+
+## MCP tools server
+
+```text
+Browser / Cursor / VS Code MCP client
+        ↓
+  http://<dashboard>:5000/mcp     ← Streamable HTTP (FastMCP + a2wsgi mount)
+        ↓
+  mcp_tools.execute_tool()        ← shared with Ask? agent loop
+        ↓
+  OllamaService → Ollama API
+```
+
+| Path | Role |
+|------|------|
+| `GET /api/mcp/status` | Tool catalog, health, URL for Connect UI |
+| `POST /api/chat/agent` | Ask? agent mode — Ollama `/api/chat` + server-side tool execution |
+| `/mcp` | MCP protocol for external IDEs |
+
+Write tools (`start_model`, `stop_model`) require `MCP_ALLOW_WRITE=true`. Read tools are always available when MCP is mounted.
 
 ---
 
@@ -226,24 +260,54 @@ service: ollama_service.save_model_settings(model_name, settings)
 
 ## Concurrency & Thread Safety
 
+Shared `OllamaService` state is touched concurrently by **Waitress request threads** (8 by
+default), the **background stats thread**, and the **`/api/show` enrichment pool** (≤3 workers).
+CPython's GIL makes a *single* dict/deque operation atomic, but **compound** sequences
+(check-then-act, value+timestamp pairs, `in` → `del`) are not — those need explicit locks.
+
 ### Background Thread
 - **Runs in daemon mode** (exits when main thread exits)
 - **Updates cycle**: System stats every 1s; Ollama health ping every ~15s
 - **Model lists**: Fetched on page load or manual refresh only
-- **Lock-free reads**: Cache reads don't lock; stale data acceptable
-- **Locked writes**: Cache writes use `_cache_lock`
-- **Settings mutations**: Protected by `_model_settings_lock`
 
-### Lock Usage
+### Locks & guards
+| Primitive | Protects | Why |
+|-----------|----------|-----|
+| `_cache_lock` (`Lock`) | every read/write/clear of `_cache` + `_cache_timestamps` | keeps the value and its timestamp consistent; prevents TOCTOU `del` → `KeyError` and `dict changed size during iteration` |
+| `_model_settings_lock` (`Lock`) | `_model_settings` writes + disk persistence | settings save is read-modify-write to a file |
+| `_model_token_usage_lock` (`Lock`) | `_model_last_generate_tokens` | per-model token counters |
+| `_history_lock` (`Lock`) | history deque snapshot/append | `list(self.history)` must not race `appendleft` |
+| `_build_tls` (`threading.local`) | `get_available_models` re-entrancy depth | per-thread, so concurrent requests don't skip enrichment |
+| `_stop_background` (`Event`) | background-thread shutdown signal | |
+
 ```python
-with self._cache_lock:
-    self._cache[key] = value
-    self._cache_timestamps[key] = time.time()
+def _set_cached(self, key, value):           # writer
+    with self._cache_lock:
+        self._cache[key] = value
+        self._cache_timestamps[key] = datetime.now()
 
-with self._model_settings_lock:
-    self._model_settings[model_name] = settings
-    # ... write to disk ...
+def _get_cached(self, key, ttl_seconds):      # reader: atomic value+timestamp read
+    with self._cache_lock:
+        ts = self._cache_timestamps.get(key)
+        if not ts:
+            return None
+        if (datetime.now() - ts).total_seconds() < ttl_seconds:
+            return self._cache.get(key)
+        return None
+
+def clear_cache(self, key):                   # pop, not "if in: del" (TOCTOU-safe)
+    with self._cache_lock:
+        self._cache.pop(key, None)
+        self._cache_timestamps.pop(key, None)
 ```
+
+> **Free-threaded builds (PEP 703, CPython 3.13+/3.14 `--disable-gil`):** the GIL no longer
+> serializes individual dict ops, so these explicit locks are *required* for correctness, not
+> just for compound invariants. The codebase runs on CPython 3.14; keep all `_cache`/history
+> access behind the locks above.
+
+History writes use an atomic temp-then-rename with a **per-process/thread** temp filename
+(`history.json.<pid>.<tid>.tmp`) so concurrent saves never clobber a single shared temp file.
 
 ---
 

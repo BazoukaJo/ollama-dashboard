@@ -674,6 +674,12 @@
                     <div class="tab-content" id="askModalTabContent">
                         <div class="tab-pane fade show active" id="askTabPane" role="tabpanel" aria-labelledby="askTabBtn" tabindex="0">
                             <p id="askModelCapabilitiesHint" class="small text-muted mb-2"></p>
+                            <div id="askAgentModeWrap" class="ask-agent-mode-wrap mb-2" style="display:none;">
+                                <span class="badge bg-info ask-agent-badge">Agent mode</span>
+                                <span class="small text-muted ms-2">Uses dashboard MCP tools</span>
+                                <button type="button" id="askMcpConnectBtn" class="btn btn-link btn-sm p-0 ms-2 text-info">Connect MCP in VS Code / Cursor</button>
+                            </div>
+                            <div id="askAgentSteps" class="ask-agent-steps mb-2" style="display:none;" aria-live="polite"></div>
                             <div class="ask-attachments-toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
                                 <input type="file" id="askImageInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
                                 <input type="file" id="askPdfInput" class="d-none" accept=".pdf,application/pdf">

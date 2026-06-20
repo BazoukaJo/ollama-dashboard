@@ -15,6 +15,7 @@ A simple web dashboard for **Ollama** — the tool that runs AI models on your c
 - **Save per-model settings** — temperature, context size, and more (stored in `model_settings.json`)
 - **Control Ollama** — start, stop, or restart the Ollama service from the header
 - **Connect other apps** — use the built-in **API proxy** URL in the header so VS Code, Copilot, Continue, and similar tools use your saved settings (with parameter sanitization and output caps for IDE clients)
+- **MCP tools server** — connect Cursor or VS Code to `http://…/mcp` for dashboard tools (models, stats, proxy status); **Ask?** uses the same tools in agent mode on tool-capable models
 
 The dashboard works in **dark and light** themes and adapts to phone, tablet, and desktop screens.
 
@@ -87,6 +88,7 @@ Copy `StartupFolder\Start Ollama Dashboard.bat` into your Startup folder (**Win+
 3. **Running Models** — models loaded in memory; use **Start** / **Stop** / **Settings** on each card
 4. **Available Models** — models on disk; download or delete from here
 5. **API proxy** — copy the `http://…/ollama` address to point external apps at the dashboard instead of Ollama directly (your saved settings apply on chat requests)
+6. **MCP tools** — copy `http://…/mcp` from **Connect** for Cursor/VS Code MCP; pair with the proxy URL above (models + tools)
 
 Click **Refresh** or wait for the countdown to update model lists. System stats refresh about every second.
 
@@ -111,7 +113,7 @@ More help: **[Troubleshooting](docs/TROUBLESHOOTING.md)**
 
 | Guide | Contents |
 |-------|----------|
-| **[Complete Guide](docs/GUIDE.md)** | Proxy setup, Windows start/stop/restart, per-model settings, configuration, development |
+| **[Complete Guide](docs/GUIDE.md)** | Proxy setup, MCP tools, Windows start/stop/restart, per-model settings, configuration, development |
 | **[Architecture](docs/ARCHITECTURE.md)** | How the app is built internally |
 | **[Deployment](docs/DEPLOYMENT.md)** | Docker, Gunicorn, Nginx, production tips |
 | **[Security](docs/SECURITY.md)** | CORS, validation, TLS |

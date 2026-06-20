@@ -133,7 +133,95 @@
     }
   }
 
-  async function runWizardChecks(container) {
+  function mcpBaseUrl() {
+    return window.location.origin + "/mcp";
+  }
+
+  function copyTextToClipboard(text, successMsg) {
+    if (!text) return;
+    var done = function () {
+      if (window.showNotification) window.showNotification(successMsg || "Copied", "success");
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () {});
+      return;
+    }
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+      done();
+    } catch (_) {}
+    document.body.removeChild(ta);
+  }
+
+  function renderMcpWizardSection(data, base) {
+    var mcpUrl = data.mcp_base_url || mcpBaseUrl();
+    var html =
+      '<div id="apiMcpWizardSection" class="mt-3 p-2 rounded border border-info api-mcp-wizard-section">' +
+      '<div class="small fw-semibold mb-1"><i class="fas fa-toolbox me-1"></i>MCP tools server (dashboard tools for Cursor / VS Code)</div>' +
+      '<code class="small user-select-all" id="apiMcpUrlCopy">' +
+      escapeHtml(mcpUrl) +
+      "</code>" +
+      ' <button type="button" class="btn btn-sm btn-outline-info ms-1" id="apiMcpCopyBtn">Copy</button>' +
+      '<div class="text-muted small mt-2 mb-2">Same port as the dashboard. Pair with the Ollama proxy above: proxy for <strong>models</strong>, MCP for <strong>dashboard tools</strong>.</div>';
+
+    var tools = data.mcp_tools || [];
+    if (tools.length) {
+      html += '<div class="small fw-semibold mb-1">Available tools</div><ul class="list-unstyled small mb-2 api-mcp-tool-list">';
+      tools.forEach(function (tool) {
+        var badge = tool.write
+          ? '<span class="badge bg-warning text-dark ms-1">write</span>'
+          : '<span class="badge bg-secondary ms-1">read</span>';
+        html +=
+          "<li class=\"mb-1\"><code>" +
+          escapeHtml(tool.name || "") +
+          "</code>" +
+          badge +
+          "<div class=\"text-muted\">" +
+          escapeHtml(tool.description || "") +
+          "</div></li>";
+      });
+      html += "</ul>";
+    }
+
+    if (data.mcp_write_tools_enabled) {
+      html +=
+        '<div class="text-warning small mb-2">Write tools (start/stop model) are enabled via <code>MCP_ALLOW_WRITE=true</code>.</div>';
+    }
+
+    var mcpExamples = data.mcp_client_examples || [];
+    if (mcpExamples.length) {
+      html += '<div class="small fw-semibold mb-2">MCP client setup</div>';
+      mcpExamples.forEach(function (ex, idx) {
+        html +=
+          '<div class="mb-2 p-2 rounded api-mcp-example-block" style="background:rgba(255,255,255,0.04)">' +
+          '<div class="small fw-semibold">' +
+          escapeHtml(ex.name || "") +
+          "</div>" +
+          '<div class="text-muted small">' +
+          escapeHtml(ex.hint || ex.field || "") +
+          "</div>" +
+          '<pre class="small user-select-all mb-1 api-mcp-example-code" id="apiMcpExample' +
+          idx +
+          '">' +
+          escapeHtml(ex.value || mcpUrl) +
+          "</pre>" +
+          '<button type="button" class="btn btn-sm btn-outline-secondary api-mcp-example-copy" data-example-idx="' +
+          idx +
+          '">Copy</button></div>';
+      });
+    }
+    html += "</div>";
+    return html;
+  }
+
+  async function runWizardChecks(container, scrollToMcp) {
     if (!container) return;
     container.innerHTML =
       '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i> Running checks…</div>';
@@ -180,6 +268,8 @@
         html += "</div>";
       }
 
+      html += renderMcpWizardSection(data, base);
+
       container.innerHTML = html;
       var copyBtn = document.getElementById("apiProxyCopyBtn");
       if (copyBtn) {
@@ -191,22 +281,40 @@
           }
         };
       }
+      var mcpCopyBtn = document.getElementById("apiMcpCopyBtn");
+      if (mcpCopyBtn) {
+        mcpCopyBtn.onclick = function () {
+          var mcpEl = document.getElementById("apiMcpUrlCopy");
+          copyTextToClipboard((mcpEl && mcpEl.textContent) || data.mcp_base_url || mcpBaseUrl(), "Copied MCP URL");
+        };
+      }
+      container.querySelectorAll(".api-mcp-example-copy").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var idx = btn.getAttribute("data-example-idx");
+          var pre = document.getElementById("apiMcpExample" + idx);
+          copyTextToClipboard(pre ? pre.textContent : "", "Copied MCP config");
+        });
+      });
+      if (scrollToMcp) {
+        var mcpSection = document.getElementById("apiMcpWizardSection");
+        if (mcpSection) mcpSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     } catch (err) {
       container.innerHTML = '<div class="text-danger small">' + escapeHtml(err.message) + "</div>";
     }
   }
 
-  function openProxyWizard() {
+  function openProxyWizard(scrollToMcp) {
     var existing = document.getElementById("apiProxyWizardModal");
     if (existing) existing.remove();
     var html =
       '<div class="modal fade" id="apiProxyWizardModal" tabindex="-1">' +
-      '<div class="modal-dialog modal-dialog-centered modal-lg">' +
+      '<div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">' +
       '<div class="modal-content bg-dark text-light">' +
       '<div class="modal-header"><h5 class="modal-title"><i class="fas fa-plug me-2"></i>Connect external apps</h5>' +
       '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>' +
       '<div class="modal-body"><p class="text-muted small">Any app that accepts an <strong>Ollama server address</strong> or an <strong>OpenAI-compatible API base URL</strong> can use the dashboard proxy instead of <code>localhost:11434</code>. Saved per-model settings (temperature, <code>num_ctx</code>, prompts) are applied automatically.</p>' +
-      '<p class="text-muted small mb-2">Works with VS Code chat extensions, Claude Code with Ollama, Continue, Cursor BYOK, LangChain, OpenAI SDKs pointed at a local base URL, and other compatible tools.</p>' +
+      '<p class="text-muted small mb-2">Works with VS Code chat extensions, Claude Code with Ollama, Continue, Cursor BYOK, LangChain, OpenAI SDKs pointed at a local base URL, and other compatible tools. Use the <strong>MCP tools server</strong> below so agents can call dashboard tools from Cursor or VS Code.</p>' +
       '<div id="apiProxyWizardChecks"></div></div>' +
       '<div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>' +
       '<button type="button" class="btn btn-primary" id="apiProxyWizardRerun">Re-run checks</button></div>' +
@@ -216,9 +324,9 @@
     var modal = new bootstrap.Modal(modalEl);
     modal.show();
     var checksEl = document.getElementById("apiProxyWizardChecks");
-    runWizardChecks(checksEl);
+    runWizardChecks(checksEl, !!scrollToMcp);
     document.getElementById("apiProxyWizardRerun").onclick = function () {
-      runWizardChecks(checksEl);
+      runWizardChecks(checksEl, false);
     };
     modalEl.addEventListener("hidden.bs.modal", function () {
       modalEl.remove();

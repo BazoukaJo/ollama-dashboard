@@ -11,7 +11,9 @@ def start_service_windows(get_status):
         return None, methods_tried
     try:
         methods_tried.append('Windows service')
-        result = subprocess.run(['sc', 'start', 'Ollama'], capture_output=True, text=True, timeout=15)
+        result = subprocess.run(
+            ['sc', 'start', 'Ollama'], capture_output=True, text=True, timeout=15, check=False,
+        )
         if result.returncode == 0 or 'START_PENDING' in result.stdout:
             time.sleep(5)
             if get_status():
@@ -40,7 +42,9 @@ def start_service_windows(get_status):
         pass
     try:
         methods_tried.append('direct execution')
-        check = subprocess.run(['where', 'ollama'], capture_output=True, text=True, timeout=5)
+        check = subprocess.run(
+            ['where', 'ollama'], capture_output=True, text=True, timeout=5, check=False,
+        )
         if check.returncode == 0:
             try:
                 subprocess.Popen(['ollama', 'serve'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -60,7 +64,9 @@ def start_service_unix(get_status):
         return None, methods_tried
     try:
         methods_tried.append('systemctl')
-        result = subprocess.run(['systemctl', 'start', 'ollama'], capture_output=True, text=True, timeout=15)
+        result = subprocess.run(
+            ['systemctl', 'start', 'ollama'], capture_output=True, text=True, timeout=15, check=False,
+        )
         if result.returncode == 0:
             time.sleep(5)
             if get_status():
@@ -69,7 +75,9 @@ def start_service_unix(get_status):
         pass
     try:
         methods_tried.append('service command')
-        result = subprocess.run(['service', 'ollama', 'start'], capture_output=True, text=True, timeout=15)
+        result = subprocess.run(
+            ['service', 'ollama', 'start'], capture_output=True, text=True, timeout=15, check=False,
+        )
         if result.returncode == 0:
             time.sleep(5)
             if get_status():
@@ -78,7 +86,9 @@ def start_service_unix(get_status):
         pass
     try:
         methods_tried.append('direct execution')
-        check = subprocess.run(['which', 'ollama'], capture_output=True, text=True, timeout=5)
+        check = subprocess.run(
+            ['which', 'ollama'], capture_output=True, text=True, timeout=5, check=False,
+        )
         if check.returncode == 0:
             try:
                 subprocess.Popen(['ollama', 'serve'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -97,7 +107,9 @@ def stop_service_windows(get_status):
         return None, methods_tried
     try:
         methods_tried.append('Windows service')
-        result = subprocess.run(['sc', 'stop', 'Ollama'], capture_output=True, text=True, timeout=15)
+        result = subprocess.run(
+            ['sc', 'stop', 'Ollama'], capture_output=True, text=True, timeout=15, check=False,
+        )
         if result.returncode == 0 or 'STOP_PENDING' in result.stdout:
             time.sleep(5)
             if not get_status():
@@ -106,7 +118,9 @@ def stop_service_windows(get_status):
         pass
     try:
         methods_tried.append('process termination')
-        subprocess.run(['taskkill', '/T', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10)
+        subprocess.run(
+            ['taskkill', '/T', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10, check=False,
+        )
         time.sleep(5)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via graceful termination"}, methods_tried
@@ -114,7 +128,9 @@ def stop_service_windows(get_status):
         pass
     try:
         methods_tried.append('force kill')
-        subprocess.run(['taskkill', '/F', '/T', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10)
+        subprocess.run(
+            ['taskkill', '/F', '/T', '/IM', 'ollama.exe'], capture_output=True, text=True, timeout=10, check=False,
+        )
         time.sleep(5)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via force kill"}, methods_tried
@@ -128,7 +144,9 @@ def stop_service_unix(get_status):
         return None, methods_tried
     try:
         methods_tried.append('systemctl')
-        result = subprocess.run(['systemctl', 'stop', 'ollama'], capture_output=True, text=True, timeout=15)
+        result = subprocess.run(
+            ['systemctl', 'stop', 'ollama'], capture_output=True, text=True, timeout=15, check=False,
+        )
         if result.returncode == 0:
             time.sleep(5)
             if not get_status():
@@ -137,7 +155,9 @@ def stop_service_unix(get_status):
         pass
     try:
         methods_tried.append('service command')
-        result = subprocess.run(['service', 'ollama', 'stop'], capture_output=True, text=True, timeout=15)
+        result = subprocess.run(
+            ['service', 'ollama', 'stop'], capture_output=True, text=True, timeout=15, check=False,
+        )
         if result.returncode == 0:
             time.sleep(5)
             if not get_status():
@@ -146,7 +166,9 @@ def stop_service_unix(get_status):
         pass
     try:
         methods_tried.append('pkill graceful')
-        subprocess.run(['pkill', '-TERM', '-f', 'ollama'], capture_output=True, text=True, timeout=10)
+        subprocess.run(
+            ['pkill', '-TERM', '-f', 'ollama'], capture_output=True, text=True, timeout=10, check=False,
+        )
         time.sleep(3)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via graceful pkill"}, methods_tried
@@ -154,7 +176,9 @@ def stop_service_unix(get_status):
         pass
     try:
         methods_tried.append('pkill force')
-        subprocess.run(['pkill', '-9', '-f', 'ollama'], capture_output=True, text=True, timeout=10)
+        subprocess.run(
+            ['pkill', '-9', '-f', 'ollama'], capture_output=True, text=True, timeout=10, check=False,
+        )
         time.sleep(3)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via force pkill"}, methods_tried
@@ -162,7 +186,9 @@ def stop_service_unix(get_status):
         pass
     try:
         methods_tried.append('killall')
-        subprocess.run(['killall', '-TERM', 'ollama'], capture_output=True, text=True, timeout=10)
+        subprocess.run(
+            ['killall', '-TERM', 'ollama'], capture_output=True, text=True, timeout=10, check=False,
+        )
         time.sleep(3)
         if not get_status():
             return {"success": True, "message": "Ollama service stopped successfully via killall"}, methods_tried

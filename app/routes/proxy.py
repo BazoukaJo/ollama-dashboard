@@ -20,6 +20,7 @@ from app.services.client_payload_compat import (
     messages_have_images,
     native_api_should_cap_predict,
     prepare_native_api_payload,
+    proxy_max_response_chars,
     sanitize_v1_chat_payload,
 )
 from app.services.copilot_pipeline import prepare_copilot_payload
@@ -46,6 +47,7 @@ from app.services.v1_native_bridge import (
     stream_native_chat_lines_to_openai_sse,
     stream_native_generate_lines_to_openai_sse,
 )
+from app.wsgi_safe import HOP_BY_HOP_HEADERS, strip_hop_by_hop_headers
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +66,6 @@ def _log_incoming_ollama_request():
         extra={'query': request.query_string.decode('utf-8', errors='replace')[:120] or None},
     )
 
-
-from app.wsgi_safe import HOP_BY_HOP_HEADERS, strip_hop_by_hop_headers
 
 # Upstream Ollama HTTP timeouts (seconds).
 _UPSTREAM_CONNECT_TIMEOUT = 30
@@ -307,6 +307,32 @@ def _sse_response(stream_body, *, status=200):
     return strip_hop_by_hop_headers(response)
 
 
+def _ollama_unreachable_text(err):
+    return (
+        f'Cannot reach Ollama at {_ollama_url()}: {err}. '
+        'Start the Ollama service (the dashboard header can do this) and retry.'
+    )
+
+
+def _openai_error_json(message, *, status_code=502, model_name=''):
+    """OpenAI-shaped JSON error for non-streaming clients."""
+    body: dict = {'error': {'message': message[:2000], 'type': 'upstream_error', 'code': status_code}}
+    if model_name:
+        body['model'] = model_name
+    response = Response(json.dumps(body), status=status_code, content_type='application/json')
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
+
+def _openai_error_sse(message, *, status_code=502, model_name=''):
+    """OpenAI-shaped SSE error stream for streaming clients (VS Code Copilot, etc.)."""
+    def error_stream():
+        for line in openai_error_sse_lines(message[:2000], status_code=status_code, model=model_name):
+            yield line.encode('utf-8')
+
+    return _sse_response(error_stream, status=status_code)
+
+
 def _forward_v1_chat_passthrough(payload):
     """Forward Copilot chat to Ollama native ``/v1/chat/completions`` (byte passthrough)."""
     ollama_url = _ollama_url()
@@ -372,7 +398,10 @@ def _handle_v1_chat_completions():
     merged_payload, pipeline_meta = prepare_copilot_payload(payload, settings_entry)
 
     native_payload = openai_chat_to_native(merged_payload, {})
-    apply_copilot_native_defaults(native_payload, merged_payload)
+    # Resolve thinking from the ORIGINAL request: prepare_copilot_payload() sanitizes away
+    # reasoning/effort/think, so apply_copilot_native_defaults must see the raw payload for
+    # OLLAMA_COPILOT_ALLOW_THINKING to actually take effect (otherwise the toggle is dead).
+    apply_copilot_native_defaults(native_payload, payload)
 
     log_copilot_request(
         merged_payload,
@@ -397,22 +426,26 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
     model_name = native_payload.get('model') or ''
     include_usage = _v1_include_usage(openai_payload)
     has_images = messages_have_images(native_payload.get('messages') or [])
+    has_tools = bool(native_payload.get('tools'))
+    # When thinking is explicitly enabled for this request, surface it to VS Code Copilot
+    # (which renders delta.content only) by mirroring reasoning into content — but never for
+    # agent/tool turns, where mixing thinking into content would corrupt the tool exchange.
+    think_val = native_payload.get('think')
+    think_on = think_val is not None and think_val is not False
+    mirror_thinking = think_on and not has_tools
     infer_timeout = (
         _UPSTREAM_VISION_INFERENCE_TIMEOUT if has_images else _UPSTREAM_INFERENCE_TIMEOUT
     )
 
     if stream:
-        upstream = _upstream_post(upstream_url, native_payload, stream=True)
+        try:
+            upstream = _upstream_post(upstream_url, native_payload, stream=True)
+        except requests.RequestException as err:
+            logger.warning('Upstream /api/chat stream connection failed (model=%s): %s', model_name, err)
+            return _openai_error_sse(_ollama_unreachable_text(err), model_name=model_name)
         if upstream.status_code != 200:
             err_text = (upstream.text or upstream.reason or 'Upstream error')[:2000]
-
-            def error_stream():
-                for line in openai_error_sse_lines(
-                    err_text, status_code=upstream.status_code, model=model_name,
-                ):
-                    yield line.encode('utf-8')
-
-            return _sse_response(error_stream, status=upstream.status_code)
+            return _openai_error_sse(err_text, status_code=upstream.status_code, model_name=model_name)
 
         def stream_body():
             opening, cid, created = openai_sse_stream_opening(model_name)
@@ -423,16 +456,22 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
                 include_usage=include_usage,
                 completion_id=cid,
                 stream_created=created,
-                omit_reasoning_deltas=True,
-                agent_mode=bool(native_payload.get('tools')),
+                omit_reasoning_deltas=not mirror_thinking,
+                mirror_thinking_to_content=mirror_thinking,
+                agent_mode=has_tools,
+                max_stream_chars=proxy_max_response_chars(),
             ):
                 yield chunk.encode('utf-8')
 
         return _sse_response(stream_body)
 
-    response_data = _upstream_post(
-        upstream_url, native_payload, timeout=infer_timeout,
-    )
+    try:
+        response_data = _upstream_post(
+            upstream_url, native_payload, timeout=infer_timeout,
+        )
+    except requests.RequestException as err:
+        logger.warning('Upstream /api/chat connection failed (model=%s): %s', model_name, err)
+        return _openai_error_json(_ollama_unreachable_text(err), model_name=model_name)
     if response_data.status_code != 200:
         return _openai_error_response(response_data, model_name)
     try:
@@ -556,14 +595,18 @@ def proxy_general_ollama_calls(catchall):
     ollama_url = _ollama_url()
 
     timeout = _UPSTREAM_PULL_TIMEOUT if catchall == 'pull' else _UPSTREAM_DEFAULT_TIMEOUT
-    response_data = _upstream_request(
-        request.method,
-        f"{ollama_url}/api/{catchall}",
-        headers=forward_headers,
-        data=request.get_data(),
-        cookies=request.cookies,
-        timeout=timeout,
-    )
+    try:
+        response_data = _upstream_request(
+            request.method,
+            f"{ollama_url}/api/{catchall}",
+            headers=forward_headers,
+            data=request.get_data(),
+            cookies=request.cookies,
+            timeout=timeout,
+        )
+    except requests.RequestException as err:
+        logger.warning('Upstream /api/%s connection failed: %s', catchall, err)
+        return _openai_error_json(_ollama_unreachable_text(err))
 
     return _proxy_upstream_response(response_data)
 
@@ -577,13 +620,17 @@ def proxy_v1_openai_calls(catchall):
     forward_headers = {k: v for k, v in request.headers.items() if k.lower() != 'host'}
     ollama_url = _ollama_url()
 
-    response_data = _upstream_request(
-        request.method,
-        f"{ollama_url}/v1/{catchall}",
-        headers=forward_headers,
-        data=request.get_data(),
-        cookies=request.cookies,
-    )
+    try:
+        response_data = _upstream_request(
+            request.method,
+            f"{ollama_url}/v1/{catchall}",
+            headers=forward_headers,
+            data=request.get_data(),
+            cookies=request.cookies,
+        )
+    except requests.RequestException as err:
+        logger.warning('Upstream /v1/%s connection failed: %s', catchall, err)
+        return _openai_error_json(_ollama_unreachable_text(err))
 
     return _proxy_upstream_response(response_data)
 

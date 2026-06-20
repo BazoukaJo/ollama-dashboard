@@ -4,6 +4,8 @@ Main routes blueprint for Ollama Dashboard.
 This module is large and handles many endpoint variations; we relax a few
 lint rules to keep the legacy surface area stable while improving readability.
 """
+from __future__ import annotations
+
 import json
 import os
 import platform
@@ -11,6 +13,7 @@ import re
 import signal
 import time
 from datetime import datetime
+from typing import Any
 
 import psutil
 import requests
@@ -18,6 +21,8 @@ from flask import Response, current_app, jsonify, render_template, request, stre
 
 from app import __version__ as DASHBOARD_VERSION
 from app.routes import bp
+from app.services import mcp_tools
+from app.services.ask_agent import stream_ask_agent
 from app.services.ask_attachments import AttachmentError, prepare_chat_from_attachments
 from app.services.model_helpers import (
     attach_last_token_usage_to_model,
@@ -257,7 +262,7 @@ def force_kill_app():
     return jsonify({"success": True, "message": f"Force killed PIDs: {', '.join(map(str, killed_pids))}"})
 
 
-def _validate_model_name(model_name):
+def _validate_model_name(model_name: str) -> tuple[dict[str, Any] | None, int | None]:
     """Validate model name format. Returns (None, None) if valid, or (error_dict, status_code) if invalid."""
     is_valid, msg = InputValidator.validate_model_name(model_name)
     if not is_valid:
@@ -282,7 +287,7 @@ def _verify_model_unloaded(model_name, max_attempts=5, delay_seconds=1):
     return False
 
 
-def _handle_model_error(response, model_name, operation="operation"):
+def _handle_model_error(response, model_name, operation="operation") -> tuple[dict[str, Any], int]:
     """Handle common model operation errors."""
     error_text = response.text.lower()
 
@@ -304,10 +309,11 @@ def _handle_model_error(response, model_name, operation="operation"):
             "message": f"Model '{model_name}' is too large for available memory. Try a smaller model."
         }, 400
 
+    status_code = getattr(response, "status_code", None)
     return {
         "success": False,
         "message": f"Failed to {operation} model: {response.text}"
-    }, response.status_code
+    }, int(status_code) if status_code else 500
 
 
 @bp.route('/api/models/start/<model_name>', methods=['POST'], endpoint='api_start_model')
@@ -486,6 +492,8 @@ def start_model(model_name=None):
                 return {"success": False, "message": "Model loading failed after 3 retries due to connection issues. This can happen with large models on first load. Please try again."}, 503
             return {"success": False, "message": "Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct."}, 503
 
+        return {"success": False, "message": f"Failed to start model {model_name}"}, 500
+
     except _ROUTE_ERRORS as e:
         return {"success": False, "message": f"Unexpected error: {str(e)}"}, 500
 
@@ -631,7 +639,7 @@ def stop_model(model_name=None):
                     "success": False,
                     "message": error_msg,
                     "can_force": True,
-                }, unload_response.status_code
+                }, int(unload_response.status_code)
 
         except requests.exceptions.Timeout:
             return {
@@ -689,7 +697,7 @@ def restart_model(model_name=None):
                             error_msg += f" - {error_detail}"
                     except _ROUTE_ERRORS:
                         pass
-                    return {"success": False, "message": error_msg}, unload_response.status_code
+                    return {"success": False, "message": error_msg}, int(unload_response.status_code)
 
             except requests.exceptions.Timeout:
                 return {"success": False, "message": f"Timeout while stopping model {model_name} during restart"}, 504
@@ -770,23 +778,20 @@ def restart_model(model_name=None):
                     if start_response.status_code in [500, 502, 503, 504] and attempt < max_retries - 1:
                         time.sleep(min(retry_delay * (2 ** attempt), 32))  # Exponential backoff with cap
                         continue
-                    else:
-                        return {"success": False, "message": f"Failed to restart model: {last_error}"}, start_response.status_code
+                    return {"success": False, "message": f"Failed to restart model: {last_error}"}, start_response.status_code
 
             except requests.exceptions.Timeout:
                 last_error = "Timeout"
                 if attempt < max_retries - 1:
                     time.sleep(min(retry_delay * (2 ** attempt), 32))
                     continue
-                else:
-                    return {"success": False, "message": f"Timeout while restarting model {model_name}"}, 504
+                return {"success": False, "message": f"Timeout while restarting model {model_name}"}, 504
             except requests.exceptions.RequestException as e:
                 last_error = str(e)
                 if attempt < max_retries - 1:
                     time.sleep(min(retry_delay * (2 ** attempt), 32))
                     continue
-                else:
-                    return {"success": False, "message": f"Network error while restarting model: {str(e)}"}, 503
+                return {"success": False, "message": f"Network error while restarting model: {str(e)}"}, 503
 
         return {"success": False, "message": f"Failed to restart model after {max_retries} attempts: {last_error}"}, 500
 
@@ -800,7 +805,7 @@ def get_model_info(model_name):
     """Get detailed information about a specific model."""
     err, status = _validate_model_name(model_name)
     if err is not None:
-        return err, status
+        return err, status or 400
     try:
         response = _get_ollama_service()._session.post(
             _get_ollama_url("show"),
@@ -969,14 +974,14 @@ def get_combined_models():
         return {"error": str(exc), "models": []}, 500
 
 
-def _resolve_model_name(model_name=None):
+def _resolve_model_name(model_name: str | None = None) -> tuple[str | None, tuple[dict[str, Any], int] | None]:
     """Get model name from path param or ?model= query param."""
     name = model_name or request.args.get('model') or request.args.get('name')
     if not name:
         return None, ({"success": False, "error": "Missing model name"}, 400)
     err, status = _validate_model_name(name)
     if err is not None:
-        return None, (err, status)
+        return None, (err, status or 400)
     return name, None
 
 
@@ -1113,10 +1118,12 @@ def api_copy_model_settings_between():
     body = request.get_json() or {}
     src = body.get('from') or body.get('source')
     dst = body.get('to') or body.get('target')
-    for _, raw in (('source', src), ('target', dst)):
+    for label, raw in (('source', src), ('target', dst)):
+        if not raw or not isinstance(raw, str):
+            return {"success": False, "error": f"Missing {label} model name"}, 400
         err, status = _validate_model_name(raw)
         if err is not None:
-            return err, status
+            return err, status or 400
     if src == dst:
         return _json_error('Source and target must differ', status=400)
     try:
@@ -1298,8 +1305,7 @@ def chat():
                 pass
             if stream:
                 def _generate_stream(r=response):
-                    for chunk in r.iter_content(chunk_size=None):
-                        yield chunk
+                    yield from r.iter_content(chunk_size=None)
                 return Response(stream_with_context(_generate_stream()), content_type='text/plain')
             try:
                 _get_ollama_service().record_model_token_usage_from_response(
@@ -1313,6 +1319,84 @@ def chat():
         error_result, status_code = _handle_model_error(response, model_name, "chat with")
         return error_result, status_code
 
+    except _ROUTE_ERRORS as e:
+        return {"error": f"Unexpected error: {str(e)}"}, 500
+
+
+@bp.route('/api/chat/agent', methods=['POST'])
+def chat_agent():
+    """Ask? agent mode — Ollama /api/chat with dashboard MCP tools (server-side loop)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        model_name = data.get('model')
+        prompt = data.get('prompt')
+        attachments = data.get('attachments')
+
+        if not model_name:
+            return {"error": "Model name is required"}, 400
+        if not (prompt or '').strip() and not attachments:
+            return {"error": "Enter a question or add an attachment"}, 400
+
+        model_info = _get_ollama_service().get_model_info_cached(model_name)
+        if not model_info:
+            return {"error": f"Model '{model_name}' not found. Please ensure it's installed."}, 404
+
+        model_has_vision = model_info.get('has_vision')
+        if model_has_vision is None and isinstance(model_info.get('capabilities'), list):
+            caps = {str(c).lower() for c in model_info['capabilities']}
+            model_has_vision = bool(caps & {'vision', 'image', 'multimodal'})
+
+        try:
+            prepared = prepare_chat_from_attachments(
+                prompt or '',
+                attachments,
+                model_has_vision=model_has_vision,
+            )
+        except AttachmentError as exc:
+            return {"error": str(exc)}, 400
+
+        user_message: dict = {'role': 'user', 'content': prepared['prompt']}
+        if prepared.get('images'):
+            user_message['images'] = prepared['images']
+        messages = [user_message]
+
+        options = _get_ollama_service().get_default_settings()
+        try:
+            model_settings_entry = _get_ollama_service().get_model_settings_with_fallback(model_name)
+            if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
+                for k, v in model_settings_entry['settings'].items():
+                    options[k] = v
+        except _ROUTE_ERRORS as e:
+            current_app.logger.error("Failed to merge per-model settings for %s: %s", model_name, e)
+
+        allow_write = mcp_tools.mcp_allow_write()
+        auth_svc = current_app.config.get('AUTH_SERVICE')
+        if auth_svc and allow_write:
+            ok, role = auth_svc.authenticate_request(request)
+            if not ok or role not in ('operator', 'admin'):
+                allow_write = False
+
+        svc = _get_ollama_service()
+        chat_url = _get_ollama_url('chat')
+
+        def _generate():
+            try:
+                svc.record_model_activity(model_name)
+            except _ROUTE_ERRORS:
+                pass
+            yield from stream_ask_agent(
+                session=svc._session,
+                chat_url=chat_url,
+                model_name=model_name,
+                messages=messages,
+                options=options,
+                allow_write=allow_write,
+            )
+
+        return Response(
+            stream_with_context(_generate()),
+            content_type='application/x-ndjson',
+        )
     except _ROUTE_ERRORS as e:
         return {"error": f"Unexpected error: {str(e)}"}, 500
 
@@ -1363,7 +1447,8 @@ def delete_model(model_name=None):
                 error_msg = err_json.get("error") or err_json.get("message") or response.text
             except _ROUTE_ERRORS:
                 error_msg = response.text
-            return jsonify({"success": False, "message": f"Failed to delete model: {error_msg}"}), response.status_code if response.status_code >= 400 else 400
+            status_code = int(response.status_code) if response.status_code >= 400 else 400
+            return jsonify({"success": False, "message": f"Failed to delete model: {error_msg}"}), status_code
 
         # Verify model is gone from Ollama
         if not _verify_model_deleted(model_name):
@@ -1372,6 +1457,9 @@ def delete_model(model_name=None):
         # Remove model settings
         from app.services.model_settings_helpers import delete_model_settings_entry
         settings_deleted = delete_model_settings_entry(svc, model_name)
+
+        # Drop cached model lists/details so the deleted model disappears immediately.
+        svc.invalidate_model_catalog(model_name)
 
         return jsonify({
             "success": True,
@@ -1465,7 +1553,7 @@ def get_model_performance(model_name):
     """Get performance metrics for a model."""
     err, status = _validate_model_name(model_name)
     if err is not None:
-        return err, status
+        return err, status or 400
     try:
         performance = _get_ollama_service().get_model_performance(model_name)
         return performance
@@ -1583,13 +1671,13 @@ def api_get_downloadable_models():
         current_app.logger.error(f"Error in downloadable models endpoint: {str(e)}", exc_info=True)
         return jsonify({"success": False, "message": str(e)}), 500
 
-def _json_success(message, extra=None, status=200):
+def _json_success(message: str, extra: dict[str, Any] | None = None, status: int = 200) -> tuple[Response, int]:
     payload = {"success": True, "message": message}
     if extra:
         payload.update(extra)
     return jsonify(payload), status
 
-def _json_error(message, status=500):
+def _json_error(message: str, status: int = 500) -> tuple[Response, int]:
     """Return a standardized JSON error response."""
     return jsonify({"success": False, "error": message, "message": message}), status
 
@@ -1633,7 +1721,7 @@ def init_app(app):
     if not getattr(bp, '_monitoring_registered', False):
         from app.routes.monitoring import create_monitoring_endpoints
         create_monitoring_endpoints(bp, svc)
-        bp._monitoring_registered = True
+        bp._monitoring_registered = True  # type: ignore[attr-defined]
     # Template filters (`datetime` and `time_ago`) are registered in app factory via app.__init__.
     # Avoid duplicate registration here to prevent platform-specific filter overrides.
     app.register_blueprint(bp)

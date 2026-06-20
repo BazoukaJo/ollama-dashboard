@@ -314,7 +314,7 @@ def test_v1_chat_completions_bridges_to_native_api_chat(tmp_path, monkeypatch):
     assert captured['url'] == 'http://localhost:11434/api/chat'
     assert captured['json']['options']['temperature'] == 0.55
     assert captured['json']['options']['num_ctx'] == 16384
-    assert captured['json']['options']['num_predict'] == 16384
+    assert captured['json']['options']['num_predict'] == 4096
     assert captured['json']['think'] is False
     assert 'reasoning_effort' not in captured['json']
     assert 'tools' not in captured['json']
@@ -717,7 +717,7 @@ def test_v1_completions_caps_and_resolves_model(tmp_path, monkeypatch):
         resp.get_data()
 
     assert captured['json']['model'] == 'qwen3:14b'
-    assert captured['json']['options']['num_predict'] == 16384
+    assert captured['json']['options']['num_predict'] == 4096
 
 
 def test_api_embed_passthrough(tmp_path, monkeypatch):

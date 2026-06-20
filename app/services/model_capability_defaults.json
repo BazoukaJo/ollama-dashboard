@@ -35,7 +35,12 @@
     "reasoning_families": [
       "deepseek-r1", "deepseek-reasoning", "qwq", "qwen-qwq", "qwen-reasoning",
       "o1", "o2", "o3", "marco-o1", "phi4-reasoning", "phi4-mini-reasoning",
-      "openthinker", "deepscaler"
+      "openthinker", "deepscaler", "gpt-oss", "magistral", "cogito", "exaone-deep",
+      "smallthinker", "reflection"
+    ],
+    "moe_families": [
+      "mixtral", "gpt-oss", "deepseek-v2", "deepseek-v3", "llama4", "dbrx",
+      "jamba", "qwen3-moe", "granite3-moe", "phi3.5-moe", "olmoe"
     ]
   },
   "sources": [

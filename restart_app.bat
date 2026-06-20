@@ -25,13 +25,16 @@ if /i not "!RUNMODE!"=="dev" set "RUNMODE=release"
 echo Target run mode: !RUNMODE!
 echo.
 
-call "%~dp0stop_app.bat" --no-pause
-if errorlevel 2 (
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\dashboard-process.ps1" -Action stop -CloseLaunchers
+set "STOP=!ERRORLEVEL!"
+if "!STOP!"=="2" (
 	echo Restart aborted: port 5000 is blocked by another application.
 	pause
 	exit /b 2
 )
-
+if "!STOP!"=="1" (
+	echo No dashboard instance was running.
+)
 echo Waiting for port 5000 to clear...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\dashboard-process.ps1" -Action wait-clear
 if errorlevel 1 (
@@ -61,6 +64,5 @@ if /i "!RUNMODE!"=="dev" (
 
 echo.
 echo Dashboard is restarting in a new window.
-echo You can close this window.
-timeout /t 3 /nobreak >nul
 endlocal
+exit 0

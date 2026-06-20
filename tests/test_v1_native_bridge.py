@@ -94,6 +94,18 @@ def test_native_chat_response_to_openai_shape():
     assert usage.get('total_tokens') == 15
 
 
+def test_native_chat_response_maps_length_finish_to_stop():
+    """Copilot crashes on finish_reason length — bridge must emit stop."""
+    native = {
+        'model': 'm',
+        'message': {'role': 'assistant', 'content': 'partial'},
+        'done': True,
+        'done_reason': 'length',
+    }
+    out = native_chat_response_to_openai(native, copilot_safe=True)
+    assert out['choices'][0]['finish_reason'] == 'stop'
+
+
 def test_native_chat_response_includes_reasoning():
     native = {
         'model': 'qwen3:14b',
@@ -205,6 +217,39 @@ def test_stream_agent_tool_calls_do_not_flush_thinking_to_content():
     assert 'Hello there' not in out
     assert '"tool_calls"' in out
     assert '"reasoning"' not in out
+
+
+def test_stream_truncates_huge_tool_call_arguments(monkeypatch):
+    """Agent-mode tool_calls must fit the IDE char budget (Copilot rejects oversized SSE)."""
+    monkeypatch.setenv('OLLAMA_PROXY_MAX_RESPONSE_CHARS', '2048')
+    huge = 'x' * 50_000
+    lines = [
+        (
+            b'{"message":{"role":"assistant","tool_calls":[{"id":"c1","function":'
+            b'{"name":"grep","arguments":{"pattern":"' + huge.encode() + b'"}}}],"content":""},'
+            b'"done":true}'
+        ),
+    ]
+    out = ''.join(stream_native_chat_lines_to_openai_sse(
+        iter(lines), model='qwen3:14b', omit_reasoning_deltas=True, agent_mode=True,
+    ))
+    assert '"tool_calls"' in out
+    assert len(out) < 50_000
+
+
+def test_native_chat_response_maps_length_finish_to_stop_with_tools():
+    native = {
+        'model': 'm',
+        'message': {
+            'role': 'assistant',
+            'content': '',
+            'tool_calls': [{'function': {'name': 'x', 'arguments': {}}}],
+        },
+        'done': True,
+        'done_reason': 'length',
+    }
+    out = native_chat_response_to_openai(native, copilot_safe=False)
+    assert out['choices'][0]['finish_reason'] == 'stop'
 
 
 def test_stream_maps_tool_calls_to_openai_format():

@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 logger = logging.getLogger(__name__)
@@ -104,7 +104,6 @@ def create_app(config_name='development'):
 
         @app.before_request
         def check_auth():
-            from flask import jsonify, request  # pylint: disable=import-outside-toplevel
             path = request.path
             auth_svc = app.config.get('AUTH_SERVICE')
             if not auth_svc:
@@ -129,7 +128,9 @@ def create_app(config_name='development'):
     @app.errorhandler(404)
     def not_found(e):
         from flask import request as _req  # pylint: disable=import-outside-toplevel
-        if _req.path.startswith('/api/') or _req.path.startswith('/ollama/api/'):
+        # /ollama/* includes the OpenAI-compatible /ollama/v1/* paths VS Code Copilot calls —
+        # they must get JSON (not HTML) so OpenAI SDK error parsing works.
+        if _req.path.startswith('/api/') or _req.path.startswith('/ollama/'):
             return jsonify({"success": False, "error": "Not found", "message": str(e)}), 404
         desc = getattr(e, 'description', None) or str(e) or 'Not Found'
         body = (
@@ -141,8 +142,11 @@ def create_app(config_name='development'):
     @app.errorhandler(500)
     def internal_error(e):
         from flask import request as _req  # pylint: disable=import-outside-toplevel
-        if _req.path.startswith('/api/') or _req.path.startswith('/ollama/api/'):
-            return jsonify({"success": False, "error": "Internal server error", "message": str(e)}), 500
+        logger.exception("Unhandled 500 error on %s", _req.path)
+        if _req.path.startswith('/api/') or _req.path.startswith('/ollama/'):
+            # Generic message only — do not leak internal exception text/paths to IDE clients.
+            return jsonify({"success": False, "error": "Internal server error",
+                            "message": "An internal error occurred."}), 500
         msg = getattr(e, 'description', None) or str(e) or 'Internal Server Error'
         body = (
             '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Server Error</title></head>'
@@ -153,7 +157,11 @@ def create_app(config_name='development'):
     # ===== MIDDLEWARE & SECURITY =====
     cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5000,http://127.0.0.1:5000')
     # Updated CORS rule to grant full API clearance to the dashboard and external IDE connections
-    CORS(app, resources={r"/api/*": {"origins": cors_origins.split(',')}, r"/ollama/*": {"origins": "*"}})
+    CORS(app, resources={
+        r"/api/*": {"origins": cors_origins.split(',')},
+        r"/ollama/*": {"origins": "*"},
+        r"/mcp/*": {"origins": "*"},
+    })
 
     @app.after_request
     def set_security_headers(response):
@@ -172,6 +180,9 @@ def create_app(config_name='development'):
 
     init_app(app)
     logger.info("✅ Routes registered")
+
+    from app.services.mcp_server import mount_mcp_on_flask_app  # pylint: disable=import-outside-toplevel
+    mount_mcp_on_flask_app(app)
 
     logger.info("✅ Application initialized successfully")
     return app

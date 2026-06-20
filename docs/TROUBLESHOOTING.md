@@ -48,6 +48,10 @@ loads the model. Saved `num_ctx` and other options are merged into each proxied 
 3. Use **Connect app** in the dashboard header for checks and copy-paste URLs.
 4. Save per-model settings in the dashboard UI (**Settings** → **Save**).
 
+For **dashboard MCP tools** (separate from the Ollama proxy), use **`http://127.0.0.1:5000/mcp`**
+in Cursor or VS Code MCP settings. The Connect wizard lists tools and sample JSON. See
+[Complete Guide — MCP tools server](GUIDE.md#mcp-tools-server-mcp).
+
 **Examples:**
 
 | App | Field | Value |
@@ -259,6 +263,27 @@ If the model returns tool calls but Copilot still shows no text, confirm the mod
 supports tools in Ollama and that VS Code Agent mode is enabled. Some models answer in plain
 text even when tools are offered; others return tools only — both paths are supported by the
 proxy.
+
+## MCP: Cursor / VS Code cannot connect to `/mcp`
+
+Symptoms:
+
+- MCP client shows disconnected or fails to list tools
+- Connect wizard **`mcp_endpoint`** check fails
+
+**Checks:**
+
+1. **Dashboard running** — MCP is served on the **same port** as the UI (default `:5000`), not a separate process.
+2. **Correct URL** — `http://127.0.0.1:5000/mcp` (not `/ollama`, not `:11434`).
+3. **Dependencies installed** — `pip install -r requirements.txt` includes `mcp` and `a2wsgi`. Restart after upgrading.
+4. **Status endpoint** — `GET http://127.0.0.1:5000/api/mcp/status` should return JSON with `"ok": true`.
+5. **Pair with proxy** — MCP supplies dashboard tools; chat still needs the Ollama proxy at `http://127.0.0.1:5000/ollama`.
+
+**Ask? agent mode:** Requires a model with **tool support** (`has_tools` on the model card). The modal shows **Agent mode** when enabled. If tools never run, try a tool-capable tag (for example Qwen3) and check the server log for `/api/chat/agent` errors.
+
+**Write tools:** `start_model` / `stop_model` are hidden unless `MCP_ALLOW_WRITE=true` and the dashboard was restarted.
+
+See [GUIDE.md — MCP tools server](GUIDE.md#mcp-tools-server-mcp).
 
 ## VS Code Copilot: request timeout or model won't load
 

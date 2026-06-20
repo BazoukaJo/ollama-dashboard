@@ -1,14 +1,17 @@
 """External API proxy — status, setup wizard, analytics, RAG routes."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request
 
+from app.services import mcp_tools
 from app.services.copilot_analytics import client_proxy_analytics, client_proxy_status, read_log_records
 from app.services.copilot_prewarm import schedule_context_preload
+from app.services.mcp_server import mcp_health_check
 from app.services.model_advisor import advise_from_hardware
 from app.services.model_settings_helpers import lookup_settings_entry
 from app.services.rag import index_workspace, rag_status
@@ -34,6 +37,56 @@ def _data_dir():
 
 def _proxy_base():
     return request.host_url.rstrip('/') + '/ollama'
+
+
+def _mcp_base():
+    return request.host_url.rstrip('/') + '/mcp'
+
+
+def _mcp_client_examples(mcp_url: str, proxy_url: str) -> list[dict[str, str]]:
+    cursor_json = json.dumps(
+        {'mcpServers': {'ollama-dashboard': {'url': mcp_url}}},
+        indent=2,
+    )
+    vscode_json = json.dumps(
+        {'servers': {'ollama-dashboard': {'type': 'http', 'url': mcp_url}}},
+        indent=2,
+    )
+    return [
+        {
+            'name': 'Cursor — MCP tools',
+            'field': '.cursor/mcp.json',
+            'value': cursor_json,
+            'hint': 'Adds dashboard tools (models, stats, proxy status). Use with Ollama proxy for chat.',
+        },
+        {
+            'name': 'VS Code — MCP extension',
+            'field': 'mcp.servers (settings JSON)',
+            'value': vscode_json,
+            'hint': 'Same MCP URL; pair with github.copilot.chat.byok.ollamaEndpoint for models.',
+        },
+        {
+            'name': 'Combined IDE setup',
+            'field': 'Models + tools',
+            'value': f'Ollama proxy: {proxy_url}  |  MCP tools: {mcp_url}',
+            'hint': 'Proxy URL for LLM inference; MCP URL for dashboard tool access.',
+        },
+    ]
+
+
+def _mcp_status_payload():
+    health = mcp_health_check(current_app._get_current_object())
+    mcp_url = _mcp_base()
+    tools = mcp_tools.list_tools_metadata()
+    return {
+        'ok': bool(health.get('ok')),
+        'mcp_base_url': mcp_url,
+        'mcp_enabled': bool(health.get('ok')),
+        'tool_count': len(tools),
+        'write_tools_enabled': mcp_tools.mcp_allow_write(),
+        'tools': tools,
+        'health': health,
+    }
 
 
 def _client_examples(base: str) -> list[dict[str, str]]:
@@ -109,13 +162,28 @@ def _wizard_payload():
 
     add('proxy_url', True, f'Use {base} as the server / API base in your app', f'Copy: {base}')
 
-    passed = all(c['passed'] for c in checks if c['name'] != 'proxy_url')
+    mcp_url = _mcp_base()
+    mcp_health = mcp_health_check(current_app._get_current_object())
+    add(
+        'mcp_endpoint',
+        bool(mcp_health.get('ok')),
+        f'MCP tools at {mcp_url} ({mcp_health.get("tool_count", 0)} tools)',
+        None if mcp_health.get('ok') else 'Install mcp and a2wsgi, then restart the dashboard.',
+    )
+
+    passed = all(c['passed'] for c in checks if c['name'] not in ('proxy_url',))
+    mcp_status = _mcp_status_payload()
     return {
         'success': passed,
         'checks': checks,
         'proxy_base_url': base,
         'proxy_endpoint': base,
         'client_examples': _client_examples(base),
+        'mcp_base_url': mcp_url,
+        'mcp_enabled': mcp_status.get('mcp_enabled'),
+        'mcp_tools': mcp_status.get('tools') or [],
+        'mcp_write_tools_enabled': mcp_status.get('write_tools_enabled'),
+        'mcp_client_examples': _mcp_client_examples(mcp_url, base),
     }
 
 
@@ -135,6 +203,16 @@ def api_proxy_status():
 def api_proxy_wizard_checks():
     """Run setup checks for external OpenAI/Ollama-compatible clients."""
     return jsonify(_wizard_payload())
+
+
+@bp.route('/api/mcp/status')
+def api_mcp_status():
+    """MCP server status for Connect panel and health checks."""
+    try:
+        return jsonify(_mcp_status_payload())
+    except (RuntimeError, OSError, ValueError, TypeError, KeyError) as err:
+        logger.exception('MCP status endpoint failed')
+        return jsonify({'ok': False, 'error': str(err)}), 500
 
 
 @bp.route('/api/proxy/analytics')

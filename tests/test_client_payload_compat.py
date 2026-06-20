@@ -1,8 +1,12 @@
 """Tests for external client payload compatibility."""
+import json
+
 from app.services.client_payload_compat import (
     cap_num_predict,
     cap_openai_chat_response,
+    estimate_tool_calls_chars,
     prepare_external_v1_payload,
+    proxy_max_response_chars,
     sanitize_v1_chat_payload,
 )
 from app.services.v1_native_bridge import openai_chat_to_native
@@ -47,16 +51,16 @@ def test_sanitize_strips_reasoning_effort_and_think():
 def test_cap_num_predict_limits_client_and_dashboard():
     payload = {'max_tokens': 32000, 'options': {}}
     capped, meta = cap_num_predict(payload, {'num_predict': 8192})
-    assert capped['max_tokens'] == 16384
-    assert capped['options']['num_predict'] == 16384
-    assert meta['num_predict_ceiling'] == 16384
+    assert capped['max_tokens'] == 4096
+    assert capped['options']['num_predict'] == 4096
+    assert meta['num_predict_ceiling'] == 4096
 
 
-def test_cap_num_predict_uses_saved_without_client_request():
+def test_cap_num_predict_uses_saved_when_lower_than_ceiling():
     payload = {'options': {}}
     capped, meta = cap_num_predict(payload, {'num_predict': 8192})
-    assert capped['options']['num_predict'] == 8192
-    assert meta['num_predict_ceiling'] == 8192
+    assert capped['options']['num_predict'] == 4096
+    assert meta['num_predict_ceiling'] == 4096
 
 
 def test_cap_num_predict_respects_lower_saved_value():
@@ -73,9 +77,9 @@ def test_prepare_external_v1_payload_sanitizes_and_caps():
         'metadata': {'trace': '1'},
     }
     out, meta = prepare_external_v1_payload(payload, None)
-    assert out['max_tokens'] == 16384
+    assert out['max_tokens'] == 4096
     assert 'metadata' not in out
-    assert meta['num_predict_capped'] == 16384
+    assert meta['num_predict_capped'] == 4096
 
 
 def test_sanitize_converts_multimodal_content_to_ollama_format():
@@ -247,6 +251,30 @@ def test_sanitize_function_role_maps_to_tool():
     }
     out, _meta = sanitize_v1_chat_payload(payload)
     assert out['messages'][0]['role'] == 'tool'
+
+
+def test_cap_openai_chat_response_truncates_huge_tool_calls():
+    huge_args = json.dumps({'pattern': 'x' * 200_000})
+    body = {
+        'choices': [{
+            'index': 0,
+            'message': {
+                'role': 'assistant',
+                'content': '',
+                'tool_calls': [{
+                    'id': 'call_1',
+                    'type': 'function',
+                    'function': {'name': 'grep', 'arguments': huge_args},
+                }],
+            },
+            'finish_reason': 'tool_calls',
+        }],
+    }
+    out, meta = cap_openai_chat_response(body)
+    assert meta['truncated'] is True
+    calls = out['choices'][0]['message']['tool_calls']
+    assert calls
+    assert estimate_tool_calls_chars(calls) <= proxy_max_response_chars()
 
 
 def test_cap_openai_chat_response_preserves_tool_calls():

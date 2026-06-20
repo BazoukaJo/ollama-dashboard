@@ -12,6 +12,13 @@ if (!window.getCapabilitiesHTML) {
     const r = model?.has_reasoning,
       v = model?.has_vision,
       t = model?.has_tools;
+    const moe =
+      model?.has_moe === true
+        ? `
+            <span class="capability-icon enabled" data-dashboard-tooltip="Mixture of Experts (MoE)">
+                <i class="fas fa-cubes"></i>
+            </span>`
+        : "";
     return `
             <span class="capability-icon ${capState(r)}" data-dashboard-tooltip="${capTitle(r, "Reasoning")}">
                 <i class="fas fa-brain"></i>
@@ -21,7 +28,7 @@ if (!window.getCapabilitiesHTML) {
             </span>
             <span class="capability-icon ${capState(t)}" data-dashboard-tooltip="${capTitle(t, "Tool Usage")}">
                 <i class="fas fa-tools"></i>
-            </span>
+            </span>${moe}
         `;
   };
 }

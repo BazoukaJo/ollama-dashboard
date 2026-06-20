@@ -239,7 +239,10 @@ class OllamaServiceModels:
 
     def get_available_models(self, force_refresh=False):
         """Get list of available models from the Ollama server."""
-        if getattr(self, '_building_available_models_depth', 0) > 0:
+        # Thread-local re-entrancy guard: a build on THIS thread (normalize -> settings ->
+        # model info -> get_available_models) returns the cache to break recursion, but a build
+        # on another thread must not make us skip enrichment.
+        if self._building_models_depth() > 0:
             cached = self._get_cached('available_models', ttl_seconds=10)
             return cached if cached is not None else []
         if not force_refresh:
@@ -247,9 +250,7 @@ class OllamaServiceModels:
             if cached is not None:
                 return cached
         try:
-            self._building_available_models_depth = (
-                getattr(self, '_building_available_models_depth', 0) + 1
-            )
+            self._set_building_models_depth(self._building_models_depth() + 1)
             host, port = self._ollama_core.get_ollama_host_port()
             tags_url = f"http://{host}:{port}/api/tags"
             response = self._session.get(tags_url, timeout=10)
@@ -330,8 +331,7 @@ class OllamaServiceModels:
             self.logger.debug("Error fetching available models: %s", exc)
             return []
         finally:
-            depth = getattr(self, '_building_available_models_depth', 0)
-            self._building_available_models_depth = max(0, depth - 1)
+            self._set_building_models_depth(max(0, self._building_models_depth() - 1))
 
     def get_running_models(self, force_refresh=False):
         """Get list of currently running models.

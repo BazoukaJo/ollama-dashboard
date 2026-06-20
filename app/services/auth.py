@@ -54,6 +54,7 @@ class AuthService:
         '/api/models/pull',
         '/api/models/settings',
         '/api/chat',
+        '/api/chat/agent',
     ]
 
     def __init__(self):

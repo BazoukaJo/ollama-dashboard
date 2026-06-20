@@ -2925,6 +2925,27 @@ html.light .model-actions .model-action-settings-btn .model-settings-status-badg
   tab-size: 2;
 }
 
+.ask-agent-mode-wrap .ask-agent-badge {
+  font-size: 0.72rem;
+  vertical-align: middle;
+}
+
+.ask-agent-steps {
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.ask-agent-step {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.api-mcp-wizard-section pre.api-mcp-example-code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 0.35rem;
+  color: var(--text-muted, #adb5bd);
+}
+
 .ask-model-response-area {
   background: var(--primary-bg, #1a1a1a);
   padding-top: 2.35rem !important;

@@ -16,7 +16,12 @@ import time
 import uuid
 from typing import Any, Iterator
 
-from app.services.client_payload_compat import normalize_messages_for_ollama, proxy_max_response_chars
+from app.services.client_payload_compat import (
+    estimate_tool_calls_chars,
+    normalize_messages_for_ollama,
+    proxy_max_response_chars,
+    truncate_tool_calls,
+)
 from app.services.model_settings_helpers import merge_options_for_external_proxy
 
 _OPENAI_OPTION_KEYS = frozenset({
@@ -25,6 +30,17 @@ _OPENAI_OPTION_KEYS = frozenset({
     'stop', 'min_p', 'typical_p', 'mirostat', 'mirostat_tau', 'mirostat_eta',
     'penalize_newline',
 })
+
+
+def _copilot_safe_finish_reason(native: dict[str, Any], *, tool_calls: bool = False) -> str:
+    """VS Code Copilot errors on ``finish_reason: length`` — map to ``stop``."""
+    reason = native.get('done_reason') or native.get('finish_reason')
+    reason_s = reason.strip().lower() if isinstance(reason, str) else ''
+    if reason_s == 'length':
+        return 'stop'
+    if tool_calls or reason_s in ('tool_calls', 'function_call'):
+        return 'tool_calls'
+    return 'stop'
 
 
 def _openai_request_options(payload: dict[str, Any]) -> dict[str, Any]:
@@ -252,13 +268,15 @@ def native_chat_response_to_openai(
             'role': message.get('role') or 'assistant',
             'content': content,
         },
-        'finish_reason': 'stop' if native.get('done', True) else None,
+        'finish_reason': _copilot_safe_finish_reason(native),
     }
     if message.get('tool_calls'):
         converted = _native_tool_calls_to_openai(message['tool_calls'])
         if converted:
             choice['message']['tool_calls'] = converted
-            choice['finish_reason'] = 'tool_calls'
+            choice['finish_reason'] = _copilot_safe_finish_reason(
+                native, tool_calls=native.get('done_reason') != 'length',
+            )
     if reasoning and not copilot_safe:
         choice['message']['reasoning'] = reasoning
     usage = {}
@@ -368,9 +386,19 @@ def _delta_has_substance(delta: dict[str, Any]) -> bool:
 
 
 def _delta_content_char_len(delta: dict[str, Any]) -> int:
-    """Bytes VS Code/Copilot clients render from a streaming delta."""
+    """Length of ``delta.content`` only (used to detect a user-visible answer)."""
     content = delta.get('content')
     return len(str(content)) if isinstance(content, str) else 0
+
+
+def _delta_outbound_char_len(delta: dict[str, Any]) -> int:
+    """Total rendered/streamed payload size for IDE client char budgets."""
+    total = _delta_content_char_len(delta)
+    reasoning = delta.get('reasoning')
+    if isinstance(reasoning, str):
+        total += len(reasoning)
+    total += estimate_tool_calls_chars(delta.get('tool_calls'))
+    return total
 
 
 def _strip_reasoning_from_delta(delta: dict[str, Any]) -> dict[str, Any]:
@@ -390,15 +418,20 @@ _COPILOT_BLEED_MAX_CHARS = 3
 
 
 def _truncate_delta_for_stream(delta: dict[str, Any], remaining: int) -> dict[str, Any]:
-    """Trim delta text fields so streamed SSE stays under the IDE char budget."""
+    """Trim delta text and tool_calls so streamed SSE stays under the IDE char budget."""
     if remaining <= 0:
         out = {'role': delta.get('role') or 'assistant', 'content': ''}
         if 'reasoning' in delta:
             out['reasoning'] = ''
         if delta.get('tool_calls'):
-            out['tool_calls'] = delta['tool_calls']
+            out['tool_calls'] = truncate_tool_calls(delta['tool_calls'], 0)
         return out
     out = dict(delta)
+    tool_calls = out.get('tool_calls')
+    if isinstance(tool_calls, list) and tool_calls:
+        shrunk = truncate_tool_calls(tool_calls, remaining)
+        out['tool_calls'] = shrunk
+        remaining = max(0, remaining - estimate_tool_calls_chars(shrunk))
     content = out.get('content')
     if isinstance(content, str) and len(content) > remaining:
         out['content'] = content[:remaining]
@@ -411,6 +444,15 @@ def _truncate_delta_for_stream(delta: dict[str, Any], remaining: int) -> dict[st
     elif isinstance(reasoning, str) and len(reasoning) > remaining:
         out['reasoning'] = reasoning[:remaining]
     return out
+
+
+def _fit_delta_to_stream_budget(delta: dict[str, Any], remaining: int) -> dict[str, Any]:
+    """Return a delta guaranteed to fit the remaining streamed-char budget."""
+    if remaining <= 0:
+        return _truncate_delta_for_stream(delta, 0)
+    if _delta_outbound_char_len(delta) <= remaining:
+        return delta
+    return _truncate_delta_for_stream(delta, remaining)
 
 
 def stream_native_chat_lines_to_openai_sse(
@@ -479,11 +521,17 @@ def stream_native_chat_lines_to_openai_sse(
                 delta = _strip_reasoning_from_delta(delta)
             if delta.get('content') is None:
                 delta['content'] = ''
-            if _delta_has_substance(delta) and streamed_chars < char_budget:
-                yield _openai_chat_chunk(cid, model, delta, created=created)
-                yielded_substance = True
-                yielded_agent_turn = True
-                streamed_chars += _delta_content_char_len(delta)
+            # Tool calls are functional payloads for Agent mode: emit them whole and valid against
+            # the FULL budget (not just the remaining text budget) so a large-but-legitimate call
+            # is never starved by earlier content or dropped — and truncate_tool_calls guarantees
+            # the arguments stay valid JSON even in the pathological oversized case.
+            if _delta_has_substance(delta):
+                out_delta = _fit_delta_to_stream_budget(delta, char_budget)
+                if _delta_has_substance(out_delta):
+                    yield _openai_chat_chunk(cid, model, out_delta, created=created)
+                    yielded_substance = True
+                    yielded_agent_turn = True
+                    streamed_chars += _delta_outbound_char_len(out_delta)
         elif omit_reasoning_deltas:
             # Copilot BYOK renders delta.content only. Hold thinking tokens and defer
             # short content that arrives during the thinking phase (often a lone "I").
@@ -507,15 +555,15 @@ def stream_native_chat_lines_to_openai_sse(
                         yielded_substance = True
                         if content_s.strip():
                             yielded_content = True
-                        streamed_chars += _delta_content_char_len(out_delta)
+                        streamed_chars += _delta_outbound_char_len(out_delta)
         elif _delta_has_substance(delta) and streamed_chars < char_budget:
-            content_len = _delta_content_char_len(delta)
+            content_len = _delta_outbound_char_len(delta)
             if streamed_chars + content_len > char_budget:
                 delta = _truncate_delta_for_stream(delta, char_budget - streamed_chars)
-                content_len = _delta_content_char_len(delta)
+                content_len = _delta_outbound_char_len(delta)
             yield _openai_chat_chunk(cid, model, delta, created=created)
             yielded_substance = True
-            if content_len:
+            if _delta_content_char_len(delta):
                 yielded_content = True
             streamed_chars += content_len
         if native.get('done'):
@@ -546,9 +594,12 @@ def stream_native_chat_lines_to_openai_sse(
                 if final_delta.get('content') is None:
                     final_delta['content'] = ''
                 if final_delta.get('tool_calls'):
-                    yield _openai_chat_chunk(cid, model, final_delta, created=created)
-                    yielded_substance = True
-                    yielded_agent_turn = True
+                    out_delta = _fit_delta_to_stream_budget(final_delta, char_budget)
+                    if _delta_has_substance(out_delta):
+                        yield _openai_chat_chunk(cid, model, out_delta, created=created)
+                        yielded_substance = True
+                        yielded_agent_turn = True
+                        streamed_chars += _delta_outbound_char_len(out_delta)
             elif not yielded_substance:
                 final_delta = _openai_chat_delta_from_native_message(
                     msg, mirror_thinking_to_content=mirror_thinking_to_content or True,
@@ -556,7 +607,7 @@ def stream_native_chat_lines_to_openai_sse(
                 if _delta_has_substance(final_delta):
                     yield _openai_chat_chunk(cid, model, final_delta, created=created)
                     yielded_substance = True
-            finish = 'tool_calls' if seen_tool_calls else 'stop'
+            finish = _copilot_safe_finish_reason(native, tool_calls=seen_tool_calls)
             usage = None
             if include_usage:
                 usage = {}

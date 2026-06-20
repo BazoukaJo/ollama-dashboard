@@ -168,7 +168,8 @@ def attach_last_token_usage_to_model(service, model_dict):
 
 def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflict=False):
     if not isinstance(entry, dict):
-        return {'name': str(entry), 'has_vision': False, 'has_tools': False, 'has_reasoning': False}
+        return {'name': str(entry), 'has_vision': None, 'has_tools': None,
+                'has_reasoning': None, 'has_moe': None}
     raw_ctx = _extract_context_length(entry)
     model = {
         'name': entry.get('name', 'unknown'),
@@ -179,6 +180,10 @@ def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflic
         'digest': entry.get('digest'),
         'context_length': format_context_length(raw_ctx) if raw_ctx is not None else None,
     }
+    # Preserve any provider-authoritative capabilities array from /api/tags so
+    # ensure_capability_flags can use it instead of falling back to name heuristics.
+    if entry.get('capabilities') is not None:
+        model['capabilities'] = entry.get('capabilities')
     if isinstance(model.get('size'), (int, float)):
         try:
             model['formatted_size'] = service.format_size(model['size'])
@@ -187,9 +192,10 @@ def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflic
     try:
         model = ensure_capability_flags(model, prefer_heuristics_on_conflict=prefer_heuristics_on_conflict)
     except (ValueError, KeyError, TypeError):
-        model.setdefault('has_vision', False)
-        model.setdefault('has_tools', False)
-        model.setdefault('has_reasoning', False)
+        model.setdefault('has_vision', None)
+        model.setdefault('has_tools', None)
+        model.setdefault('has_reasoning', None)
+        model.setdefault('has_moe', None)
     # Request context and token usage are attached after the list is built (see routes/main.py)
     # to avoid recursion: attach_request_context -> get_model_settings_with_fallback ->
     # get_model_info_cached -> get_available_models -> normalize_available_model_entry.
@@ -252,9 +258,10 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
         try:
             entry = ensure_capability_flags(entry, prefer_heuristics_on_conflict=prefer_heuristics_on_conflict)
         except SERVICE_ERRORS:
-            entry.setdefault('has_vision', False)
-            entry.setdefault('has_tools', False)
-            entry.setdefault('has_reasoning', False)
+            entry.setdefault('has_vision', None)
+            entry.setdefault('has_tools', None)
+            entry.setdefault('has_reasoning', None)
+            entry.setdefault('has_moe', None)
         if include_has_custom_settings:
             try:
                 ms = service.get_model_settings(entry['name']) or {}
@@ -265,4 +272,5 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
         attach_last_token_usage_to_model(service, entry)
         return entry
     except SERVICE_ERRORS:
-        return {'name': str(model), 'running': False, 'has_vision': False, 'has_tools': False, 'has_reasoning': False}
+        return {'name': str(model), 'running': False, 'has_vision': None,
+                'has_tools': None, 'has_reasoning': None, 'has_moe': None}

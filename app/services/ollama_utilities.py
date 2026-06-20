@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import threading
 import time
 import uuid
 from collections import deque
@@ -84,10 +85,12 @@ class OllamaServiceUtilities:
         if self.history is None:
             return  # Skip update when no history available
         timestamp = datetime.now().isoformat()
-        self.history.appendleft({
-            'timestamp': timestamp,
-            'models': models
-        })
+        lock = getattr(self, '_history_lock', None)
+        if lock is not None:
+            with lock:
+                self.history.appendleft({'timestamp': timestamp, 'models': models})
+        else:
+            self.history.appendleft({'timestamp': timestamp, 'models': models})
         self.save_history()
     def save_history(self):
         """Save history to file."""
@@ -96,13 +99,21 @@ class OllamaServiceUtilities:
         if self.history is None:
             return  # Skip saving when no history available
         try:
+            # Snapshot the deque under the lock so the C-level iteration in list() cannot race a
+            # concurrent appendleft ("deque mutated during iteration").
+            lock = getattr(self, '_history_lock', None)
+            if lock is not None:
+                with lock:
+                    snapshot = list(self.history)
+            else:
+                snapshot = list(self.history)
             # Validate JSON serialization before write
-            json_str = json.dumps(list(self.history))
+            json_str = json.dumps(snapshot)
             history_file = self.app.config['HISTORY_FILE']
             history_dir = os.path.dirname(os.path.abspath(history_file)) or '.'
             os.makedirs(history_dir, exist_ok=True)
-            # Write with atomic pattern: tmp then rename
-            tmp_path = history_file + '.tmp'
+            # Per-process/thread temp name so concurrent saves don't clobber one shared .tmp file.
+            tmp_path = f"{history_file}.{os.getpid()}.{threading.get_ident()}.tmp"
             with open(tmp_path, 'w', encoding='utf-8') as f:
                 f.write(json_str)
             try:
@@ -777,6 +788,7 @@ class OllamaServiceUtilities:
             )
 
             if response.status_code == 200:
+                self.invalidate_model_catalog(model_name)
                 return {"success": True, "message": f"Model {model_name} pulled successfully"}
             else:
                 return {"success": False, "message": f"Failed to pull model: {response.text}"}
@@ -833,10 +845,12 @@ class OllamaServiceUtilities:
                         yield event_payload
 
                     if payload.get("done") or status_msg == "success":
+                        self.invalidate_model_catalog(model_name)
                         yield {"event": "done", "success": True, "message": f"Model {model_name} pulled successfully"}
                         return
 
                 # Fallback completion event when stream ends without explicit done
+                self.invalidate_model_catalog(model_name)
                 yield {"event": "done", "success": True, "message": f"Model {model_name} pulled successfully"}
 
         except HTTP_SERVICE_ERRORS as e:

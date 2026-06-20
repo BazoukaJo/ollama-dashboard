@@ -858,6 +858,10 @@ function renderCapabilityBadges(info) {
     { label: "Vision", icon: "fa-image", val: v },
     { label: "Tools", icon: "fa-tools", val: t },
   ];
+  // Mixture-of-Experts is architectural: only surface it when known true (avoids noisy "unknown").
+  if (info?.has_moe === true) {
+    badges.push({ label: "MoE", icon: "fa-cubes", val: true });
+  }
 
   return badges
     .map((badge) => {
@@ -1096,6 +1100,15 @@ function getCapabilitiesHTML(model) {
   const r = model?.has_reasoning;
   const v = model?.has_vision;
   const t = model?.has_tools;
+  // MoE icon is appended LAST and only when true, so existing caps[0..2] ordering
+  // (reasoning, vision, tools) used by live-update/capabilityFlagsFromCard stays valid.
+  const moe =
+    model?.has_moe === true
+      ? `
+    <span class="capability-icon enabled" data-dashboard-tooltip="Mixture of Experts (MoE)">
+      <i class="fas fa-cubes"></i>
+    </span>`
+      : "";
   return `
     <span class="capability-icon ${capState(r)}" data-dashboard-tooltip="${capTitle(r, "Reasoning")}">
       <i class="fas fa-brain"></i>
@@ -1105,7 +1118,7 @@ function getCapabilitiesHTML(model) {
     </span>
     <span class="capability-icon ${capState(t)}" data-dashboard-tooltip="${capTitle(t, "Tool Usage")}">
       <i class="fas fa-tools"></i>
-    </span>
+    </span>${moe}
   `;
 }
 

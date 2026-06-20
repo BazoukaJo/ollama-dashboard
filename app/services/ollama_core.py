@@ -96,6 +96,18 @@ class OllamaServiceCore:
         self.app = app
         self._cache = {}
         self._cache_timestamps = {}
+        # Guards every mutation/compound-read of _cache + _cache_timestamps. Request threads
+        # (Waitress, 8), the background stats thread, and the /api/show enrichment pool all touch
+        # these dicts; without this lock check-then-act sequences race (TOCTOU del -> KeyError,
+        # torn value/timestamp pairs). Matches the contract documented in docs/ARCHITECTURE.md.
+        self._cache_lock = threading.Lock()
+        # Serializes history deque snapshot/append so save_history's list(self.history) cannot
+        # race a concurrent appendleft ("deque mutated during iteration").
+        self._history_lock = threading.Lock()
+        # Per-thread re-entrancy guard for get_available_models (normalize -> settings -> info ->
+        # get_available_models). Instance-wide state would leak across threads and make concurrent
+        # requests skip /api/show enrichment.
+        self._build_tls = threading.local()
         # Store session in __dict__ directly to avoid property conflicts during init
         session = requests.Session()
         adapter = HTTPAdapter(pool_connections=5, pool_maxsize=20)
@@ -247,9 +259,7 @@ class OllamaServiceCore:
                     stats = getattr(self, '_get_system_stats_raw')() or {}
                 else:
                     stats = {}
-                with self._stats_lock:
-                    self._cache['system_stats'] = stats
-                    self._cache_timestamps['system_stats'] = datetime.now()
+                self._set_cached('system_stats', stats)
 
                 _cycle += 1
                 if _cycle >= _health_check_interval:
@@ -273,18 +283,27 @@ class OllamaServiceCore:
 
     # Simple cache helpers restored after refactor corruption
     def _get_cached(self, key, ttl_seconds):
-        """Get a cached value if it exists and hasn't expired."""
-        ts = self._cache_timestamps.get(key)
-        if not ts:
+        """Get a cached value if it exists and hasn't expired (atomic value+timestamp read)."""
+        with self._cache_lock:
+            ts = self._cache_timestamps.get(key)
+            if not ts:
+                return None
+            if (datetime.now() - ts).total_seconds() < ttl_seconds:
+                return self._cache.get(key)
             return None
-        if (datetime.now() - ts).total_seconds() < ttl_seconds:
-            return self._cache.get(key)
-        return None
 
     def _set_cached(self, key, value):
-        """Cache a value with current timestamp."""
-        self._cache[key] = value
-        self._cache_timestamps[key] = datetime.now()
+        """Cache a value with current timestamp (value+timestamp written atomically)."""
+        with self._cache_lock:
+            self._cache[key] = value
+            self._cache_timestamps[key] = datetime.now()
+
+    def _building_models_depth(self):
+        """Current thread's get_available_models re-entrancy depth (thread-local)."""
+        return getattr(self._build_tls, 'depth', 0)
+
+    def _set_building_models_depth(self, value):
+        self._build_tls.depth = value
 
     def record_model_activity(self, model_name):
         """Record that a model had recent activity (chat/generate).
@@ -530,18 +549,35 @@ class OllamaServiceCore:
 
     def clear_all_caches(self):
         """Clear all cached data and timestamps (used after service restart)."""
-        self._cache.clear()
-        self._cache_timestamps.clear()
+        with self._cache_lock:
+            self._cache.clear()
+            self._cache_timestamps.clear()
         # Also reset error states
         self._last_background_error = None
         self._consecutive_ps_failures = 0
 
     def clear_cache(self, key):
-        """Clear a specific cache entry and its timestamp."""
-        if key in self._cache:
-            del self._cache[key]
-        if key in self._cache_timestamps:
-            del self._cache_timestamps[key]
+        """Clear a specific cache entry and its timestamp (lock prevents TOCTOU del KeyError)."""
+        with self._cache_lock:
+            self._cache.pop(key, None)
+            self._cache_timestamps.pop(key, None)
+
+    def invalidate_model_catalog(self, model_name=None):
+        """Drop cached model lists/details after a pull or delete so the UI reflects reality now.
+
+        Clears the available/running model lists and the per-model /api/show cache, plus the
+        OpenAI /v1 model-name resolution cache. Without this a pulled model is invisible (or a
+        deleted one lingers) for up to the cache TTL (~60s).
+        """
+        self.clear_cache('available_models')
+        self.clear_cache('running_models')
+        if model_name:
+            self.clear_cache(f'show:{model_name}')
+        try:
+            from app.services.v1_model_resolve import invalidate_model_list_cache
+            invalidate_model_list_cache()
+        except Exception:  # pylint: disable=broad-except
+            pass
 
     def _cleanup(self):
         """Cleanup resources on process exit."""

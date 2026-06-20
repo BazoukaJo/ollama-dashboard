@@ -147,12 +147,81 @@
     return caps;
   }
 
+  function updateAskAgentModeUi() {
+    var wrap = document.getElementById("askAgentModeWrap");
+    var steps = document.getElementById("askAgentSteps");
+    var agentOn = _askModelCaps.has_tools === true;
+    if (wrap) wrap.style.display = agentOn ? "" : "none";
+    if (steps && !agentOn) {
+      steps.style.display = "none";
+      steps.innerHTML = "";
+    }
+  }
+
+  function bindAskMcpConnectButton() {
+    var btn = document.getElementById("askMcpConnectBtn");
+    if (!btn || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", function (e) {
+      e.preventDefault();
+      if (window.apiProxyUI && window.apiProxyUI.openWizard) {
+        window.apiProxyUI.openWizard(true);
+      }
+    });
+  }
+
+  function resetAskAgentSteps() {
+    var steps = document.getElementById("askAgentSteps");
+    if (!steps) return;
+    steps.innerHTML = "";
+    steps.style.display = "none";
+  }
+
+  function ensureAskAgentStepRow(name) {
+    var steps = document.getElementById("askAgentSteps");
+    if (!steps) return null;
+    steps.style.display = "";
+    var rowId = "ask-agent-step-" + String(name || "tool").replace(/[^a-z0-9_-]/gi, "_");
+    var existing = document.getElementById(rowId);
+    if (existing) return existing;
+    var row = document.createElement("div");
+    row.id = rowId;
+    row.className = "ask-agent-step small p-2 mb-1 rounded border border-secondary";
+    row.innerHTML =
+      '<div class="ask-agent-step-head d-flex align-items-center gap-2">' +
+      '<i class="fas fa-cog fa-spin text-info ask-agent-step-spinner" aria-hidden="true"></i>' +
+      '<code class="ask-agent-step-name">' +
+      escapeHtml(name || "tool") +
+      "</code></div>" +
+      '<div class="ask-agent-step-result text-muted mt-1" style="display:none;"></div>';
+    steps.appendChild(row);
+    return row;
+  }
+
+  function finishAskAgentStep(name, summary) {
+    var row = ensureAskAgentStepRow(name);
+    if (!row) return;
+    var spinner = row.querySelector(".ask-agent-step-spinner");
+    if (spinner) {
+      spinner.classList.remove("fa-spin", "fa-cog");
+      spinner.classList.add("fa-check-circle", "text-success");
+    }
+    var result = row.querySelector(".ask-agent-step-result");
+    if (result) {
+      result.style.display = "";
+      result.textContent = summary || "Done";
+    }
+  }
+
   function updateAskCapabilityHint() {
     var hint = document.getElementById("askModelCapabilitiesHint");
     var imageBtn = document.getElementById("askAttachImageBtn");
     if (!hint) return;
 
     var parts = [];
+    if (_askModelCaps.has_tools === true) {
+      parts.push("Agent mode: this model can call dashboard MCP tools.");
+    }
     if (_askModelCaps.has_vision === true) {
       parts.push("Vision: attach images for this model.");
     } else if (_askModelCaps.has_vision === false) {
@@ -163,6 +232,7 @@
     parts.push("PDF and Word text is extracted for all models.");
     parts.push("Code snippets are included in the prompt.");
     hint.textContent = parts.join(" ");
+    updateAskAgentModeUi();
 
     if (imageBtn) {
       var hideImage = _askModelCaps.has_vision === false;
@@ -398,6 +468,7 @@
     if (_askControlsBound) return;
     _askControlsBound = true;
     bindAskAttachmentControls();
+    bindAskMcpConnectButton();
     var modalEl = document.getElementById("askModelModal");
     if (modalEl) {
       modalEl.addEventListener("hidden.bs.modal", function () {
@@ -425,6 +496,7 @@
       has_tools: null,
       has_reasoning: null,
     };
+    resetAskAgentSteps();
     updateAskCapabilityHint();
 
     var nameEl = document.getElementById("askModelModalName");
@@ -475,6 +547,62 @@
     updateAskCapabilityHint();
   }
 
+  function summarizeToolResult(content) {
+    var text = String(content || "");
+    if (text.length <= 120) return text;
+    return text.slice(0, 117) + "...";
+  }
+
+  async function consumeAgentStream(reader, responseEl, spinner) {
+    var decoder = new TextDecoder();
+    var buffer = "";
+    var gotFirstToken = false;
+
+    while (true) {
+      var chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      var lines = buffer.split("\n");
+      buffer = lines.pop();
+      for (var i = 0; i < lines.length; i++) {
+        var trimmed = lines[i].trim();
+        if (!trimmed) continue;
+        try {
+          var evt = JSON.parse(trimmed);
+          if (evt.type === "content" && evt.text != null) {
+            if (!gotFirstToken) {
+              gotFirstToken = true;
+              if (spinner) spinner.style.display = "none";
+            }
+            if (responseEl) {
+              responseEl.textContent += evt.text;
+              responseEl.scrollTop = responseEl.scrollHeight;
+              setAskCopyEnabled(true);
+            }
+          } else if (evt.type === "tool_call") {
+            ensureAskAgentStepRow(evt.name || "tool");
+          } else if (evt.type === "tool_result") {
+            finishAskAgentStep(evt.name || "tool", summarizeToolResult(evt.content));
+          } else if (evt.type === "error") {
+            if (responseEl) {
+              responseEl.textContent = "Error: " + (evt.message || "Agent failed");
+              setAskCopyEnabled(true);
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    if (buffer.trim()) {
+      try {
+        var last = JSON.parse(buffer.trim());
+        if (last.type === "content" && last.text != null && responseEl) {
+          responseEl.textContent += last.text;
+          setAskCopyEnabled(true);
+        }
+      } catch (_) {}
+    }
+  }
+
   async function sendAskModelQuestion() {
     var question = (document.getElementById("askModelInput")?.value || "").trim();
     if (!question && !_askAttachments.length) {
@@ -486,10 +614,12 @@
     var spinner = document.getElementById("askModelSpinner");
     var responseWrap = document.getElementById("askModelResponseWrap");
     var responseEl = document.getElementById("askModelResponse");
+    var useAgent = _askModelCaps.has_tools === true;
 
     if (sendBtn) sendBtn.disabled = true;
     if (responseWrap) responseWrap.style.display = "";
     if (responseEl) responseEl.textContent = "";
+    resetAskAgentSteps();
     setAskCopyEnabled(false);
     if (spinner) spinner.style.display = "";
 
@@ -499,7 +629,7 @@
     var payload = {
       model: _askModelName,
       prompt: question,
-      stream: true,
+      stream: !useAgent,
     };
     if (_askAttachments.length) {
       payload.attachments = _askAttachments.map(function (att) {
@@ -514,8 +644,10 @@
       });
     }
 
+    var endpoint = useAgent ? "/api/chat/agent" : "/api/chat";
+
     try {
-      var resp = await fetch("/api/chat", {
+      var resp = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -534,47 +666,51 @@
         return;
       }
 
-      if (spinner) spinner.style.display = "";
+      if (useAgent) {
+        await consumeAgentStream(resp.body.getReader(), responseEl, spinner);
+      } else {
+        if (spinner) spinner.style.display = "";
 
-      var reader = resp.body.getReader();
-      var decoder = new TextDecoder();
-      var buffer = "";
-      var gotFirstToken = false;
+        var reader = resp.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer = "";
+        var gotFirstToken = false;
 
-      while (true) {
-        var chunk = await reader.read();
-        if (chunk.done) break;
-        buffer += decoder.decode(chunk.value, { stream: true });
-        var lines = buffer.split("\n");
-        buffer = lines.pop();
-        for (var i = 0; i < lines.length; i++) {
-          var trimmed = lines[i].trim();
-          if (!trimmed) continue;
+        while (true) {
+          var chunk = await reader.read();
+          if (chunk.done) break;
+          buffer += decoder.decode(chunk.value, { stream: true });
+          var lines = buffer.split("\n");
+          buffer = lines.pop();
+          for (var i = 0; i < lines.length; i++) {
+            var trimmed = lines[i].trim();
+            if (!trimmed) continue;
+            try {
+              var parsed = JSON.parse(trimmed);
+              if (parsed.response != null) {
+                if (!gotFirstToken) {
+                  gotFirstToken = true;
+                  if (spinner) spinner.style.display = "none";
+                }
+                if (responseEl) {
+                  responseEl.textContent += parsed.response;
+                  responseEl.scrollTop = responseEl.scrollHeight;
+                  setAskCopyEnabled(true);
+                }
+              }
+            } catch (_) {}
+          }
+        }
+        if (buffer.trim()) {
           try {
-            var parsed = JSON.parse(trimmed);
-            if (parsed.response != null) {
-              if (!gotFirstToken) {
-                gotFirstToken = true;
-                if (spinner) spinner.style.display = "none";
-              }
-              if (responseEl) {
-                responseEl.textContent += parsed.response;
-                responseEl.scrollTop = responseEl.scrollHeight;
-                setAskCopyEnabled(true);
-              }
+            var last = JSON.parse(buffer.trim());
+            if (last.response != null && responseEl) {
+              responseEl.textContent += last.response;
+              responseEl.scrollTop = responseEl.scrollHeight;
+              setAskCopyEnabled(true);
             }
           } catch (_) {}
         }
-      }
-      if (buffer.trim()) {
-        try {
-          var last = JSON.parse(buffer.trim());
-          if (last.response != null && responseEl) {
-            responseEl.textContent += last.response;
-            responseEl.scrollTop = responseEl.scrollHeight;
-            setAskCopyEnabled(true);
-          }
-        } catch (_) {}
       }
     } catch (err) {
       if (err.name !== "AbortError" && responseEl) {

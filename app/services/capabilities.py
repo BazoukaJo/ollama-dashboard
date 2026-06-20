@@ -83,6 +83,44 @@ _REASONING_INDICATORS = ['math', 'reasoning', 'thinking', 'think', 'cognitive']
 _TOOL_FUNCTION_INDICATORS = ['tools', 'function', 'function-calling', 'tool-use']
 _VISION_FAMILY_INDICATORS = ['clip', 'projector', 'vision', 'multimodal', 'vl', 'llava', 'siglip']
 
+# Mixture-of-Experts model name patterns (display-only flag; Ollama routes experts internally).
+# Matches mixtral, NxMb notation (8x7b/8x22b), total-active notation (30b-a3b), and known MoE families.
+_MOE_PATTERNS = [
+    r'mixtral', r'\d+x\d+b', r'\bmoe\b', r'-moe', r'\d+b-a\d+b',
+    r'gpt-oss', r'deepseek-?v[23]', r'llama4', r'dbrx', r'jamba', r'qwen3-?moe',
+    r'granite.*moe', r'phi.*moe', r'grok',
+]
+
+
+def _match_family_defaults(name_lower: str) -> dict:
+    """Capability flags from model_capability_defaults.json family lists (heuristic fallback).
+
+    Returns only True/None per flag (never False) — used to fill gaps the regex heuristics miss
+    (e.g. gemma3/minicpm-v vision, gpt-oss tools) without contradicting definitive False signals.
+    """
+    out = {'has_vision': None, 'has_tools': None, 'has_reasoning': None, 'has_moe': None}
+    fam = (load_capability_defaults() or {}).get('family_defaults') or {}
+    base = name_lower.split(':', 1)[0].split('/')[-1]
+    if not base:
+        return out
+
+    def _matches(families) -> bool:
+        for f in families or []:
+            fl = str(f).lower().strip()
+            if fl and (base == fl or base.startswith(fl)):
+                return True
+        return False
+
+    if _matches(fam.get('vision_families')):
+        out['has_vision'] = True
+    if _matches(fam.get('tools_families')):
+        out['has_tools'] = True
+    if _matches(fam.get('reasoning_families')):
+        out['has_reasoning'] = True
+    if _matches(fam.get('moe_families')):
+        out['has_moe'] = True
+    return out
+
 
 def detect_capabilities(model_name: str, families) -> dict:
     """Return capability flags for model name + families.
@@ -93,7 +131,8 @@ def detect_capabilities(model_name: str, families) -> dict:
     capabilities = {
         'has_vision': None,
         'has_tools': None,
-        'has_reasoning': None
+        'has_reasoning': None,
+        'has_moe': None,
     }
 
     name_lower = (model_name or '').lower()
@@ -137,6 +176,18 @@ def detect_capabilities(model_name: str, families) -> dict:
     if any(ind in name_lower for ind in _REASONING_INDICATORS):
         capabilities['has_reasoning'] = True
 
+    # Mixture-of-Experts detection (display flag).
+    if any(re.search(p, name_lower, re.IGNORECASE) for p in _MOE_PATTERNS):
+        capabilities['has_moe'] = True
+    if isinstance(families, list) and any('moe' in str(f).lower() for f in families):
+        capabilities['has_moe'] = True
+
+    # Fill remaining gaps from curated family lists (only sets True, never overrides False).
+    family_caps = _match_family_defaults(name_lower)
+    for key in ('has_vision', 'has_tools', 'has_reasoning', 'has_moe'):
+        if capabilities.get(key) is None and family_caps.get(key) is True:
+            capabilities[key] = True
+
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(f"Capabilities for '{model_name}': {capabilities}")
         logger.debug(f"Tokens: {tokens}; Families: {families}")
@@ -159,10 +210,14 @@ def _caps_from_ollama_api(caps_list: list) -> dict | None:
         "tools", "tool", "function", "function-calling", "tool-use"
     ]
     reasoning_aliases = api_to_flags.get("has_reasoning") or ["reasoning", "thinking", "think"]
+    has_reasoning_alias = any(x in caps_lower for x in reasoning_aliases)
     return {
         "has_vision": any(x in caps_lower for x in vision_aliases),
         "has_tools": any(x in caps_lower for x in tools_aliases),
-        "has_reasoning": any(x in caps_lower for x in reasoning_aliases),
+        # Ollama's capabilities array does not (yet) advertise reasoning/thinking, so absence is
+        # NOT proof of "no reasoning". Only report True when an alias is actually present;
+        # otherwise leave None so name/family heuristics and the catalog can decide.
+        "has_reasoning": True if has_reasoning_alias else None,
     }
 
 
@@ -182,26 +237,27 @@ def ensure_capability_flags(model: dict, prefer_heuristics_on_conflict: bool = F
         families = details.get('families', []) or []
         caps_list = model.get('capabilities') or details.get('capabilities')
 
-        # 1. Ollama API capabilities (definitive): True or False
+        # 1. Ollama API capabilities (definitive only per-key when not None)
         api_caps = _caps_from_ollama_api(caps_list) if caps_list else None
+        # Heuristics computed once (also supplies has_moe, which the API never reports).
+        heuristics = detect_capabilities(name, families)
 
-        # 2. Explicit catalog/source flags (definitive when bool)
+        # Priority per flag: API (when it gives a definitive non-None value) > explicit bool > heuristics.
         def get_flag(key: str):
-            val = model.get(key)
-            if api_caps is not None and key in api_caps:
+            if api_caps is not None and api_caps.get(key) is not None:
                 return api_caps[key]
-            if isinstance(val, bool):
+            val = model.get(key)
+            if isinstance(val, bool) and not prefer_heuristics_on_conflict:
                 return val
-            if prefer_heuristics_on_conflict or val is None or not isinstance(val, bool):
-                detected = detect_capabilities(name, families).get(key)
-                return detected  # True or None
-            return bool(val)
+            return heuristics.get(key)
 
         model['has_vision'] = get_flag('has_vision')
         model['has_tools'] = get_flag('has_tools')
         model['has_reasoning'] = get_flag('has_reasoning')
+        model['has_moe'] = get_flag('has_moe')
     except (AttributeError, KeyError, TypeError, ValueError):
         model.setdefault('has_vision', None)
         model.setdefault('has_tools', None)
         model.setdefault('has_reasoning', None)
+        model.setdefault('has_moe', None)
     return model

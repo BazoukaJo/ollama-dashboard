@@ -15,12 +15,19 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-# VS Code Copilot rejects very large completions client-side; align with dashboard defaults.
-_DEFAULT_MAX_PREDICT = 8192
-_MAX_PREDICT_CEILING = 16384
+# VS Code Copilot rejects very large completions client-side; stay under a safe ceiling.
+_DEFAULT_MAX_PREDICT = 4096
+_MAX_PREDICT_CEILING = 8192
 _MIN_PREDICT = 64
 
-# Approximate max characters returned to picky IDE clients (reasoning + content + tools).
+# Agent/tool turns (file edits, multi-step refactors) need far more output room than plain chat,
+# and the small saved chat default must not silently clamp them. Separate, higher ceiling.
+_DEFAULT_MAX_PREDICT_AGENT = 32768
+_MAX_PREDICT_AGENT_CEILING = 131072
+
+# Approximate max characters streamed/returned to picky IDE clients (reasoning + content + tools).
+# Generous by default so agent-mode tool_calls (file writes, large grep args) survive intact;
+# the per-token num_predict cap is what actually bounds visible chat text for Copilot.
 _DEFAULT_MAX_RESPONSE_CHARS = 96_000
 
 # OpenAI top-level fields safe to forward to Ollama /v1 or native /api/chat.
@@ -58,12 +65,22 @@ def _env_int(name: str, default: int, *, minimum: int, maximum: int) -> int:
 
 
 def proxy_max_predict() -> int:
-    """Max output tokens the proxy allows for external clients."""
+    """Max output tokens the proxy allows for external clients (plain chat)."""
     return _env_int(
         'OLLAMA_PROXY_MAX_PREDICT',
         _DEFAULT_MAX_PREDICT,
         minimum=_MIN_PREDICT,
         maximum=_MAX_PREDICT_CEILING,
+    )
+
+
+def proxy_max_predict_agent() -> int:
+    """Max output tokens for agent/tool turns (much higher — long edits must not be cut)."""
+    return _env_int(
+        'OLLAMA_PROXY_MAX_PREDICT_AGENT',
+        _DEFAULT_MAX_PREDICT_AGENT,
+        minimum=_MIN_PREDICT,
+        maximum=_MAX_PREDICT_AGENT_CEILING,
     )
 
 
@@ -102,28 +119,32 @@ def _resolve_requested_max_tokens(payload: dict[str, Any]) -> int | None:
 def cap_num_predict(
     payload: dict[str, Any],
     dashboard_settings: dict[str, Any] | None = None,
+    *,
+    agent: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Apply a safe num_predict / max_tokens ceiling for external clients."""
-    hard_ceiling = proxy_max_predict()
+    """Apply a safe num_predict / max_tokens ceiling for external clients.
+
+    ``agent=True`` (tool/function-calling turns) uses a much higher ceiling and ignores the
+    small saved chat default, so long agent edits/refactors are not silently truncated.
+    """
+    hard_ceiling = proxy_max_predict_agent() if agent else proxy_max_predict()
     requested = _resolve_requested_max_tokens(payload)
     saved = None
     if isinstance(dashboard_settings, dict):
         saved = _coerce_positive_int(dashboard_settings.get('num_predict'))
 
+    # Never exceed the safe ceiling; the client may only lower it via max_tokens.
     if requested is not None:
-        basis = requested
+        basis = min(requested, hard_ceiling)
+    elif agent:
+        # Agent turns: don't let a small saved chat default (e.g. 512) clamp tool output.
+        basis = hard_ceiling
     elif saved is not None:
-        basis = saved
+        basis = min(saved, hard_ceiling)
     else:
         basis = hard_ceiling
 
-    # Respect dashboard-saved limits above the env default, still bounded for IDE safety.
-    upper = min(
-        _MAX_PREDICT_CEILING,
-        max(hard_ceiling, saved or 0, requested or 0),
-    )
-    effective = min(basis, upper)
-    effective = max(effective, _MIN_PREDICT)
+    effective = max(basis, _MIN_PREDICT)
     out = dict(payload)
     opts = dict(out.get('options') or {})
     opts['num_predict'] = effective
@@ -132,7 +153,8 @@ def cap_num_predict(
     meta = {
         'num_predict_capped': effective,
         'num_predict_requested': requested,
-        'num_predict_ceiling': upper,
+        'num_predict_ceiling': hard_ceiling,
+        'agent': agent,
     }
     return out, meta
 
@@ -409,6 +431,59 @@ def _truncate_text(text: str, limit: int) -> str:
     return text[:keep] + suffix
 
 
+def estimate_tool_calls_chars(tool_calls: Any) -> int:
+    """Serialized size of OpenAI-shaped ``tool_calls`` (counts toward IDE response limits)."""
+    if not isinstance(tool_calls, list) or not tool_calls:
+        return 0
+    try:
+        return len(json.dumps(tool_calls, ensure_ascii=False))
+    except (TypeError, ValueError):
+        return sum(len(str(tc)) for tc in tool_calls)
+
+
+def truncate_tool_calls(tool_calls: Any, max_chars: int) -> list[dict[str, Any]]:
+    """Shrink tool_calls so their JSON fits ``max_chars`` **without ever emitting invalid JSON**.
+
+    VS Code Agent mode parses ``function.arguments`` as JSON to execute the tool. Slicing the
+    arguments string mid-token produces malformed JSON and the agent turn fails silently, so we
+    only ever (1) keep calls whole when they fit, (2) drop whole trailing calls, or (3) as a last
+    resort reset an oversized call's ``arguments`` to an empty object ``{}`` — always valid JSON.
+    Callers should prefer a generous budget so this last resort is hit only by pathological sizes.
+    """
+    if not isinstance(tool_calls, list) or not tool_calls:
+        return []
+    if max_chars <= 0:
+        return []
+    valid: list[dict[str, Any]] = [dict(tc) for tc in tool_calls if isinstance(tc, dict)]
+    if not valid:
+        return []
+    if estimate_tool_calls_chars(valid) <= max_chars:
+        return valid
+
+    # Drop whole trailing calls first (keep at least one) — never corrupt a call's JSON.
+    while len(valid) > 1 and estimate_tool_calls_chars(valid) > max_chars:
+        valid.pop()
+    if estimate_tool_calls_chars(valid) <= max_chars:
+        return valid
+
+    # Single remaining call is itself too large: keep id/name, reset arguments to valid empty JSON.
+    tc = dict(valid[0])
+    fn = dict(tc.get('function') or {}) if isinstance(tc.get('function'), dict) else {}
+    fn['arguments'] = '{}'
+    tc['function'] = fn
+    return [tc]
+
+
+def _assistant_message_outbound_chars(message: dict[str, Any]) -> int:
+    total = 0
+    for key in ('content', 'reasoning', 'reasoning_content'):
+        val = message.get(key)
+        if isinstance(val, str) and val:
+            total += len(val)
+    total += estimate_tool_calls_chars(message.get('tool_calls'))
+    return total
+
+
 def cap_openai_chat_response(body: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     """Truncate oversized non-streaming chat.completion bodies for IDE clients."""
     limit = proxy_max_response_chars()
@@ -432,22 +507,16 @@ def cap_openai_chat_response(body: dict[str, Any]) -> tuple[dict[str, Any], dict
             new_choices.append(ch)
             continue
         m = dict(msg)
-        total = 0
-        for key in ('content', 'reasoning', 'reasoning_content'):
-            val = m.get(key)
-            if isinstance(val, str) and val:
-                total += len(val)
-        if total <= limit:
+        if _assistant_message_outbound_chars(m) <= limit:
             new_choices.append(ch)
             continue
         meta['truncated'] = True
         remaining = limit
         tool_calls = m.get('tool_calls')
-        if isinstance(tool_calls, list):
-            try:
-                remaining = max(0, remaining - len(json.dumps(tool_calls, ensure_ascii=False)))
-            except (TypeError, ValueError) as err:
-                logger.debug('Could not estimate tool_calls size for response cap: %s', err)
+        if isinstance(tool_calls, list) and tool_calls:
+            shrunk = truncate_tool_calls(tool_calls, remaining)
+            m['tool_calls'] = shrunk
+            remaining = max(0, remaining - estimate_tool_calls_chars(shrunk))
         for key in ('reasoning', 'reasoning_content', 'content'):
             val = m.get(key)
             if not isinstance(val, str) or not val:
