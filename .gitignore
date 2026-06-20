@@ -62,7 +62,12 @@ htmlcov/
 .ruff_cache/
 .mypy_cache/
 
-# Project specific
+# Project specific — runtime persistence (under data/)
+data/history.json
+data/chat_history.json
+data/model_settings.json
+data/system_stats_history.json
+# Legacy root paths (pre-1.2 cleanup; migration moves these into data/)
 history.json
 chat_history.json
 model_settings.json

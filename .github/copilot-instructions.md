@@ -46,6 +46,8 @@
 - `chat_history.json` — Ask? chat sessions (max 100)
 - `model_settings.json` — per-model defaults
 - `system_stats_history.json` — sparkline history
+
+All live under `data/` by default (see `HISTORY_FILE` / `MODEL_SETTINGS_FILE` in `app/__init__.py`).
 - All use atomic write pattern (`.tmp` then `os.replace`).
 
 ## Model Lists & Aliases

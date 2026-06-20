@@ -81,8 +81,8 @@ def lookup_settings_entry(model_settings, model_name):
 
 def model_settings_file_path(service):
     if service.app:
-        return service.app.config.get('MODEL_SETTINGS_FILE', 'model_settings.json')
-    return os.getenv('MODEL_SETTINGS_FILE', 'model_settings.json')
+        return service.app.config.get('MODEL_SETTINGS_FILE', 'data/model_settings.json')
+    return os.getenv('MODEL_SETTINGS_FILE', 'data/model_settings.json')
 
 def load_model_settings(service) -> dict:
     path = model_settings_file_path(service)

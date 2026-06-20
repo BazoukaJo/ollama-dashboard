@@ -212,7 +212,7 @@ service: ollama_service.save_model_settings(model_name, settings)
 >    `/v1/completions` bridged via `v1_native_bridge.py`. Hop-by-hop upstream headers are
 >    stripped so Waitress does not 500 on `/ollama/api/tags`.
 > 2. **Bake into Model** — `OllamaServiceUtilities.bake_model_settings`.
-> 3. **`server_with_proxy.js`** — same `model_settings.json`; mirrors API at proxy root;
+> 3. **`scripts/proxy/server_with_proxy.js`** — same `data/model_settings.json`; mirrors API at proxy root;
 >    merges settings on `/api/chat`, `/api/generate`, and `/v1/chat/completions`.
 >
 > **MCP tools server:** Streamable HTTP at `http://<dashboard>:5000/mcp` (same port as the UI).

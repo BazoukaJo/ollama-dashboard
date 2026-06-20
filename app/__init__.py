@@ -9,6 +9,7 @@ __version__ = "1.2.0"
 import html
 import logging
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,6 +17,24 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 logger = logging.getLogger(__name__)
+
+
+def _migrate_legacy_root_data_files(base_dir: Path, data_dir: Path) -> None:
+    """Move persistence JSON from repo root into data/ (one-time, best-effort)."""
+    for name in (
+        'history.json',
+        'chat_history.json',
+        'model_settings.json',
+        'system_stats_history.json',
+    ):
+        legacy = base_dir / name
+        dest = data_dir / name
+        if legacy.is_file() and not dest.exists():
+            try:
+                shutil.move(str(legacy), str(dest))
+                logger.info("Migrated legacy data file %s -> %s", name, dest)
+            except OSError as exc:
+                logger.warning("Could not migrate %s: %s", name, exc)
 
 
 def create_app(config_name='development'):
@@ -60,6 +79,7 @@ def create_app(config_name='development'):
     base_dir = Path(__file__).parent.parent
     data_dir = base_dir / 'data'
     data_dir.mkdir(exist_ok=True)
+    _migrate_legacy_root_data_files(base_dir, data_dir)
     app.config['DATA_DIR'] = str(data_dir)
 
     # Ollama connection
@@ -69,9 +89,11 @@ def create_app(config_name='development'):
     # on dashboard startup, start Ollama automatically if it isn't already running.
     app.config['AUTO_START_OLLAMA'] = os.getenv('AUTO_START_OLLAMA', 'true').lower() in ('true', '1', 'yes', 'on')
 
-    # Persistence
-    app.config['HISTORY_FILE'] = os.getenv('HISTORY_FILE', 'history.json')
-    app.config['MODEL_SETTINGS_FILE'] = os.getenv('MODEL_SETTINGS_FILE', 'model_settings.json')
+    # Persistence (defaults live under data/ to keep the repo root clean)
+    app.config['HISTORY_FILE'] = os.getenv('HISTORY_FILE', str(data_dir / 'history.json'))
+    app.config['MODEL_SETTINGS_FILE'] = os.getenv(
+        'MODEL_SETTINGS_FILE', str(data_dir / 'model_settings.json')
+    )
     app.config['MAX_HISTORY'] = int(os.getenv('MAX_HISTORY', '50'))
 
     logger.info("🔧 Configuring Ollama Dashboard in %s mode", config_name)

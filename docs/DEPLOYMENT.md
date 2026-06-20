@@ -58,8 +58,8 @@ powershell -File scripts\dashboard-process.ps1 -Action status
 
 The PowerShell monitor script (`scripts/ollama-dashboard-monitor.ps1`) can auto-start the dashboard when Ollama is detected and stop it when Ollama shuts down.
 
-> `start_proxy_takeover.bat` is a related but separate script: it runs the *optional*
-> settings-injecting companion proxy (`server_with_proxy.js`) in "port takeover" mode — not
+> `scripts/start_proxy_takeover.bat` is a related but separate script: it runs the *optional*
+> settings-injecting companion proxy (`scripts/proxy/server_with_proxy.js`) in "port takeover" mode — not
 > the dashboard itself, and not required to use the dashboard. See the README's
 > [Per-Model Settings: scope and limitations](GUIDE.md#per-model-settings-scope-and-limitations)
 > for what it does and when you'd want it.

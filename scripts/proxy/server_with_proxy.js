@@ -20,13 +20,13 @@
 // for every request, but requires clients to point at this proxy's host:port instead
 // of Ollama's.
 //
-// Run with: node server_with_proxy.js
+// Run with: npm run proxy   (from repo root; see package.json)
 // Configure with env vars (mirroring the Flask app's config):
 //   OLLAMA_HOST           Ollama host (default: localhost). May itself be "host:port"
 //                         (the form Ollama's OWN OLLAMA_HOST takes) — an embedded
 //                         port wins over OLLAMA_PORT below; see resolveOllamaHostPort().
 //   OLLAMA_PORT           Ollama port (default: 11434)
-//   MODEL_SETTINGS_FILE   Path to model_settings.json (default: ./model_settings.json,
+//   MODEL_SETTINGS_FILE   Path to model_settings.json (default: data/model_settings.json,
 //                         same default the Flask app uses — point both at the same file)
 //   PROXY_PORT            Port this proxy listens on (default: 11435)
 //
@@ -65,10 +65,13 @@ function resolveOllamaHostPort(rawHost, rawPort) {
     return { host, port };
 }
 
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const PROXY_PORT = parseInt(process.env.PROXY_PORT || '11435', 10);
 const { host: OLLAMA_HOST, port: OLLAMA_PORT } = resolveOllamaHostPort(process.env.OLLAMA_HOST, process.env.OLLAMA_PORT || '11434');
 const OLLAMA_URL = `http://${OLLAMA_HOST}:${OLLAMA_PORT}`;
-const SETTINGS_FILE_PATH = path.resolve(process.env.MODEL_SETTINGS_FILE || path.join(__dirname, 'model_settings.json'));
+const SETTINGS_FILE_PATH = path.resolve(
+    process.env.MODEL_SETTINGS_FILE || path.join(PROJECT_ROOT, 'data', 'model_settings.json')
+);
 const OLLAMA_DEFAULT_PORT = 11434;
 const IS_PORT_TAKEOVER = PROXY_PORT === OLLAMA_DEFAULT_PORT;
 

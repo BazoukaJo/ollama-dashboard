@@ -254,7 +254,7 @@ running dashboard required. Note that `presence_penalty`, `frequency_penalty`, `
 and `penalize_newline` are **not** valid Modelfile `PARAMETER` directives, so they can't be
 baked in this way (they're silently omitted from the generated `Modelfile`).
 
-### Alternative: standalone proxy (`server_with_proxy.js`)
+### Alternative: standalone proxy (`scripts/proxy/server_with_proxy.js`)
 
 Runs as an independent Node process — useful if you want settings injection when the Flask
 dashboard isn't running, or for **port takeover** on `:11434`. Reads the **same**
@@ -286,7 +286,7 @@ configuration at all**:
    combined `host:port` form for this variable) in the environment that *launches Ollama*, then
    restart Ollama so it picks up the change and starts listening on `:11436` instead.
 2. **Run this proxy on the now-vacated `:11434`**, pointed at the relocated Ollama. On Windows,
-   `start_proxy_takeover.bat` does both for you — sets `PROXY_PORT=11434` and runs `npm run
+   `scripts\start_proxy_takeover.bat` does both for you — sets `PROXY_PORT=11434` and runs `npm run
    proxy`, with pre-flight checks and guidance printed to the console. Manually: `set
    PROXY_PORT=11434&& set OLLAMA_HOST=127.0.0.1:11436&& npm run proxy`.
 
@@ -311,8 +311,8 @@ OLLAMA_HOST=localhost              # Ollama hostname
 OLLAMA_PORT=11434                  # Ollama port
 AUTO_START_OLLAMA=true             # Start Ollama automatically if not already running
 
-HISTORY_FILE=history.json          # Model-list snapshot history (not chat sessions)
-MODEL_SETTINGS_FILE=model_settings.json
+HISTORY_FILE=data/history.json          # Model-list snapshot history (not chat sessions)
+MODEL_SETTINGS_FILE=data/model_settings.json
 MAX_HISTORY=50                     # Max model-list history entries
 
 LOG_LEVEL=INFO                     # Logging level
@@ -341,10 +341,10 @@ Create a `.env` file with your settings; defaults work out-of-the-box for local 
 
 | File | Purpose |
 |------|---------|
-| `history.json` | Rolling model-list snapshots (`MAX_HISTORY`, default 50) |
-| `chat_history.json` | Ask? chat sessions (max 100) |
-| `model_settings.json` | Per-model saved settings |
-| `system_stats_history.json` | Sparkline data for system metrics |
+| `data/history.json` | Rolling model-list snapshots (`MAX_HISTORY`, default 50) |
+| `data/chat_history.json` | Ask? chat sessions (max 100) |
+| `data/model_settings.json` | Per-model saved settings |
+| `data/system_stats_history.json` | Sparkline data for system metrics |
 
 ---
 

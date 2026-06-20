@@ -2,7 +2,7 @@
 
 ## Version 1.2.0
 
-![Ollama Dashboard — system metrics, running/available models with Start, Ask?, Info, Settings and Delete actions, per-model settings with Saved/Default badge](image.png)
+![Ollama Dashboard — system metrics, running/available models with Start, Ask?, Info, Settings and Delete actions, per-model settings with Saved/Default badge](docs/images/dashboard-hero.png)
 
 A simple web dashboard for **Ollama** — the tool that runs AI models on your computer. See your system usage, start and stop models, change settings, and download new models from one page.
 
@@ -12,7 +12,7 @@ A simple web dashboard for **Ollama** — the tool that runs AI models on your c
 
 - **Start, stop, and manage models** — running, available, and downloadable lists on one screen
 - **Watch your computer** — live CPU, RAM, GPU memory, and disk usage
-- **Save per-model settings** — temperature, context size, and more (stored in `model_settings.json`)
+- **Save per-model settings** — temperature, context size, and more (stored in `data/model_settings.json`)
 - **Control Ollama** — start, stop, or restart the Ollama service from the header
 - **Connect other apps** — use the built-in **API proxy** URL in the header so VS Code, Copilot, Continue, and similar tools use your saved settings (with parameter sanitization and output caps for IDE clients)
 - **MCP tools server** — connect Cursor or VS Code to `http://…/mcp` for dashboard tools (models, stats, proxy status); **Ask?** uses the same tools in agent mode on tool-capable models

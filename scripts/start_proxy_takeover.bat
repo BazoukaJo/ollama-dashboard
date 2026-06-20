@@ -1,5 +1,6 @@
 @echo off
 setlocal enabledelayedexpansion
+cd /d "%~dp0\.."
 echo ============================================================
 echo  Ollama Settings Proxy - PORT TAKEOVER MODE
 echo ============================================================
