@@ -107,6 +107,15 @@ def create_app(config_name='development'):
         template_folder='templates'
     )
 
+    from app.services.model_helpers import resolve_quantization_level  # pylint: disable=import-outside-toplevel
+
+    @app.template_filter('model_quantization_label')
+    def _model_quantization_label(model):
+        if not isinstance(model, dict):
+            return '—'
+        quant = resolve_quantization_level(model)
+        return quant if quant else '—'
+
     # Record exact startup time so get_component_health() can report accurate uptime
     app.config['START_TIME'] = datetime.now(timezone.utc)
 

@@ -12,6 +12,7 @@ from app.services.model_helpers import (
     _extract_context_length,
     format_context_length,
     format_running_model_entry,
+    merge_show_details_into_model,
     normalize_available_model_entry,
 )
 from app.services.model_settings_helpers import lookup_settings_entry
@@ -219,23 +220,22 @@ class OllamaServiceModels:
             return None
 
     def _enrich_model_from_show(self, model):
-        """Fetch /api/show for a model; return (name, context_length, capabilities_list).
-        Used to enrich available models with provider-authoritative context_length and capabilities.
-        """
+        """Fetch /api/show for a model; return (name, context_length, capabilities_list, details)."""
         name = model.get('name')
         if not name:
-            return name, None, None
+            return name, None, None, None
         try:
             info = self.get_detailed_model_info(name)
             if not info:
-                return name, None, None
+                return name, None, None, None
             ctx = _extract_context_length(info)
             caps_list = info.get('capabilities')
+            show_details = info.get('details') if isinstance(info.get('details'), dict) else None
             if isinstance(caps_list, list):
-                return name, ctx, caps_list
-            return name, ctx, None
+                return name, ctx, caps_list, show_details
+            return name, ctx, None, show_details
         except HTTP_SERVICE_ERRORS:
-            return name, None, None
+            return name, None, None, None
 
     def get_available_models(self, force_refresh=False):
         """Get list of available models from the Ollama server."""
@@ -270,6 +270,7 @@ class OllamaServiceModels:
             SHOW_CACHE_TTL = 300
             ctx_by_name = {}
             caps_by_name = {}
+            details_by_name = {}
             for m in normalized:
                 name = m.get('name')
                 if not name:
@@ -277,27 +278,36 @@ class OllamaServiceModels:
                 cached = self._get_cached(f"show:{name}", ttl_seconds=SHOW_CACHE_TTL)
                 if cached is not None and isinstance(cached, (list, tuple)) and len(cached) >= 2:
                     ctx, caps_list = cached[0], cached[1]
+                    show_details = cached[2] if len(cached) >= 3 else None
                     if ctx is not None:
                         ctx_by_name[name] = ctx
                     if caps_list is not None:
                         caps_by_name[name] = caps_list
+                    if show_details is not None:
+                        details_by_name[name] = show_details
             # Only call /api/show for models missing context or capabilities in cache
             need_enrich = [
                 m for m in normalized
-                if m.get('name') and (m['name'] not in ctx_by_name or m['name'] not in caps_by_name)
+                if m.get('name') and (
+                    m['name'] not in ctx_by_name
+                    or m['name'] not in caps_by_name
+                    or m['name'] not in details_by_name
+                )
             ]
             try:
                 with concurrent.futures.ThreadPoolExecutor(max_workers=min(3, len(need_enrich) or 1)) as ex:
                     futures = {ex.submit(self._enrich_model_from_show, m): m for m in need_enrich}
                     for future in concurrent.futures.as_completed(futures, timeout=15):
                         try:
-                            name, ctx, caps_list = future.result()
+                            name, ctx, caps_list, show_details = future.result()
                             if name and ctx is not None:
                                 ctx_by_name[name] = ctx
                             if name and caps_list is not None:
                                 caps_by_name[name] = caps_list
+                            if name and show_details is not None:
+                                details_by_name[name] = show_details
                             if name:
-                                self._set_cached(f"show:{name}", (ctx, caps_list))
+                                self._set_cached(f"show:{name}", (ctx, caps_list, show_details))
                         except HTTP_SERVICE_ERRORS:
                             pass
             except concurrent.futures.TimeoutError:
@@ -311,7 +321,9 @@ class OllamaServiceModels:
                     m['context_length'] = format_context_length(raw) or raw
                 if m.get('name') in caps_by_name:
                     m['capabilities'] = caps_by_name[m['name']]
-                    ensure_capability_flags(m)
+                if m.get('name') in details_by_name:
+                    merge_show_details_into_model(m, details_by_name[m['name']])
+                ensure_capability_flags(m)
 
             # Debug logging to help diagnose mismatches between Ollama and UI
             try:
@@ -404,7 +416,7 @@ class OllamaServiceModels:
                             dst_details[_fld] = src_details.get(_fld)
                     entry['details'] = dst_details
                     # Use capability flags from available list (enriched from /api/show)
-                    for key in ('has_reasoning', 'has_vision', 'has_tools'):
+                    for key in ('has_reasoning', 'has_vision', 'has_tools', 'has_moe'):
                         if key in src and isinstance(src[key], bool):
                             entry[key] = src[key]
                         elif key in src:

@@ -105,8 +105,15 @@ def test_visual_layout_model_cards_have_valid_spec_rows(page, server_process):
         spec_rows = card.locator(".spec-row")
         count = spec_rows.count()
         if count > 0:
-            assert count == 3, (
-                f"Model card {i} has {count} spec rows; expected 3 for loaded models"
+            card_class = card.get_attribute("class") or ""
+            if "model-card--derived" in card_class:
+                expected = 1
+            elif "model-card--running" in card_class:
+                expected = 3
+            else:
+                expected = 2
+            assert count == expected, (
+                f"Model card {i} has {count} spec rows; expected {expected}"
             )
 
 

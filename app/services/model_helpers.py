@@ -1,4 +1,6 @@
 """Model formatting helpers extracted from OllamaService."""
+import re
+
 from app.services.capabilities import ensure_capability_flags
 from app.services.model_settings_helpers import get_existing_model_settings_entry
 from app.services.service_errors import SERVICE_ERRORS
@@ -166,6 +168,54 @@ def attach_last_token_usage_to_model(service, model_dict):
         model_dict["context_tokens_used_display"] = disp
 
 
+_QUANT_TAG_RE = re.compile(
+    r'^(q\d+[_\-\w]*|f\d+[\w_\-]*|mxfp\d+|bf16|fp16|fp32)$',
+    re.IGNORECASE,
+)
+
+
+def resolve_quantization_level(model: dict):
+    """Best-effort quantization label for card display."""
+    if not isinstance(model, dict):
+        return None
+    details = model.get('details') or {}
+    for key in ('quantization_level', 'quantization'):
+        val = details.get(key)
+        if val is not None and str(val).strip() != '':
+            return str(val)
+    fmt = details.get('format')
+    if fmt is not None and str(fmt).strip().lower() not in ('', 'gguf'):
+        return str(fmt)
+    name = str(model.get('name') or '')
+    if ':' in name:
+        tag = name.rsplit(':', 1)[-1].strip()
+        if tag and _QUANT_TAG_RE.match(tag):
+            return tag.upper().replace('-', '_')
+    return None
+
+
+def merge_show_details_into_model(model: dict, show_details: dict) -> None:
+    """Fill missing /api/tags detail fields from /api/show."""
+    if not isinstance(model, dict) or not isinstance(show_details, dict):
+        return
+    details = model.get('details')
+    if not isinstance(details, dict):
+        details = {}
+        model['details'] = details
+    for key in (
+        'family', 'families', 'parameter_size', 'quantization_level',
+        'quantization', 'format', 'context_length',
+    ):
+        val = show_details.get(key)
+        if val is None or val == '':
+            continue
+        if not details.get(key):
+            details[key] = val
+    quant = resolve_quantization_level(model)
+    if quant and not details.get('quantization_level'):
+        details['quantization_level'] = quant
+
+
 def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflict=False):
     if not isinstance(entry, dict):
         return {'name': str(entry), 'has_vision': None, 'has_tools': None,
@@ -196,6 +246,11 @@ def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflic
         model.setdefault('has_tools', None)
         model.setdefault('has_reasoning', None)
         model.setdefault('has_moe', None)
+    quant = resolve_quantization_level(model)
+    if quant:
+        details = model.setdefault('details', {})
+        if isinstance(details, dict) and not details.get('quantization_level'):
+            details['quantization_level'] = quant
     # Request context and token usage are attached after the list is built (see routes/main.py)
     # to avoid recursion: attach_request_context -> get_model_settings_with_fallback ->
     # get_model_info_cached -> get_available_models -> normalize_available_model_entry.

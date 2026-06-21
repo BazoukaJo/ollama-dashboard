@@ -1122,6 +1122,8 @@ function getCapabilitiesHTML(model) {
   `;
 }
 
+window.getCapabilitiesHTML = getCapabilitiesHTML;
+
 /**
  * Build { has_reasoning, has_vision, has_tools } for the info modal using the same
  * rules as cards: prefer backend-normalized flags, else Ollama capabilities[] (see capabilities.py).
@@ -1507,51 +1509,6 @@ function updateRunningModelsDisplay(models) {
         : String(name);
 
     const hasCustom = modelHasCustomSettings(model);
-    const details = model?.details || {};
-    const family = details?.family || "Unknown";
-    const parameterSize =
-      details && details.parameter_size != null && details.parameter_size !== ""
-        ? details.parameter_size
-        : model?.parameter_size != null && model.parameter_size !== ""
-          ? model.parameter_size
-          : "Unknown";
-    const quantization = quantizationFromModel(model);
-    const formattedSize =
-      model?.formatted_size != null && model.formatted_size !== ""
-        ? model.formatted_size
-        : model?.size != null
-          ? String(model.size)
-          : "Unknown";
-
-    const size = typeof model?.size === "number" ? model.size : 0;
-    const sizeVram = typeof model?.size_vram === "number" ? model.size_vram : 0;
-    const formattedSizeVram =
-      model?.formatted_size_vram != null && model.formatted_size_vram !== ""
-        ? model.formatted_size_vram
-        : "0 B";
-
-    const contextMax =
-      (details &&
-      details.context_length != null &&
-      details.context_length !== ""
-        ? details.context_length
-        : null) ??
-      model?.context_length ??
-      "Unknown";
-    const contextLoaded =
-      model?.loaded_context_length != null && model.loaded_context_length !== ""
-        ? model.loaded_context_length
-        : (model?.context_length ?? "Unknown");
-
-    const maxCtxHtml = _escModelCard(contextMax);
-    const loadedCtxHtml = _escModelCard(contextLoaded);
-
-    const expires = model?.expires_at || {};
-    const expiresLabel = expires.relative || expires.local || "";
-
-    const gpuPercent =
-      size > 0 && sizeVram > 0 ? ((sizeVram / size) * 100).toFixed(1) : "0.0";
-
     const capabilityIcons = getCapabilitiesHTML(model);
 
     const cardIndex = index + 1;
@@ -1563,6 +1520,12 @@ function updateRunningModelsDisplay(models) {
         : `<div class="model-title">${safeNameText}</div>`;
 
     const settingsBtnInner = getSettingsButtonInnerHtml(hasCustom);
+
+    const specsHtml =
+      window.modelCards &&
+      typeof window.modelCards.buildSpecsRowsRunning === "function"
+        ? window.modelCards.buildSpecsRowsRunning(model, cardIndex)
+        : "";
 
     return `
       <div class="col">
@@ -1590,81 +1553,7 @@ function updateRunningModelsDisplay(models) {
             </div>
           </div>
           <div class="model-specs">
-            <div class="spec-row">
-              <div class="spec-item">
-                <div class="spec-icon">
-                  <i class="fas fa-cogs"></i>
-                </div>
-                <div class="spec-content">
-                  <div class="spec-label" data-dashboard-tooltip="Model family name from Ollama metadata (e.g. llama, mistral).">Family</div>
-                  <div class="spec-value">${
-                    typeof escapeHtml === "function"
-                      ? escapeHtml(String(family))
-                      : String(family)
-                  }</div>
-                </div>
-              </div>
-              <div class="spec-item">
-                <div class="spec-icon">
-                  <i class="fas fa-weight"></i>
-                </div>
-                <div class="spec-content">
-                  <div class="spec-label" data-dashboard-tooltip="Approximate parameter size or class (e.g. 7B) from metadata.">Parameters</div>
-                  <div class="spec-value">${
-                    typeof escapeHtml === "function"
-                      ? escapeHtml(String(parameterSize))
-                      : String(parameterSize)
-                  }</div>
-                  <div class="text-muted small">Quant: ${_escModelCard(quantization)}</div>
-                </div>
-              </div>
-            </div>
-            <div class="spec-row">
-              <div class="spec-item">
-                <div class="spec-icon">
-                  <i class="fas fa-hdd"></i>
-                </div>
-                <div class="spec-content">
-                  <div class="spec-label" data-dashboard-tooltip="On-disk size of this model’s files.">Size</div>
-                  <div class="spec-value text-nowrap model-size">${
-                    typeof escapeHtml === "function"
-                      ? escapeHtml(String(formattedSize))
-                      : String(formattedSize)
-                  }</div>
-                </div>
-              </div>
-              <div class="spec-item">
-                <div class="spec-icon">
-                  <i class="fas fa-microchip"></i>
-                </div>
-                <div class="spec-content">
-                  <div class="spec-label text-nowrap" data-dashboard-tooltip="While loaded: fraction of weights in GPU memory vs model size (from Ollama).">GPU Allocation</div>
-                  <div class="spec-value text-nowrap" id="model-gpu-${cardIndex}">
-                    ${gpuPercent}% (${formattedSizeVram})
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="spec-row">
-              <div class="spec-item">
-                <div class="spec-icon">
-                  <i class="fas fa-layer-group"></i>
-                </div>
-                <div class="spec-content">
-                  <div class="spec-label" data-dashboard-tooltip="Maximum context from model metadata (Ollama show / details).">Max context</div>
-                  <div class="spec-value text-nowrap" id="model-context-max-${cardIndex}">${maxCtxHtml}</div>
-                </div>
-              </div>
-              <div class="spec-item">
-                <div class="spec-icon">
-                  <i class="fas fa-expand-arrows-alt"></i>
-                </div>
-                <div class="spec-content">
-                  <div class="spec-label" data-dashboard-tooltip="Context window allocated for this running process (Ollama /api/ps).">Allocated</div>
-                  <div class="spec-value text-nowrap" id="model-context-loaded-${cardIndex}">${loadedCtxHtml}</div>
-                </div>
-              </div>
-            </div>
+            ${specsHtml}
           </div>
           <div class="model-actions model-actions--running">
             <button type="button" class="btn btn-primary" data-model-action="restart" onclick="restartModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Reload this model in memory (applies updated settings from disk).">
@@ -1673,21 +1562,16 @@ function updateRunningModelsDisplay(models) {
             <button type="button" class="btn btn-success" onclick="openAskModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Send a question to this running model (streams the response)." aria-label="Ask this model a question">
               <i class="fas fa-comment-dots"></i> <span class="model-action-btn-label">Ask?</span>
             </button>
-            <button type="button" class="btn btn-warning" data-model-action="stop" onclick="stopModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Unload from VRAM (ollama stop). Model files stay installed.">
-              <i class="fas fa-stop"></i> <span class="model-action-btn-label">Stop</span>
-            </button>
             <button class="btn btn-info" onclick="showModelInfo(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Open a modal with raw Ollama model details (JSON).">
               <i class="fas fa-info-circle"></i> <span class="model-action-btn-label">Info</span>
             </button>
             <button type="button" class="btn btn-secondary model-action-settings-btn" onclick="openModelSettingsModal(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Edit temperature, context, and other options stored for this dashboard." aria-label="${hasCustom ? "Settings (saved custom defaults)" : "Settings (using defaults)"}">
               ${settingsBtnInner}
             </button>
+            <button type="button" class="btn btn-warning" data-model-action="stop" onclick="stopModel(this.closest('.model-card').dataset.modelName)" data-dashboard-tooltip="Unload from VRAM (ollama stop). Model files stay installed.">
+              <i class="fas fa-stop"></i> <span class="model-action-btn-label">Stop</span>
+            </button>
           </div>
-          ${
-            expiresLabel
-              ? `<div class="model-expires text-muted small mt-1">${expiresLabel}</div>`
-              : ""
-          }
         </div>
       </div>
     `;
@@ -1712,23 +1596,6 @@ function buildAvailableModelCardHTML(model) {
     typeof escapeHtml === "function" ? escapeHtml(String(name)) : String(name);
   const hasCustom = modelHasCustomSettings(model);
   const details = model?.details || {};
-  const family =
-    details.family != null && details.family !== ""
-      ? String(details.family)
-      : "Unknown";
-  const parameterSize =
-    details.parameter_size != null && details.parameter_size !== ""
-      ? String(details.parameter_size)
-      : model?.parameter_size != null && model.parameter_size !== ""
-        ? String(model.parameter_size)
-        : "Unknown";
-  const quantization = quantizationFromModel(model);
-  const formattedSize =
-    model?.formatted_size != null && model.formatted_size !== ""
-      ? String(model.formatted_size)
-      : typeof model?.size === "number" && !Number.isNaN(model.size)
-        ? formatBytes(model.size)
-        : "Unknown";
   const ctxMax =
     model?.context_length ??
     (details.context_length != null ? details.context_length : null) ??
@@ -1746,7 +1613,11 @@ function buildAvailableModelCardHTML(model) {
 
   const settingsBtnInner = getSettingsButtonInnerHtml(hasCustom);
 
-  const contextInnerHtml = buildAvailableContextInnerHtml(model, contextStr);
+  const specsHtml =
+    window.modelCards &&
+    typeof window.modelCards.buildSpecsRowsAvailable === "function"
+      ? window.modelCards.buildSpecsRowsAvailable(model, contextStr)
+      : "";
   const visionDataAttr =
     model?.has_vision === true
       ? ' data-has-vision="true"'
@@ -1775,47 +1646,7 @@ function buildAvailableModelCardHTML(model) {
             </div>
           </div>
           <div class="model-specs">
-            <div class="spec-row">
-              <div class="spec-item">
-                <div class="spec-icon">
-                  <i class="fas fa-cogs"></i>
-                </div>
-                <div class="spec-content">
-                  <div class="spec-label" data-dashboard-tooltip="Model family from Ollama metadata.">Family</div>
-                  <div class="spec-value">${_escModelCard(family)}</div>
-                </div>
-              </div>
-              <div class="spec-item">
-                <div class="spec-icon">
-                  <i class="fas fa-weight"></i>
-                </div>
-                <div class="spec-content">
-                  <div class="spec-label" data-dashboard-tooltip="Parameter class from metadata (e.g. 7B).">Parameters</div>
-                  <div class="spec-value">${_escModelCard(parameterSize)}</div>
-                  <div class="text-muted small">Quant: ${_escModelCard(quantization)}</div>
-                </div>
-              </div>
-            </div>
-            <div class="spec-row">
-              <div class="spec-item">
-                <div class="spec-icon">
-                  <i class="fas fa-hdd"></i>
-                </div>
-                <div class="spec-content">
-                  <div class="spec-label" data-dashboard-tooltip="Disk space used by this model’s files.">Size</div>
-                  <div class="spec-value text-nowrap">${_escModelCard(formattedSize)}</div>
-                </div>
-              </div>
-              <div class="spec-item">
-                <div class="spec-icon">
-                  <i class="fas fa-align-left"></i>
-                </div>
-                <div class="spec-content">
-                  <div class="spec-label" data-dashboard-tooltip="Last tokens (dashboard generate/chat) · request num_ctx · max context from Ollama for this tag.">Context</div>
-                  <div class="spec-value spec-context-dual">${contextInnerHtml}</div>
-                </div>
-              </div>
-            </div>
+            ${specsHtml}
           </div>
           <div class="download-progress d-none">
             <div class="progress" style="height: 20px;">
@@ -1888,6 +1719,11 @@ function updateAvailableModelsDisplay(models) {
   }
 
   try {
+    const syncFn =
+      window.modelCards &&
+      typeof window.modelCards.syncModelCardFromModel === "function"
+        ? window.modelCards.syncModelCardFromModel
+        : null;
     currentCards.forEach((card) => {
       const name = (
         card.dataset && card.dataset.modelName
@@ -1899,28 +1735,8 @@ function updateAvailableModelsDisplay(models) {
         (m) => m.name && m.name.trim() === name,
       );
       if (!matching) return;
-      const caps = card.querySelectorAll(".capability-icon");
-      if (caps && caps.length >= 3) {
-        const [reasoningEl, visionEl, toolsEl] = caps;
-        for (const [el, val, label] of [
-          [reasoningEl, matching.has_reasoning, "Reasoning"],
-          [visionEl, matching.has_vision, "Image Processing"],
-          [toolsEl, matching.has_tools, "Tool Usage"],
-        ]) {
-          const state =
-            val === true ? "enabled" : val === false ? "disabled" : "unknown";
-          const title =
-            val === true
-              ? `${label}: Available`
-              : val === false
-                ? `${label}: Not available`
-                : `${label}: Unknown`;
-          el.classList.remove("enabled", "disabled", "unknown");
-          el.classList.add(state);
-          el.removeAttribute("title");
-          el.setAttribute("data-dashboard-tooltip", title);
-          el.dataset.dashboardTooltipMigrated = "1";
-        }
+      if (syncFn) {
+        syncFn(card, matching);
       }
       syncSettingsSavedIndicatorOnCard(card, matching);
     });

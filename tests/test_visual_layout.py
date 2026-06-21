@@ -80,7 +80,7 @@ class TestModelCardSpecRows:
         section = html[start:end]
         spec_rows = section.count('class="spec-row')
         assert spec_rows == 3, (
-            f"Running card should have 3 spec rows, found {spec_rows}"
+            f"Running card should have 3 spec rows (6 subsections), found {spec_rows}"
         )
 
 class TestModelCardHeaderLayout:
@@ -195,11 +195,9 @@ class TestDownloadableCardTemplate:
         return js_path.read_text(encoding="utf-8")
 
     def test_downloadable_template_has_two_spec_rows(self, model_cards_js):
-        """Downloadable card (no GPU) has 2 rows: Family+Params, Size+Context."""
-        spec_row_count = model_cards_js.count('class="spec-row')
-        assert spec_row_count >= 2, (
-            f"Downloadable card template should have 2 spec rows (Size+Context on same line), found {spec_row_count}"
-        )
+        """Downloadable card: 4 subsections in 2 rows (Family+Params, Quant+Size)."""
+        assert "buildSpecsRowsDownloadable" in model_cards_js
+        assert "buildSpecsRowsCore" in model_cards_js
 
     def test_downloadable_template_has_family_size_context(self, model_cards_js):
         assert "spec-label" in model_cards_js
@@ -224,7 +222,7 @@ class TestSectionSpacing:
         assert "section-title-text" in html
 
     def test_running_section_spec_row_count_per_card(self, client):
-        """Running card: three spec rows (Family+Params, Size+GPU, Max+Allocated)."""
+        """Running card: 6 subsections in 3 two-column rows."""
         _, html = _run_with_mocks(client, running=[{"name": "x", "details": {}}])
         run_start = html.find('id="runningModelsContainer"')
         assert run_start != -1
@@ -237,3 +235,5 @@ class TestSectionSpacing:
             f"Running card must have 3 spec rows, found {spec_row_count}"
         )
         assert "model-card--running" in snippet
+        assert "spec-context-dual" in snippet
+        assert "ctx-loaded" in snippet

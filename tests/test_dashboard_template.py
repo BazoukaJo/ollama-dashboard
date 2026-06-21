@@ -142,20 +142,24 @@ class TestModelCardStructure:
 
         assert re.search(r'class="spec-label"[^>]*>\s*Family', html)
         assert re.search(r'class="spec-label"[^>]*>\s*Parameters', html)
+        assert re.search(r'class="spec-label"[^>]*>\s*Quantization', html)
         assert re.search(r'class="spec-label"[^>]*>\s*Size', html)
         assert 'GPU Allocation' in html
-        assert re.search(r'class="spec-label"[^>]*>\s*Max context', html)
-        assert re.search(r'class="spec-label"[^>]*>\s*Allocated', html)
+        assert re.search(r'class="spec-label"[^>]*>\s*Context', html)
+        assert 'ctx-loaded' in html
+        assert 'spec-context-dual' in html
+        assert 'GPU Allocation' in html
+        assert re.search(r'class="spec-label"[^>]*>\s*Quantization', html)
         assert 'spec-row' in html
 
     @patch('app.routes.main.ollama_service.get_running_models')
     @patch('app.routes.main.ollama_service.get_available_models')
     @patch('app.routes.main.ollama_service.get_system_stats')
     @patch('app.routes.main.ollama_service.get_ollama_version')
-    def test_available_card_has_three_spec_rows(
+    def test_available_card_has_two_spec_rows(
         self, mock_version, mock_stats, mock_available, mock_running, client
     ):
-        """Available model cards have Family, Size, Context spec rows."""
+        """Available model cards: 4 subsections in 2 rows."""
         mock_running.return_value = []
         mock_available.return_value = [
             {'name': 'llama3.1:8b', 'size': 5000000000, 'details': {'family': 'llama'}}
@@ -167,8 +171,17 @@ class TestModelCardStructure:
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert re.search(r'class="spec-label"[^>]*>\s*Family', html)
-        assert re.search(r'class="spec-label"[^>]*>\s*Context', html)
+        avail_start = html.find('id="availableModelsContainer"')
+        assert avail_start != -1
+        avail_end = html.find('id="downloadableModelsSection"', avail_start)
+        if avail_end == -1:
+            avail_end = avail_start + 8000
+        snippet = html[avail_start:avail_end]
+        assert snippet.count('class="spec-row') == 2
+        assert re.search(r'class="spec-label"[^>]*>\s*Family', snippet)
+        assert re.search(r'class="spec-label"[^>]*>\s*Parameters', snippet)
+        assert re.search(r'class="spec-label"[^>]*>\s*Quantization', snippet)
+        assert re.search(r'class="spec-label"[^>]*>\s*Size', snippet)
 
 
 class TestSectionHeaders:

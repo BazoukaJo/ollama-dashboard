@@ -88,7 +88,7 @@ _VISION_FAMILY_INDICATORS = ['clip', 'projector', 'vision', 'multimodal', 'vl', 
 _MOE_PATTERNS = [
     r'mixtral', r'\d+x\d+b', r'\bmoe\b', r'-moe', r'\d+b-a\d+b',
     r'gpt-oss', r'deepseek-?v[23]', r'llama4', r'dbrx', r'jamba', r'qwen3-?moe',
-    r'granite.*moe', r'phi.*moe', r'grok',
+    r'qwen3\.?5', r'qwen35', r'granite.*moe', r'phi.*moe', r'grok',
 ]
 
 
@@ -234,7 +234,10 @@ def ensure_capability_flags(model: dict, prefer_heuristics_on_conflict: bool = F
     try:
         name = model.get('name', '')
         details = model.get('details', {}) or {}
-        families = details.get('families', []) or []
+        families = list(details.get('families', []) or [])
+        family_single = details.get('family')
+        if family_single and family_single not in families:
+            families.append(family_single)
         caps_list = model.get('capabilities') or details.get('capabilities')
 
         # 1. Ollama API capabilities (definitive only per-key when not None)

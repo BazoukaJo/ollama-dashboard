@@ -40,7 +40,7 @@
     ],
     "moe_families": [
       "mixtral", "gpt-oss", "deepseek-v2", "deepseek-v3", "llama4", "dbrx",
-      "jamba", "qwen3-moe", "granite3-moe", "phi3.5-moe", "olmoe"
+      "jamba", "qwen3-moe", "qwen35moe", "qwen3.5", "granite3-moe", "phi3.5-moe", "olmoe"
     ]
   },
   "sources": [

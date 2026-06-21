@@ -94,6 +94,232 @@ if (!window.getCapabilitiesHTML) {
     return `<div class="model-title"><span class="model-title-display"${titleAttr} aria-label="${esc(full)}">${inner}</span></div>`;
   }
 
+  function esc(value) {
+    return escapeHtml(value == null || value === "" ? String(value ?? "") : String(value));
+  }
+
+  function specItemPad() {
+    return (
+      '<div class="spec-item spec-item--pad" aria-hidden="true">' +
+      '<div class="spec-icon"><i class="fas fa-minus" aria-hidden="true"></i></div>' +
+      '<div class="spec-content"><div class="spec-label">&nbsp;</div><div class="spec-value">&nbsp;</div></div>' +
+      "</div>"
+    );
+  }
+
+  function specItem(options) {
+    const label = options.label || "";
+    const icon = options.icon || "fa-circle";
+    const tooltip = options.tooltip || "";
+    const valueHtml = options.valueHtml != null ? options.valueHtml : esc(options.value ?? "—");
+    const valueClass = options.valueClass || "";
+    const tip = tooltip ? ` data-dashboard-tooltip="${esc(tooltip)}"` : "";
+    const valCls = valueClass ? ` ${valueClass}` : "";
+    return (
+      `<div class="spec-item">` +
+      `<div class="spec-icon"><i class="fas ${icon}" aria-hidden="true"></i></div>` +
+      `<div class="spec-content">` +
+      `<div class="spec-label"${tip}>${esc(label)}</div>` +
+      `<div class="spec-value${valCls}">${valueHtml}</div>` +
+      `</div></div>`
+    );
+  }
+
+  function specRow(leftHtml, rightHtml) {
+    return `<div class="spec-row">${leftHtml}${rightHtml != null ? rightHtml : specItemPad()}</div>`;
+  }
+
+  function parameterSizeFromModel(model) {
+    const details = (model && model.details) || {};
+    const raw =
+      details.parameter_size ??
+      model?.parameter_size;
+    if (raw == null || raw === "") return "Unknown";
+    return String(raw);
+  }
+
+  function quantizationFromModel(model) {
+    const details = (model && model.details) || {};
+    const raw =
+      details.quantization_level ??
+      details.quantization ??
+      model?.quantization_level ??
+      model?.quantization;
+    if (raw != null && String(raw).trim() !== "") return String(raw);
+    const fmt = details.format;
+    if (fmt != null && String(fmt).trim() !== "" && String(fmt).toLowerCase() !== "gguf") {
+      return String(fmt);
+    }
+    const name = model?.name != null ? String(model.name) : "";
+    const colon = name.lastIndexOf(":");
+    if (colon > 0 && colon < name.length - 1) {
+      const tag = name.slice(colon + 1).trim();
+      if (/^(q\d+[_\-\w]*|f\d+[\w_\-]*|mxfp\d+|bf16|fp16|fp32)$/i.test(tag)) {
+        return tag.toUpperCase().replace(/-/g, "_");
+      }
+    }
+    return "—";
+  }
+
+  function formattedSizeFromModel(model) {
+    if (model?.formatted_size != null && model.formatted_size !== "") {
+      return String(model.formatted_size);
+    }
+    if (typeof model?.size === "number" && !Number.isNaN(model.size)) {
+      if (typeof window.formatBytes === "function") {
+        return window.formatBytes(model.size);
+      }
+      return String(model.size);
+    }
+    if (model?.size != null && model.size !== "") return String(model.size);
+    return "Unknown";
+  }
+
+  function buildSpecsRowsCore(model, sizeTooltip) {
+    const family = familyFromModel(model);
+    const parameterSize = parameterSizeFromModel(model);
+    const quantization = quantizationFromModel(model);
+    const size = formattedSizeFromModel(model);
+    return (
+      specRow(
+        specItem({
+          label: "Family",
+          icon: "fa-cogs",
+          tooltip: "Model family from Ollama metadata.",
+          value: family,
+        }),
+        specItem({
+          label: "Parameters",
+          icon: "fa-weight",
+          tooltip: "Parameter class from metadata (e.g. 7B).",
+          value: parameterSize,
+        }),
+      ) +
+      specRow(
+        specItem({
+          label: "Quantization",
+          icon: "fa-compress",
+          tooltip: "Quantization format from metadata (e.g. Q4_K_M).",
+          value: quantization,
+        }),
+        specItem({
+          label: "Size",
+          icon: "fa-hdd",
+          tooltip: sizeTooltip,
+          valueHtml: `<span class="text-nowrap">${esc(size)}</span>`,
+        }),
+      )
+    );
+  }
+
+  function buildSpecsRowsAvailable(model) {
+    return buildSpecsRowsCore(
+      model,
+      "Disk space used by this model’s files.",
+    );
+  }
+
+  function buildRunningContextDualInner(maxHtml, loadedHtml, cardIndex) {
+    return (
+      `<span class="ctx-max text-nowrap" id="model-context-max-${cardIndex}" data-dashboard-tooltip="Maximum context from model metadata (Ollama show / details).">${maxHtml}</span>` +
+      `<span class="ctx-sep text-muted" aria-hidden="true">·</span>` +
+      `<span class="ctx-loaded text-nowrap" id="model-context-loaded-${cardIndex}" data-dashboard-tooltip="Context window allocated for this running process (Ollama /api/ps).">${loadedHtml}</span>`
+    );
+  }
+
+  function buildSpecsRowsRunning(model, cardIndex) {
+    const size = typeof model?.size === "number" ? model.size : 0;
+    const sizeVram = typeof model?.size_vram === "number" ? model.size_vram : 0;
+    const gpuPercent =
+      size > 0 && sizeVram > 0 ? ((sizeVram / size) * 100).toFixed(1) : "0.0";
+    const formattedSizeVram =
+      model?.formatted_size_vram != null && model.formatted_size_vram !== ""
+        ? String(model.formatted_size_vram)
+        : "0 B";
+    const details = model?.details || {};
+    const contextMax =
+      (details.context_length != null && details.context_length !== ""
+        ? details.context_length
+        : null) ??
+      model?.context_length ??
+      "Unknown";
+    const contextLoaded =
+      model?.loaded_context_length != null && model.loaded_context_length !== ""
+        ? model.loaded_context_length
+        : (model?.context_length ?? "Unknown");
+
+    return (
+      buildSpecsRowsCore(
+        model,
+        "On-disk size of this model’s files.",
+      ) +
+      specRow(
+        specItem({
+          label: "GPU Allocation",
+          icon: "fa-microchip",
+          tooltip:
+            "While loaded: fraction of weights in GPU memory vs model size (from Ollama).",
+          valueHtml: `<span class="text-nowrap model-size" id="model-gpu-${cardIndex}">${esc(gpuPercent)}% (${esc(formattedSizeVram)})</span>`,
+        }),
+        specItem({
+          label: "Context",
+          icon: "fa-align-left",
+          tooltip: "Maximum context from metadata · allocated for this running process.",
+          valueClass: "spec-context-dual",
+          valueHtml: buildRunningContextDualInner(
+            esc(contextMax),
+            esc(contextLoaded),
+            cardIndex,
+          ),
+        }),
+      )
+    );
+  }
+
+  function buildSpecsRowsDownloadable(model) {
+    return buildSpecsRowsCore(
+      model,
+      "Approximate download size from the library listing.",
+    );
+  }
+
+  function syncModelCardCapabilitiesFromModel(card, model) {
+    if (!card || !model) return;
+    const wrap = card.querySelector(".model-capabilities");
+    const htmlFn = window.getCapabilitiesHTML;
+    if (wrap && typeof htmlFn === "function") {
+      wrap.innerHTML = htmlFn(model);
+    }
+  }
+
+  function runningCardIndexFor(card) {
+    const container = card.closest("#runningModelsContainer");
+    if (!container) return 1;
+    const cards = [...container.querySelectorAll(".model-card--running")];
+    const idx = cards.indexOf(card);
+    return idx >= 0 ? idx + 1 : 1;
+  }
+
+  function syncModelCardSpecsFromModel(card, model) {
+    if (!card || !model) return;
+    const specs = card.querySelector(".model-specs");
+    if (!specs) return;
+    if (card.classList.contains("model-card--running")) {
+      specs.innerHTML = buildSpecsRowsRunning(model, runningCardIndexFor(card));
+      return;
+    }
+    if (card.classList.contains("model-card--downloadable")) {
+      specs.innerHTML = buildSpecsRowsDownloadable(model);
+      return;
+    }
+    specs.innerHTML = buildSpecsRowsAvailable(model);
+  }
+
+  function syncModelCardFromModel(card, model) {
+    syncModelCardCapabilitiesFromModel(card, model);
+    syncModelCardSpecsFromModel(card, model);
+  }
+
   /** Settings row: status pill always visible — saved (yellow) vs default/recommended (grey). */
   function modelActionSettingsButtonInner(hasCustomSettings) {
     const status = hasCustomSettings
@@ -103,15 +329,6 @@ if (!window.getCapabilitiesHTML) {
   }
 
   function buildDownloadableModelCardHTML(model) {
-    const family = familyFromModel(model);
-    const contextVal = contextFromModel(model);
-    const details = model.details || {};
-    const quantization =
-      details.quantization_level ||
-      details.quantization ||
-      model.quantization_level ||
-      model.quantization ||
-      "Unknown";
     return `
         <div class="col">
           <div class="model-card h-100 model-card--downloadable" data-model-name="${escapeHtml(model.name)}">
@@ -131,47 +348,7 @@ if (!window.getCapabilitiesHTML) {
                     </div>
                 </div>
                 <div class="model-specs">
-                  <div class="spec-row">
-                        <div class="spec-item">
-                            <div class="spec-icon">
-                                <i class="fas fa-cogs"></i>
-                            </div>
-                            <div class="spec-content">
-                                <div class="spec-label" data-dashboard-tooltip="Model family from Ollama metadata.">Family</div>
-                                <div class="spec-value">${escapeHtml(family)}</div>
-                            </div>
-                        </div>
-                        <div class="spec-item">
-                            <div class="spec-icon">
-                                <i class="fas fa-weight"></i>
-                            </div>
-                            <div class="spec-content">
-                                <div class="spec-label" data-dashboard-tooltip="Parameter class from metadata (e.g. 7B).">Parameters</div>
-                                <div class="spec-value">${model.parameter_size != null && model.parameter_size !== "" ? escapeHtml(String(model.parameter_size)) : "Unknown"}</div>
-                              <div class="text-muted small">Quant: ${escapeHtml(String(quantization))}</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="spec-row">
-                        <div class="spec-item">
-                            <div class="spec-icon">
-                                <i class="fas fa-hdd"></i>
-                            </div>
-                            <div class="spec-content">
-                                <div class="spec-label" data-dashboard-tooltip="Approximate download size from the library listing.">Size</div>
-                                <div class="spec-value">${model.size != null && model.size !== "" ? escapeHtml(String(model.size)) : "Unknown"}</div>
-                            </div>
-                        </div>
-                        <div class="spec-item">
-                            <div class="spec-icon">
-                                <i class="fas fa-align-left"></i>
-                            </div>
-                            <div class="spec-content">
-                                <div class="spec-label" data-dashboard-tooltip="Default or reported max context (tokens) for this tag.">Context</div>
-                                <div class="spec-value">${escapeHtml(contextVal)}</div>
-                            </div>
-                        </div>
-                    </div>
+                  ${buildSpecsRowsDownloadable(model)}
                 </div>
                 <div class="download-progress d-none">
                     <div class="progress" style="height: 20px;">
@@ -229,6 +406,13 @@ if (!window.getCapabilitiesHTML) {
   window.modelCards = window.modelCards || {};
   window.modelCards.buildDownloadableModelCardHTML =
     buildDownloadableModelCardHTML;
+  window.modelCards.buildSpecsRowsAvailable = buildSpecsRowsAvailable;
+  window.modelCards.buildSpecsRowsRunning = buildSpecsRowsRunning;
+  window.modelCards.buildSpecsRowsDownloadable = buildSpecsRowsDownloadable;
+  window.modelCards.syncModelCardFromModel = syncModelCardFromModel;
+  window.modelCards.syncModelCardCapabilitiesFromModel =
+    syncModelCardCapabilitiesFromModel;
+  window.modelCards.syncModelCardSpecsFromModel = syncModelCardSpecsFromModel;
   window.modelCards.modelTitleMarkup = modelTitleMarkup;
   window.modelCards.modelActionSettingsButtonInner =
     modelActionSettingsButtonInner;
