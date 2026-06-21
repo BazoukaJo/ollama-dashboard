@@ -11,14 +11,8 @@ if (!window.getCapabilitiesHTML) {
           : `${l}: Unknown`;
     const r = model?.has_reasoning,
       v = model?.has_vision,
-      t = model?.has_tools;
-    const moe =
-      model?.has_moe === true
-        ? `
-            <span class="capability-icon enabled" data-dashboard-tooltip="Mixture of Experts (MoE)">
-                <i class="fas fa-cubes"></i>
-            </span>`
-        : "";
+      t = model?.has_tools,
+      m = model?.has_moe;
     return `
             <span class="capability-icon ${capState(r)}" data-dashboard-tooltip="${capTitle(r, "Reasoning")}">
                 <i class="fas fa-brain"></i>
@@ -28,7 +22,10 @@ if (!window.getCapabilitiesHTML) {
             </span>
             <span class="capability-icon ${capState(t)}" data-dashboard-tooltip="${capTitle(t, "Tool Usage")}">
                 <i class="fas fa-tools"></i>
-            </span>${moe}
+            </span>
+            <span class="capability-icon ${capState(m)}" data-dashboard-tooltip="${capTitle(m, "Mixture of Experts (MoE)")}">
+                <i class="fas fa-cubes"></i>
+            </span>
         `;
   };
 }
@@ -48,11 +45,36 @@ if (!window.getCapabilitiesHTML) {
     return colon > 0 ? name.slice(0, colon).trim() : name.trim() || "Unknown";
   }
 
+  function formatContextLength(ctx) {
+    if (ctx == null || ctx === "") return "—";
+    if (typeof ctx === "string") {
+      const s = ctx.trim();
+      if (!s) return "—";
+      const matched = /^(\d+)([kmb])$/i.exec(s);
+      if (matched) return `${matched[1]}${matched[2].toUpperCase()}`;
+      const digits = s.replace(/,/g, "");
+      if (/^\d+$/.test(digits)) return formatContextLength(Number(digits));
+      return s;
+    }
+    const n = Number(ctx);
+    if (!Number.isFinite(n) || n <= 0) return String(ctx);
+    if (n >= 1_000_000) return `${Math.floor(n / 1_000_000)}M`;
+    if (n >= 1000) return `${Math.floor(n / 1000)}K`;
+    return String(n);
+  }
+
+  function contextMaxFromModel(model) {
+    const details = (model && model.details) || {};
+    const raw =
+      model?.context_length != null && model.context_length !== ""
+        ? model.context_length
+        : details.context_length;
+    const formatted = formatContextLength(raw);
+    return formatted === "—" ? "Unknown" : formatted;
+  }
+
   function contextFromModel(model) {
-    const val =
-      model.context_length ?? (model.details && model.details.context_length);
-    if (val != null && val !== "") return String(val);
-    return "—";
+    return contextMaxFromModel(model);
   }
 
   /**
@@ -212,18 +234,72 @@ if (!window.getCapabilitiesHTML) {
     );
   }
 
-  function buildSpecsRowsAvailable(model) {
-    return buildSpecsRowsCore(
-      model,
-      "Disk space used by this model’s files.",
+  function buildContextDualInner(maxHtml, secondaryHtml, secondaryKind, ids) {
+    const tooltips = {
+      loaded:
+        "Context window allocated for this running process (Ollama /api/ps).",
+      request:
+        "Context (num_ctx) the dashboard sends with generate/chat for this model.",
+    };
+    const secClass =
+      secondaryKind === "loaded"
+        ? "ctx-loaded ctx-secondary"
+        : "ctx-request ctx-secondary";
+    const maxId = ids && ids.maxId ? ` id="${esc(ids.maxId)}"` : "";
+    const secId = ids && ids.secondaryId ? ` id="${esc(ids.secondaryId)}"` : "";
+    const secTip = tooltips[secondaryKind] || tooltips.request;
+    return (
+      `<span class="ctx-max text-nowrap"${maxId} data-dashboard-tooltip="Maximum context from model metadata (Ollama show / details).">${maxHtml}</span>` +
+      `<span class="ctx-sep text-muted" aria-hidden="true">·</span>` +
+      `<span class="${secClass} text-nowrap"${secId} data-dashboard-tooltip="${esc(secTip)}">${secondaryHtml}</span>`
     );
   }
 
-  function buildRunningContextDualInner(maxHtml, loadedHtml, cardIndex) {
+  function buildSpecsRowsAvailable(model) {
+    const family = familyFromModel(model);
+    const parameterSize = parameterSizeFromModel(model);
+    const size = formattedSizeFromModel(model);
+    const contextMax = contextMaxFromModel(model);
+    const contextReq =
+      model?.request_context_length != null && model.request_context_length !== ""
+        ? formatContextLength(model.request_context_length)
+        : "—";
+
     return (
-      `<span class="ctx-max text-nowrap" id="model-context-max-${cardIndex}" data-dashboard-tooltip="Maximum context from model metadata (Ollama show / details).">${maxHtml}</span>` +
-      `<span class="ctx-sep text-muted" aria-hidden="true">·</span>` +
-      `<span class="ctx-loaded text-nowrap" id="model-context-loaded-${cardIndex}" data-dashboard-tooltip="Context window allocated for this running process (Ollama /api/ps).">${loadedHtml}</span>`
+      specRow(
+        specItem({
+          label: "Family",
+          icon: "fa-cogs",
+          tooltip: "Model family from Ollama metadata.",
+          value: family,
+        }),
+        specItem({
+          label: "Parameters",
+          icon: "fa-weight",
+          tooltip: "Parameter class from metadata (e.g. 7B).",
+          value: parameterSize,
+        }),
+      ) +
+      specRow(
+        specItem({
+          label: "Context",
+          icon: "fa-align-left",
+          tooltip:
+            "Maximum context from metadata · context (num_ctx) the dashboard sends with requests.",
+          valueClass: "spec-context-dual",
+          valueHtml: buildContextDualInner(
+            esc(contextMax),
+            esc(contextReq),
+            "request",
+          ),
+        }),
+        specItem({
+          label: "Size",
+          icon: "fa-hdd",
+          tooltip: "Disk space used by this model’s files.",
+          valueHtml: `<span class="text-nowrap">${esc(size)}</span>`,
+        }),
+      )
     );
   }
 
@@ -236,17 +312,11 @@ if (!window.getCapabilitiesHTML) {
       model?.formatted_size_vram != null && model.formatted_size_vram !== ""
         ? String(model.formatted_size_vram)
         : "0 B";
-    const details = model?.details || {};
-    const contextMax =
-      (details.context_length != null && details.context_length !== ""
-        ? details.context_length
-        : null) ??
-      model?.context_length ??
-      "Unknown";
+    const contextMax = contextMaxFromModel(model);
     const contextLoaded =
       model?.loaded_context_length != null && model.loaded_context_length !== ""
-        ? model.loaded_context_length
-        : (model?.context_length ?? "Unknown");
+        ? formatContextLength(model.loaded_context_length)
+        : contextMax;
 
     return (
       buildSpecsRowsCore(
@@ -266,10 +336,14 @@ if (!window.getCapabilitiesHTML) {
           icon: "fa-align-left",
           tooltip: "Maximum context from metadata · allocated for this running process.",
           valueClass: "spec-context-dual",
-          valueHtml: buildRunningContextDualInner(
+          valueHtml: buildContextDualInner(
             esc(contextMax),
             esc(contextLoaded),
-            cardIndex,
+            "loaded",
+            {
+              maxId: `model-context-max-${cardIndex}`,
+              secondaryId: `model-context-loaded-${cardIndex}`,
+            },
           ),
         }),
       )
@@ -404,6 +478,8 @@ if (!window.getCapabilitiesHTML) {
   }
 
   window.modelCards = window.modelCards || {};
+  window.modelCards.formatContextLength = formatContextLength;
+  window.modelCards.contextMaxFromModel = contextMaxFromModel;
   window.modelCards.buildDownloadableModelCardHTML =
     buildDownloadableModelCardHTML;
   window.modelCards.buildSpecsRowsAvailable = buildSpecsRowsAvailable;

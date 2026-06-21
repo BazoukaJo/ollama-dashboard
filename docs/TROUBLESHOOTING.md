@@ -400,6 +400,8 @@ See also [GUIDE.md — VS Code Copilot](GUIDE.md#vs-code-copilot-ollama).
 | Symptom | What to do |
 |---------|------------|
 | `start.bat` says already running | Expected — use `stop_app.bat` or `restart_app.bat` |
+| Release started but no window | Expected — release runs in the background. Check status with `scripts\dashboard-process.ps1 -Action status` or open http://127.0.0.1:5000. Logs: `data\dashboard-release-launch.log`, `data\dashboard-release-error.log` |
+| Release start failed silently | Run `start.bat console` for a visible launcher, or read `data\dashboard-release-launch.log` |
 | `stop_app.bat` refuses to stop | Another app (not this dashboard) owns port 5000 — check Task Manager or `netstat -aon \| findstr :5000` |
 | Wrong mode after restart | Use `restart_app.bat dev` or `restart_app.bat release` to force the mode |
 | Stale dev + release both running | Run `stop_app.bat` once; scripts kill all dashboard processes for this repo |
@@ -419,7 +421,9 @@ See [GUIDE.md — Windows: start, stop, and restart](GUIDE.md#windows-start-stop
 
 ## Logging
 
-Set `LOG_LEVEL` to `DEBUG`, `INFO`, `WARNING`, or `ERROR` (default `INFO`) before starting the app to tune console verbosity.
+Set `LOG_LEVEL` to `DEBUG`, `INFO`, `WARNING`, or `ERROR` (default `INFO`) before starting the app to tune server verbosity.
+
+**Release mode (Windows):** Waitress runs without a console. Check `data\dashboard-release-launch.log` (startup) and `data\dashboard-release-error.log` (server output). Development mode logs to the open terminal instead.
 
 ## Ollama version
 

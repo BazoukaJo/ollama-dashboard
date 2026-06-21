@@ -753,6 +753,12 @@ html.light .capability-filters .filter-btn.active[data-capability="tools"] {
   color: hsl(32, 82%, 28%) !important;
 }
 
+html.light .capability-filters .filter-btn.active[data-capability="moe"] {
+  background: hsl(160, 45%, 92%) !important;
+  border-color: hsl(160, 38%, 68%) !important;
+  color: hsl(160, 55%, 26%) !important;
+}
+
 html.light .capability-icon.enabled {
   color: hsl(152, 58%, 30%);
   background: hsl(142, 45%, 93%);
@@ -866,7 +872,8 @@ html.dark .capability-filters .filter-btn.active {
 
 html.dark .capability-filters .filter-btn.active[data-capability="reasoning"],
 html.dark .capability-filters .filter-btn.active[data-capability="vision"],
-html.dark .capability-filters .filter-btn.active[data-capability="tools"] {
+html.dark .capability-filters .filter-btn.active[data-capability="tools"],
+html.dark .capability-filters .filter-btn.active[data-capability="moe"] {
   background: rgba(255, 255, 255, 0.08) !important;
   border-color: rgba(255, 255, 255, 0.22) !important;
   color: var(--text-secondary) !important;

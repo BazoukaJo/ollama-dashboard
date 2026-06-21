@@ -1018,6 +1018,62 @@ function afterModelCardsRendered() {
   ) {
     modelCardActions.enhanceAllModelCards();
   }
+  ensureCapabilityFilterButtons();
+}
+
+const CAPABILITY_FILTER_SPECS = {
+  reasoning: {
+    tooltip: "Show only models with reasoning / thinking support.",
+    title: "Filter reasoning models",
+    label: "Filter reasoning models",
+    icon: "fa-brain",
+  },
+  vision: {
+    tooltip: "Show only models with image / vision support.",
+    title: "Filter vision models",
+    label: "Filter vision models",
+    icon: "fa-image",
+  },
+  tools: {
+    tooltip: "Show only models with tool or function-calling support.",
+    title: "Filter tool-enabled models",
+    label: "Filter tool-enabled models",
+    icon: "fa-tools",
+  },
+  moe: {
+    tooltip: "Show only Mixture of Experts (MoE) models.",
+    title: "Filter MoE models",
+    label: "Filter MoE models",
+    icon: "fa-cubes",
+  },
+};
+
+function ensureCapabilityFilterButtons() {
+  document.querySelectorAll(".capability-filters").forEach((bar) => {
+    Object.entries(CAPABILITY_FILTER_SPECS).forEach(([capability, meta]) => {
+      if (bar.querySelector(`.filter-btn[data-capability="${capability}"]`)) {
+        return;
+      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn-sm btn-outline-secondary filter-btn";
+      btn.dataset.capability = capability;
+      btn.setAttribute("data-dashboard-tooltip", meta.tooltip);
+      btn.title = meta.title;
+      btn.setAttribute("aria-label", meta.label);
+      btn.setAttribute("aria-pressed", "false");
+      btn.addEventListener("click", () => toggleCapabilityFilter(capability));
+      btn.innerHTML = `<i class="fas ${meta.icon}"></i>`;
+      const activePeer = document.querySelector(
+        `.filter-btn[data-capability="${capability}"].active`,
+      );
+      if (activePeer) {
+        btn.classList.add("active");
+        btn.setAttribute("aria-pressed", "true");
+      }
+      bar.appendChild(btn);
+    });
+  });
 }
 
 function copyErrorToClipboard(button) {
@@ -1100,15 +1156,7 @@ function getCapabilitiesHTML(model) {
   const r = model?.has_reasoning;
   const v = model?.has_vision;
   const t = model?.has_tools;
-  // MoE icon is appended LAST and only when true, so existing caps[0..2] ordering
-  // (reasoning, vision, tools) used by live-update/capabilityFlagsFromCard stays valid.
-  const moe =
-    model?.has_moe === true
-      ? `
-    <span class="capability-icon enabled" data-dashboard-tooltip="Mixture of Experts (MoE)">
-      <i class="fas fa-cubes"></i>
-    </span>`
-      : "";
+  const m = model?.has_moe;
   return `
     <span class="capability-icon ${capState(r)}" data-dashboard-tooltip="${capTitle(r, "Reasoning")}">
       <i class="fas fa-brain"></i>
@@ -1118,7 +1166,10 @@ function getCapabilitiesHTML(model) {
     </span>
     <span class="capability-icon ${capState(t)}" data-dashboard-tooltip="${capTitle(t, "Tool Usage")}">
       <i class="fas fa-tools"></i>
-    </span>${moe}
+    </span>
+    <span class="capability-icon ${capState(m)}" data-dashboard-tooltip="${capTitle(m, "Mixture of Experts (MoE)")}">
+      <i class="fas fa-cubes"></i>
+    </span>
   `;
 }
 
@@ -1537,12 +1588,7 @@ function updateRunningModelsDisplay(models) {
             <div class="model-card-head-body">
               <div class="model-card-head-name-row">
                 ${titleBlock}
-                <div class="model-card-head-trail" aria-label="Model status and capabilities">
-                  <div class="model-meta">
-                    <span class="status-indicator running" data-dashboard-tooltip="Model weights are resident in memory; this card reflects the running process.">
-                      <i class="fas fa-circle"></i>Loaded
-                    </span>
-                  </div>
+                <div class="model-card-head-trail" aria-label="Model capabilities">
                   <div class="model-card-head-aside" aria-label="Model capabilities">
                     <div class="model-capabilities" aria-label="Model capabilities">
                       ${capabilityIcons}
@@ -1624,10 +1670,16 @@ function buildAvailableModelCardHTML(model) {
       : model?.has_vision === false
         ? ' data-has-vision="false"'
         : "";
+  const moeDataAttr =
+    model?.has_moe === true
+      ? ' data-has-moe="true"'
+      : model?.has_moe === false
+        ? ' data-has-moe="false"'
+        : "";
 
   return `
       <div class="col">
-        <div class="model-card h-100" data-model-name="${safeDataName}"${visionDataAttr}>
+        <div class="model-card h-100" data-model-name="${safeDataName}"${visionDataAttr}${moeDataAttr}>
           <div class="model-header model-card-head">
             <div class="model-icon-wrapper">
               <i class="fas fa-box model-icon-main"></i>
@@ -1989,6 +2041,8 @@ document.addEventListener("DOMContentLoaded", function () {
     localStorage.getItem(DOWNLOADABLE_SECTION_COLLAPSED_KEY) === "true";
   toggleDownloadableSection(savedDownloadableCollapsed);
 
+  ensureCapabilityFilterButtons();
+
   ["availableModelsContainer", "downloadableModelsContainer"].forEach((id) =>
     applyCapabilityFilters(id),
   );
@@ -2244,32 +2298,71 @@ function isDownloadActiveCard(card) {
 
 function capabilityFlagsFromCard(card) {
   const caps = card.querySelectorAll(".capability-icon");
+  let hasReasoning = false;
+  let hasVision = false;
+  let hasTools = false;
+  let reasoningKnown = false;
+  let visionKnown = false;
+  let toolsKnown = false;
+  let hasMoe = false;
+  let moeKnown = false;
+
   if (caps.length >= 3) {
-    return {
-      hasReasoning: caps[0].classList.contains("enabled"),
-      hasVision: caps[1].classList.contains("enabled"),
-      hasTools: caps[2].classList.contains("enabled"),
-      reasoningKnown:
-        caps[0].classList.contains("enabled") ||
-        caps[0].classList.contains("disabled"),
-      visionKnown:
-        caps[1].classList.contains("enabled") ||
-        caps[1].classList.contains("disabled"),
-      toolsKnown:
-        caps[2].classList.contains("enabled") ||
-        caps[2].classList.contains("disabled"),
-    };
+    const [reasoningEl, visionEl, toolsEl] = caps;
+    hasReasoning = reasoningEl.classList.contains("enabled");
+    hasVision = visionEl.classList.contains("enabled");
+    hasTools = toolsEl.classList.contains("enabled");
+    reasoningKnown =
+      reasoningEl.classList.contains("enabled") ||
+      reasoningEl.classList.contains("disabled");
+    visionKnown =
+      visionEl.classList.contains("enabled") ||
+      visionEl.classList.contains("disabled");
+    toolsKnown =
+      toolsEl.classList.contains("enabled") ||
+      toolsEl.classList.contains("disabled");
+  } else {
+    const reasoning = card.dataset.hasReasoning;
+    const vision = card.dataset.hasVision;
+    const tools = card.dataset.hasTools;
+    hasReasoning = reasoning === "true";
+    hasVision = vision === "true";
+    hasTools = tools === "true";
+    reasoningKnown = reasoning === "true" || reasoning === "false";
+    visionKnown = vision === "true" || vision === "false";
+    toolsKnown = tools === "true" || tools === "false";
   }
-  const reasoning = card.dataset.hasReasoning;
-  const vision = card.dataset.hasVision;
-  const tools = card.dataset.hasTools;
+
+  if (caps.length >= 4) {
+    const moeEl = caps[3];
+    hasMoe = moeEl.classList.contains("enabled");
+    moeKnown =
+      moeEl.classList.contains("enabled") ||
+      moeEl.classList.contains("disabled");
+  } else {
+    caps.forEach((el) => {
+      if (el.querySelector(".fa-cubes")) {
+        hasMoe = el.classList.contains("enabled");
+        moeKnown =
+          el.classList.contains("enabled") ||
+          el.classList.contains("disabled");
+      }
+    });
+  }
+  if (!moeKnown && card.dataset.hasMoe !== undefined) {
+    hasMoe = card.dataset.hasMoe === "true";
+    moeKnown = card.dataset.hasMoe === "true" || card.dataset.hasMoe === "false";
+  }
+
   return {
-    hasReasoning: reasoning === "true",
-    hasVision: vision === "true",
-    hasTools: tools === "true",
-    reasoningKnown: reasoning === "true" || reasoning === "false",
-    visionKnown: vision === "true" || vision === "false",
-    toolsKnown: tools === "true" || tools === "false",
+    hasReasoning,
+    hasVision,
+    hasTools,
+    hasMoe,
+    reasoningKnown,
+    visionKnown,
+    toolsKnown,
+    moeKnown,
   };
 }
 
@@ -2285,6 +2378,7 @@ function filterButtonsForContainer(containerId) {
     reasoning: bar.querySelector('.filter-btn[data-capability="reasoning"]'),
     vision: bar.querySelector('.filter-btn[data-capability="vision"]'),
     tools: bar.querySelector('.filter-btn[data-capability="tools"]'),
+    moe: bar.querySelector('.filter-btn[data-capability="moe"]'),
   };
 }
 
@@ -2333,11 +2427,13 @@ function applyCapabilityFilters(containerId) {
     buttons?.vision?.classList.contains("active") ?? false;
   const toolsRequired =
     buttons?.tools?.classList.contains("active") ?? false;
+  const moeRequired =
+    buttons?.moe?.classList.contains("active") ?? false;
 
   const cards = container.querySelectorAll(".model-card");
 
   // No active filters → show every card.
-  if (!reasoningRequired && !visionRequired && !toolsRequired) {
+  if (!reasoningRequired && !visionRequired && !toolsRequired && !moeRequired) {
     cards.forEach((card) => setModelCardVisible(card, true));
     if (containerId === "availableModelsContainer") {
       syncModelSectionCount("availableModelsContainer", "availableModelsCount");
@@ -2361,6 +2457,9 @@ function applyCapabilityFilters(containerId) {
     }
     if (toolsRequired) {
       if (flags.toolsKnown && !flags.hasTools) matches = false;
+    }
+    if (moeRequired) {
+      if (flags.moeKnown && !flags.hasMoe) matches = false;
     }
     setModelCardVisible(card, matches);
   });

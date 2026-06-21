@@ -14,6 +14,7 @@ from app.services.model_helpers import (
     format_running_model_entry,
     merge_show_details_into_model,
     normalize_available_model_entry,
+    normalize_context_display_fields,
 )
 from app.services.model_settings_helpers import lookup_settings_entry
 from app.services.service_errors import HTTP_SERVICE_ERRORS
@@ -324,6 +325,7 @@ class OllamaServiceModels:
                 if m.get('name') in details_by_name:
                     merge_show_details_into_model(m, details_by_name[m['name']])
                 ensure_capability_flags(m)
+                normalize_context_display_fields(m)
 
             # Debug logging to help diagnose mismatches between Ollama and UI
             try:
@@ -404,9 +406,13 @@ class OllamaServiceModels:
                     if 'parameter_size' not in dst_details and 'parameter_size' in src_details:
                         dst_details['parameter_size'] = src_details.get('parameter_size')
                     if 'context_length' not in dst_details and src.get('context_length') is not None:
-                        dst_details['context_length'] = src.get('context_length')
+                        dst_details['context_length'] = format_context_length(
+                            src.get('context_length')
+                        ) or src.get('context_length')
                     if entry.get('context_length') is None and src.get('context_length') is not None:
-                        entry['context_length'] = src.get('context_length')
+                        entry['context_length'] = format_context_length(
+                            src.get('context_length')
+                        ) or src.get('context_length')
                     for _fld in (
                         'quantization_level',
                         'format',
@@ -421,6 +427,7 @@ class OllamaServiceModels:
                             entry[key] = src[key]
                         elif key in src:
                             entry[key] = src[key]  # allow None for "unknown"
+                    normalize_context_display_fields(entry)
             except HTTP_SERVICE_ERRORS:
                 # Metadata enrichment is best-effort only
                 pass

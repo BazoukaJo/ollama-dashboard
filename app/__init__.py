@@ -107,7 +107,19 @@ def create_app(config_name='development'):
         template_folder='templates'
     )
 
-    from app.services.model_helpers import resolve_quantization_level  # pylint: disable=import-outside-toplevel
+    from app.services.model_helpers import (  # pylint: disable=import-outside-toplevel
+        format_context_length,
+        resolve_quantization_level,
+    )
+
+    @app.template_filter('format_context_length')
+    def _format_context_length_filter(value):
+        if value is None:
+            return '—'
+        formatted = format_context_length(value)
+        if formatted is not None:
+            return formatted
+        return value if isinstance(value, str) and value.strip() else '—'
 
     @app.template_filter('model_quantization_label')
     def _model_quantization_label(model):

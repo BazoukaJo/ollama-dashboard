@@ -208,7 +208,7 @@ def test_moe_detection_true(name):
 
 @pytest.mark.parametrize('name', ['llama3.1:8b', 'qwen3:8b', 'gemma3:4b', 'deepseek-r1:8b'])
 def test_moe_detection_not_flagged_for_dense(name):
-    assert detect_capabilities(name, [])['has_moe'] in (None, False)
+    assert detect_capabilities(name, [])['has_moe'] is False
 
 
 def test_qwen3_vl_not_reasoning_after_changes():

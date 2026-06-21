@@ -188,6 +188,21 @@ def detect_capabilities(model_name: str, families) -> dict:
         if capabilities.get(key) is None and family_caps.get(key) is True:
             capabilities[key] = True
 
+    # Dense models with no MoE signal → grey (not supported), not yellow (unknown).
+    if capabilities.get('has_moe') is None and name_lower:
+        fam_list = []
+        if isinstance(families, list):
+            fam_list = [str(f).lower() for f in families]
+        elif isinstance(families, str):
+            fam_list = [families.lower()]
+        has_moe_hint = (
+            any(re.search(p, name_lower, re.IGNORECASE) for p in _MOE_PATTERNS)
+            or any('moe' in f for f in fam_list)
+            or family_caps.get('has_moe') is True
+        )
+        if not has_moe_hint:
+            capabilities['has_moe'] = False
+
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(f"Capabilities for '{model_name}': {capabilities}")
         logger.debug(f"Tokens: {tokens}; Families: {families}")

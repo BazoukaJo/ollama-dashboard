@@ -53,8 +53,13 @@ if /i "!RUNMODE!"=="dev" (
 	)
 ) ELSE (
 	echo [2/2] Starting release dashboard...
-	IF EXIST .venv\Scripts\activate.bat (
-		start "Ollama Dashboard" cmd /k pushd "%~dp0" ^&^& call start.bat
+	IF EXIST .venv\Scripts\waitress-serve.exe (
+		powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "%~dp0scripts\launch-release.ps1"
+		if errorlevel 1 (
+			echo Release start failed. Check data\dashboard-release.log
+			pause
+			exit /b 1
+		)
 	) ELSE (
 		echo Virtual environment not found! Please set up .venv first.
 		pause
@@ -63,6 +68,10 @@ if /i "!RUNMODE!"=="dev" (
 )
 
 echo.
-echo Dashboard is restarting in a new window.
+if /i "!RUNMODE!"=="dev" (
+	echo Dashboard is restarting in a new development window.
+) else (
+	echo Release dashboard is restarting in the background.
+)
 endlocal
 exit 0

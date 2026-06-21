@@ -2,7 +2,7 @@
 
 ## Version 1.2.0
 
-![Ollama Dashboard — system metrics, running/available models with Start, Ask?, Info, Settings and Delete actions, per-model settings with Saved/Default badge](docs/images/dashboard-hero.png)
+![Ollama Dashboard — system metrics, running model (lfm2.5) with Restart/Stop/Ask?, available and downloadable models with Start, Info, Settings, and Delete actions](docs/images/dashboard-hero.png)
 
 A simple web dashboard for **Ollama** — the tool that runs AI models on your computer. See your system usage, start and stop models, change settings, and download new models from one page.
 
@@ -18,6 +18,24 @@ A simple web dashboard for **Ollama** — the tool that runs AI models on your c
 - **MCP tools server** — connect Cursor or VS Code to `http://…/mcp` for dashboard tools (models, stats, proxy status); **Ask?** uses the same tools in agent mode on tool-capable models
 
 The dashboard works in **dark and light** themes and adapts to phone, tablet, and desktop screens.
+
+### Modals & overlays
+
+**Ask?** — chat with a loaded model (streaming), attach PDF/Word/code, agent mode with MCP tools, and history.
+
+![Ask? modal — agent mode, attachments, and streaming chat](docs/images/overlay-ask.png)
+
+**Settings** — per-model defaults (temperature, context, prompts, Copilot reasoning) saved for this dashboard and applied on load/start.
+
+![Settings modal — temperature, context, proxy prompts, and advanced options](docs/images/overlay-settings.png)
+
+**Info** — full Ollama metadata, capabilities, parameters, modelfile, and raw JSON.
+
+![Info modal — model metadata, capabilities, and modelfile](docs/images/overlay-info.png)
+
+**Connect** — verify the API proxy, copy the `/ollama` base URL, and set up MCP for Cursor or VS Code.
+
+![Connect modal — proxy checks, copy URL, and MCP setup examples](docs/images/overlay-connect.png)
 
 ---
 
@@ -58,8 +76,8 @@ steps and options.
 
 | Script | Purpose |
 |--------|---------|
-| `start.bat` | Release server (Waitress, production) |
-| `start_dev.bat` | Development server (Flask debug + auto-reload) |
+| `start.bat` | Release server (Waitress, production) — runs in the **background** with no staying terminal |
+| `start_dev.bat` | Development server (Flask debug + auto-reload) — opens a **visible** console |
 | `stop_app.bat` | Stop the dashboard instance on port 5000 |
 | `restart_app.bat` | Restart in the same mode (or `restart_app.bat dev` / `release`) |
 

@@ -6,12 +6,24 @@ from app.services.model_settings_helpers import get_existing_model_settings_entr
 from app.services.service_errors import SERVICE_ERRORS
 
 
+_FORMATTED_CTX_RE = re.compile(r'^(\d+)([KMB])$', re.IGNORECASE)
+
+
 def format_context_length(ctx):
     """Format context length from provider (number or string) for display (e.g. 128000 -> '128K')."""
     if ctx is None:
         return None
-    if isinstance(ctx, str) and ctx.strip():
-        return ctx.strip()
+    if isinstance(ctx, str):
+        s = ctx.strip()
+        if not s:
+            return None
+        matched = _FORMATTED_CTX_RE.match(s)
+        if matched:
+            return f"{matched.group(1)}{matched.group(2).upper()}"
+        digits = s.replace(',', '')
+        if digits.isdigit():
+            return format_context_length(int(digits))
+        return s
     try:
         n = int(ctx)
     except (TypeError, ValueError):
@@ -23,6 +35,22 @@ def format_context_length(ctx):
     if n >= 1000:
         return f"{n // 1000}K"
     return str(n)
+
+
+def normalize_context_display_fields(model: dict) -> None:
+    """Ensure card/API context fields use K/M labels instead of raw token counts."""
+    if not isinstance(model, dict):
+        return
+    for key in ('context_length', 'loaded_context_length', 'request_context_length'):
+        if model.get(key) is not None:
+            formatted = format_context_length(model[key])
+            if formatted is not None:
+                model[key] = formatted
+    details = model.get('details')
+    if isinstance(details, dict) and details.get('context_length') is not None:
+        formatted = format_context_length(details['context_length'])
+        if formatted is not None:
+            details['context_length'] = formatted
 
 
 def _raw_loaded_context_from_ps(model):
@@ -210,7 +238,12 @@ def merge_show_details_into_model(model: dict, show_details: dict) -> None:
         if val is None or val == '':
             continue
         if not details.get(key):
-            details[key] = val
+            if key == 'context_length':
+                formatted = format_context_length(val)
+                if formatted is not None:
+                    details[key] = formatted
+            else:
+                details[key] = val
     quant = resolve_quantization_level(model)
     if quant and not details.get('quantization_level'):
         details['quantization_level'] = quant
@@ -251,9 +284,7 @@ def normalize_available_model_entry(service, entry, prefer_heuristics_on_conflic
         details = model.setdefault('details', {})
         if isinstance(details, dict) and not details.get('quantization_level'):
             details['quantization_level'] = quant
-    # Request context and token usage are attached after the list is built (see routes/main.py)
-    # to avoid recursion: attach_request_context -> get_model_settings_with_fallback ->
-    # get_model_info_cached -> get_available_models -> normalize_available_model_entry.
+    normalize_context_display_fields(model)
     return model
 
 def _running_process_model_id(model):
@@ -325,6 +356,7 @@ def format_running_model_entry(service, model, include_has_custom_settings=False
                 entry['has_custom_settings'] = False
         attach_request_context_to_model(service, entry)
         attach_last_token_usage_to_model(service, entry)
+        normalize_context_display_fields(entry)
         return entry
     except SERVICE_ERRORS:
         return {'name': str(model), 'running': False, 'has_vision': None,

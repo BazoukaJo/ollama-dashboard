@@ -45,8 +45,8 @@ dashboard processes for this repo — not unrelated apps on port 5000.
 
 | Script | Purpose |
 |--------|---------|
-| `start.bat` | Start with Waitress (release, no debug). Skips if release/cli already running; stops dev first if needed |
-| `start_dev.bat` | Start with Flask dev server and debug reloader. Skips if dev already running; stops release/cli first if needed |
+| `start.bat` | Start with Waitress (release, no debug). **Background process** — no staying console window. Skips if release/cli already running; stops dev first if needed |
+| `start_dev.bat` | Start with Flask dev server and debug reloader. **Visible console** with live logs. Skips if dev already running; stops release/cli first if needed |
 | `stop_app.bat` | Stop the dashboard; shows status; waits for port 5000 to clear |
 | `restart_app.bat` | Stop then restart in the **running** mode (falls back to `data\dashboard.run-mode`). Override: `restart_app.bat dev` or `release` |
 
@@ -175,7 +175,7 @@ server {
 | Issue | Solution |
 |-------|----------|
 | Dashboard can't connect to Ollama | Check `OLLAMA_HOST` env var; ensure Ollama API is accessible |
-| `start.bat` window closes immediately | Run from an existing terminal to see errors; ensure `.venv` exists with `waitress` installed |
+| `start.bat` window closes immediately | **Expected** in release mode — Waitress runs hidden in the background. Check http://localhost:5000 or `scripts\dashboard-process.ps1 -Action status`. Logs: `data\dashboard-release-launch.log`, `data\dashboard-release-error.log`. For a visible launcher: `start.bat console` |
 | Settings changes not saving | Check file permissions; ensure disk space available |
 | Port 5000 already in use | Run `stop_app.bat`. If stop refuses, another app owns the port — see [Troubleshooting](TROUBLESHOOTING.md#dashboard-wont-start-or-stop-windows-port-5000) |
 | Started dev but wanted release (or vice versa) | `stop_app.bat` then `start.bat` or `start_dev.bat`; or `restart_app.bat release` / `dev` |

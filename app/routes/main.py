@@ -27,6 +27,7 @@ from app.services.ask_attachments import AttachmentError, prepare_chat_from_atta
 from app.services.model_helpers import (
     attach_last_token_usage_to_model,
     attach_request_context_to_model,
+    normalize_context_display_fields,
 )
 from app.services.model_settings_helpers import (
     compute_fresh_recommended_settings_entry,
@@ -154,10 +155,12 @@ def index():
             _m['has_custom_settings'] = svc.has_custom_model_settings(_m.get('name'))
             attach_request_context_to_model(svc, _m)
             attach_last_token_usage_to_model(svc, _m)
+            normalize_context_display_fields(_m)
         for _m in available_models or []:
             _m['has_custom_settings'] = svc.has_custom_model_settings(_m.get('name'))
             attach_request_context_to_model(svc, _m)
             attach_last_token_usage_to_model(svc, _m)
+            normalize_context_display_fields(_m)
         system_stats = svc.get_system_stats()
         _upd = run_startup_ollama_update_check(svc, refresh_installed_version=True)
         version = _upd.get('current_version') or 'Unknown'

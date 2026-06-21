@@ -96,6 +96,8 @@ class TestCapabilityFiltersVisibility:
 
         assert 'availableModelsFilters' in html
         assert 'capability-filters' in html
+        assert 'data-capability="moe"' in html
+        assert 'fa-cubes' in html
 
     @patch('app.routes.main.ollama_service.get_running_models')
     @patch('app.routes.main.ollama_service.get_available_models')
@@ -180,7 +182,10 @@ class TestModelCardStructure:
         assert snippet.count('class="spec-row') == 2
         assert re.search(r'class="spec-label"[^>]*>\s*Family', snippet)
         assert re.search(r'class="spec-label"[^>]*>\s*Parameters', snippet)
-        assert re.search(r'class="spec-label"[^>]*>\s*Quantization', snippet)
+        assert re.search(r'class="spec-label"[^>]*>\s*Context', snippet)
+        assert 'spec-context-dual' in snippet
+        assert 'ctx-max' in snippet
+        assert 'ctx-secondary' in snippet
         assert re.search(r'class="spec-label"[^>]*>\s*Size', snippet)
 
 

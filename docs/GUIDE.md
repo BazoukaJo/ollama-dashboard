@@ -401,8 +401,8 @@ path**, not just "whatever is on port 5000".
 
 | Script | Mode | Server |
 |--------|------|--------|
-| `start.bat` | **release** | Waitress (`wsgi:app`) |
-| `start_dev.bat` | **dev** | Flask debug reloader |
+| `start.bat` | **release** | Waitress (`wsgi:app`) — background, no staying terminal |
+| `start_dev.bat` | **dev** | Flask debug reloader — visible console |
 | `stop_app.bat` | — | Stops dashboard instance; refuses to kill foreign apps on port 5000 |
 | `restart_app.bat` | auto | Restarts in the **currently running** mode (or saved mode if stopped) |
 
@@ -422,6 +422,10 @@ restart_app.bat release    REM force restart in release mode
 - `start.bat` / `start_dev.bat` check port 5000 first. If the **same** mode is already
   running, they report it and exit. If the **other** mode is running, they stop it and start
   the requested mode.
+- **Release** (`start.bat`) starts Waitress as a hidden background process. Startup and server
+  logs go to `data\dashboard-release-launch.log` and `data\dashboard-release-error.log`. Use
+  `start.bat console` for a visible launcher when troubleshooting.
+- **Development** (`start_dev.bat`) keeps a console open with Flask debug output.
 - `restart_app.bat` detects the live process mode (`release`, `dev`, or `cli` from
   `ollama_dashboard_cli.py`) before choosing which start script to open.
 - `data\dashboard.run-mode` records the last started mode (`release` or `dev`) as a fallback

@@ -366,7 +366,7 @@ health = ollama_service.get_component_health()
 **Windows (production):**
 ```bash
 start.bat
-# Uses waitress-serve on port 5000
+# Waitress on port 5000 — background process, no staying console
 ```
 
 **Windows (development):**
