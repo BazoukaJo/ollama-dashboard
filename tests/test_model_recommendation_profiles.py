@@ -69,11 +69,15 @@ def test_match_profile_coding_before_general_qwen():
 
 def test_openai_error_sse_lines():
     from app.services.v1_native_bridge import openai_error_sse_lines
+    import json
+
     lines = list(openai_error_sse_lines('boom', status_code=503, model='m'))
-    assert len(lines) == 2
+    assert len(lines) == 3
     assert lines[0].startswith('data: ')
-    assert 'boom' in lines[0]
-    assert lines[1].strip() == 'data: [DONE]'
+    payload = json.loads(lines[0][5:].strip())
+    assert payload['choices'][0]['delta']['content'] == 'boom'
+    assert json.loads(lines[1][5:].strip())['choices'][0]['finish_reason'] == 'stop'
+    assert lines[2].strip() == 'data: [DONE]'
 
 
 def test_apply_all_skips_user_saved_models(tmp_path):

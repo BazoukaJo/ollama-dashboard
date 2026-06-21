@@ -743,16 +743,29 @@ def openai_error_sse_lines(
     *,
     status_code: int = 502,
     model: str = '',
+    completion_id: str | None = None,
 ) -> Iterator[str]:
-    """SSE error chunks for OpenAI-compatible streaming clients (Copilot, etc.)."""
-    payload: dict[str, Any] = {
-        'error': {
-            'message': message,
-            'type': 'upstream_error',
-            'code': status_code,
-        },
-    }
-    if model:
-        payload['model'] = model
-    yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+    """SSE error chunks for OpenAI-compatible streaming clients (Copilot, etc.).
+
+    VS Code Copilot rejects streams whose aggregate body has no ``choices`` array. Emit a
+    well-formed assistant message (plus ``finish_reason``) so the user sees the error text
+    instead of a generic "Response contained no choices" client failure.
+    """
+    cid = completion_id or _completion_id()
+    created = _created_ts()
+    model_name = model or 'unknown'
+    display = (message or 'Request failed').strip()
+    yield _openai_chat_chunk(
+        cid,
+        model_name,
+        {'role': 'assistant', 'content': display},
+        created=created,
+    )
+    yield _openai_chat_chunk(
+        cid,
+        model_name,
+        _openai_chat_finish_delta(),
+        finish_reason='stop',
+        created=created,
+    )
     yield 'data: [DONE]\n\n'

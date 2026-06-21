@@ -895,7 +895,7 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
             except _UpstreamStatusError as err:
                 tally.error = f'upstream_status_{err.status_code}'
                 for line in openai_error_sse_lines(
-                    err.text, status_code=err.status_code, model=model_name,
+                    err.text, status_code=err.status_code, model=model_name, completion_id=cid,
                 ):
                     yield line.encode('utf-8')
             except Exception as err:  # noqa: BLE001 — surface any mid-stream failure as SSE, not a hang.
@@ -904,7 +904,7 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
                     'Upstream /api/chat stream failed mid-flight (model=%s): %s', model_name, err,
                 )
                 for line in openai_error_sse_lines(
-                    _ollama_unreachable_text(err), model=model_name,
+                    _ollama_unreachable_text(err), model=model_name, completion_id=cid,
                 ):
                     yield line.encode('utf-8')
             finally:

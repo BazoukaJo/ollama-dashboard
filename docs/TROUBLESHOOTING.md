@@ -328,6 +328,29 @@ Symptoms:
 
 See [GUIDE.md — MCP tools server](GUIDE.md#mcp-tools-server-mcp).
 
+## VS Code Copilot: "Response contained no choices"
+
+Symptoms:
+
+- Copilot shows **Sorry, your request failed** with **Reason: Response contained no choices**
+- Often follows a long wait (model loading or a slow agent turn) on a large model
+
+**Cause:** The dashboard proxy aborted the upstream stream (usually a **504** first-token
+timeout after ~5 minutes of heartbeats while the model loads) and returned an SSE body without
+a well-formed ``choices`` array. VS Code Copilot requires ``choices`` even on errors.
+
+**Fix (dashboard v1.2+):** Error streams now include an assistant message with the real
+timeout text. **Restart the dashboard** after updating, then retry.
+
+**If it keeps happening:**
+
+1. **Pre-load the model** in the dashboard (**Start** on the model card) before using Copilot.
+2. Use a **smaller or faster** model for Agent mode, or lower **Context (num_ctx)** in Settings.
+3. Optionally raise the first-token cap (server-side):
+   `OLLAMA_PROXY_FIRST_TOKEN_TIMEOUT_SECONDS=600` before starting the dashboard.
+
+See also [VS Code Copilot: request timeout](#vs-code-copilot-request-timeout-or-model-wont-load).
+
 ## VS Code Copilot: request timeout or model won't load
 
 Symptoms:

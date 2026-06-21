@@ -441,7 +441,8 @@ def test_v1_chat_stream_upstream_error_returns_sse(tmp_path, monkeypatch):
     assert resp.status_code == 503
     assert 'text/event-stream' in (resp.headers.get('Content-Type') or '')
     assert resp.headers.get('Connection') is None
-    assert 'upstream_error' in body
+    assert 'model not found' in body
+    assert '"choices"' in body
 
 
 def test_v1_chat_stream_sse_omits_hop_by_hop_headers(tmp_path, monkeypatch):
