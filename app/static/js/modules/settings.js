@@ -233,7 +233,7 @@
       const data = sr.data;
       if(data.success) {
         window.showNotification(data.message,'success');
-        if (typeof updateModelData === 'function') void updateModelData();
+        if (typeof updateModelData === 'function') void updateModelData(true);
       }
       else window.showNotification(data.message || 'Failed to save settings','error');
     } catch(err){ window.showNotification('Failed to save settings: '+err.message,'error'); }
@@ -247,7 +247,7 @@
       const data = dr.data;
       if(data.success) {
         window.showNotification(data.message,'success');
-        if (typeof updateModelData === 'function') void updateModelData();
+        if (typeof updateModelData === 'function') void updateModelData(true);
       }
       else window.showNotification(data.message || 'Failed to delete settings','error');
     } catch(err){ window.showNotification('Failed to delete settings: '+err.message,'error'); }

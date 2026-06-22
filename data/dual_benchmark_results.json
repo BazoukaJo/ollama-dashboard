@@ -1,0 +1,19 @@
+{
+  "models": [
+    "gemma4:12b",
+    "qwen3.6:35b-fast",
+    "qwen3-vl:8b",
+    "gemma4:latest",
+    "lfm2.5:latest",
+    "qwen3.6:35b"
+  ],
+  "origin_url": "http://localhost:11434/api/generate",
+  "service_path": {
+    "models": [],
+    "advice": {}
+  },
+  "origin_path": {
+    "models": [],
+    "advice": {}
+  }
+}

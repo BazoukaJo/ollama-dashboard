@@ -209,7 +209,7 @@ class TestSectionHeaders:
         assert response.status_code == 200
         html = response.get_data(as_text=True)
 
-        assert 'Dashboard v' in html
+        assert 'dashboard-header-row-caption' in html and 'v1.' in html
         assert 'System Resources' in html
         assert 'Downloadable Models' in html
         assert 'section-title-text' in html

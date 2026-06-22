@@ -6,19 +6,24 @@ import time
 import pytest
 import requests
 
-# Skip this test if pytest-playwright is not installed
-pytest_plugins = []
 PLAYWRIGHT_AVAILABLE = importlib.util.find_spec("playwright") is not None
+PYTEST_PLAYWRIGHT = importlib.util.find_spec("pytest_playwright") is not None
 
-pytestmark = pytest.mark.skipif(not PLAYWRIGHT_AVAILABLE, reason="Playwright not installed")
+pytest_plugins = ["pytest_playwright"] if PYTEST_PLAYWRIGHT else []
+
+pytestmark = [
+    pytest.mark.playwright,
+    pytest.mark.skipif(
+        not (PLAYWRIGHT_AVAILABLE and PYTEST_PLAYWRIGHT),
+        reason="Playwright not installed (pip install pytest-playwright && playwright install chromium)",
+    ),
+]
 
 
 def _start_server():
-    # Start the Flask dev server in a subprocess using OllamaDashboard.py
     env = os.environ.copy()
     cmd = ["python", "OllamaDashboard.py"]
     proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    # Wait for server to be ready
     for _ in range(30):
         try:
             r = requests.get("http://127.0.0.1:5000/", timeout=5)
@@ -26,7 +31,6 @@ def _start_server():
                 return proc
         except (requests.RequestException, OSError):
             time.sleep(0.5)
-    # If we reach here, server did not start
     proc.kill()
     raise RuntimeError("Failed to start Flask server for tests")
 
@@ -35,7 +39,6 @@ def _start_server():
 def server_process():
     proc = _start_server()
     yield proc
-    # Teardown: kill process
     try:
         proc.terminate()
         proc.wait(timeout=3)
@@ -44,11 +47,11 @@ def server_process():
 
 
 def test_service_buttons(page, server_process):
-    # Mask network fetch to avoid actual service calls
-    page.add_init_script("window.fetch = (u,o) => Promise.resolve({ok:true,json:()=>Promise.resolve({success:true, message:'mock'})})")
+    page.add_init_script(
+        "window.fetch = (u,o) => Promise.resolve({ok:true,json:()=>Promise.resolve({success:true, message:'mock'})})"
+    )
 
     page.goto("http://127.0.0.1:5000/")
-    # Ensure start/stop/restart buttons exist
     start_btn = page.locator("#startServiceBtn")
     stop_btn = page.locator("#stopServiceBtn")
     restart_btn = page.locator("#restartServiceBtn")
@@ -56,11 +59,10 @@ def test_service_buttons(page, server_process):
     assert stop_btn.count() == 1
     assert restart_btn.count() == 1
 
-    # Click restart and wait for navigation (reload) to happen
     with page.expect_navigation(timeout=5000):
         restart_btn.click()
 
-    special = "playwright-test-\"'<>"
+    special = 'playwright-test-"\'<>'
     page.evaluate(
         """(name) => {
             const update = window.updateRunningModelsDisplay;
@@ -79,10 +81,8 @@ def test_service_buttons(page, server_process):
 
     card = page.locator("#runningModelsContainer .model-card", has_text=special)
     assert card.count() == 1
-    # Check capability classes - first 2 enabled, third disabled
     caps = card.locator('.capability-icon')
     assert caps.count() == 3
-    # class attribute includes 'enabled' or 'disabled'
     classes = caps.nth(0).get_attribute('class')
     assert 'enabled' in classes
     classes = caps.nth(1).get_attribute('class')
@@ -92,7 +92,6 @@ def test_service_buttons(page, server_process):
 
 
 def test_visual_layout_model_cards_have_valid_spec_rows(page, server_process):
-    """Visual regression: Running (loaded) cards use 3 spec rows."""
     page.goto("http://127.0.0.1:5000/")
     page.wait_for_load_state("networkidle")
 
@@ -118,15 +117,12 @@ def test_visual_layout_model_cards_have_valid_spec_rows(page, server_process):
 
 
 def test_visual_layout_section_containers_visible(page, server_process):
-    """Section containers and key layout elements must be present."""
     page.goto("http://127.0.0.1:5000/")
     page.wait_for_load_state("domcontentloaded")
 
     assert page.locator(".section-title-text").count() >= 1
     assert page.locator(".model-specs, .model-card").count() >= 0
-    # Spec row layout rule exists in DOM (from CSS)
     spec_rows = page.locator(".spec-row")
-    # If any spec-row exists, it should be visible (not display:none) when not in compact
     for i in range(min(3, spec_rows.count())):
         box = spec_rows.nth(i).bounding_box()
         if box:

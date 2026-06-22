@@ -3,11 +3,11 @@
   var _healthTimer = null;
   var HEALTH_INTERVAL = 15000;
 
-  // Stats: main.js updates every 1s. Only health is polled here (15s).
-
   function startPolling() {
     if (_pollActive) return;
     _pollActive = true;
+    if (typeof startModelPollTimer === "function") startModelPollTimer();
+    if (typeof startStatsPollTimer === "function") startStatsPollTimer();
     if (_healthTimer) clearInterval(_healthTimer);
     if (window.serviceControl && window.serviceControl.updateHealthStatus) {
       window.serviceControl.updateHealthStatus();
@@ -20,13 +20,18 @@
 
   function stopPolling() {
     _pollActive = false;
-    if (_healthTimer) { clearInterval(_healthTimer); _healthTimer = null; }
+    if (_healthTimer) {
+      clearInterval(_healthTimer);
+      _healthTimer = null;
+    }
+    if (typeof stopModelPollTimer === "function") stopModelPollTimer();
+    if (typeof stopStatsPollTimer === "function") stopStatsPollTimer();
   }
 
   function init() {
-    if (typeof updateTimes === "function") updateTimes();
+    startPolling();
     if (typeof loadDownloadableModels === "function") loadDownloadableModels();
-    if (typeof updateModelData === "function") updateModelData();
+    if (typeof updateModelData === "function") updateModelData(false);
     if (typeof resumeActiveDownloads === "function") resumeActiveDownloads();
     if (window.apiProxyUI && typeof window.apiProxyUI.init === "function") {
       window.apiProxyUI.init();
@@ -38,12 +43,11 @@
         }
       }, 0);
     }
-    startPolling();
   }
 
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") {
-      if (typeof updateModelData === "function") updateModelData();
+      if (typeof updateModelData === "function") updateModelData(true);
       startPolling();
     } else {
       stopPolling();

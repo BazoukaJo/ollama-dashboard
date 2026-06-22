@@ -1,32 +1,10 @@
 /**
  * Main JavaScript functionality for Ollama Dashboard
+ * Poll timers live in modules/polling.js
  */
 
-function getPollIntervalSec() {
-  const el = document.querySelector(".dashboard-header-meta-group[data-model-poll-interval]");
-  const val = el && el.dataset.modelPollInterval;
-  const n = parseInt(val, 10);
-  return Number.isFinite(n) && n > 0 ? n : 10;
-}
-
-/** System Resources (CPU/RAM/VRAM/GPU/SSD) refresh — faster than model list poll. */
-function getStatsPollIntervalSec() {
-  const el = document.querySelector(".compact-system-resources");
-  const val = el && el.dataset.statsPollInterval;
-  const n = parseInt(val, 10);
-  return Number.isFinite(n) && n > 0 ? n : 1;
-}
-
 let refreshCountdown = 10;
-
-function updateTimes() {
-  const intervalSec = getPollIntervalSec();
-  setInterval(function () {
-    if (typeof updateModelData === "function") {
-      void updateModelData();
-    }
-  }, intervalSec * 1000);
-}
+let _statsInFlight = false;
 
 /** Refresh all dashboard data (models + stats) without full page reload. */
 function refreshDashboardData() {
@@ -41,7 +19,7 @@ function refreshDashboardData() {
       }
     }
   });
-  if (typeof updateModelData === "function") updateModelData();
+  if (typeof updateModelData === "function") updateModelData(true);
   if (typeof updateSystemStats === "function") updateSystemStats();
 }
 
@@ -1022,6 +1000,8 @@ function drawTimeline(canvas, data, color) {
 }
 
 async function updateSystemStats() {
+  if (_statsInFlight) return;
+  _statsInFlight = true;
   try {
     const fetchFn = typeof fetchWithTimeout === "function" ? fetchWithTimeout : fetch;
     const response = await fetchFn("/api/system/stats", {}, 8000);
@@ -1120,6 +1100,8 @@ async function updateSystemStats() {
     }
   } catch (error) {
     console.log("Failed to update system stats:", error);
+  } finally {
+    _statsInFlight = false;
   }
 }
 
@@ -1128,36 +1110,52 @@ let _updateModelDataInFlight = false;
 const _API_TIMEOUT_MS = 15000;
 const VERSION_POLL_EVERY_N = 12;
 
-async function updateModelData() {
+function _availableSectionExpanded() {
+  const body = document.getElementById("availableModelsBody");
+  if (!body) return true;
+  return body.style.display !== "none";
+}
+
+async function updateModelData(forceRefresh) {
   if (_updateModelDataInFlight) return;
   _updateModelDataInFlight = true;
   let runningModels = null;
   let availableModels = null;
+  const refreshQ = forceRefresh ? "?refresh=1" : "";
+  const fetchAvailable = forceRefresh || _availableSectionExpanded();
 
   try {
     const fetchFn = typeof fetchWithTimeout === "function" ? fetchWithTimeout : fetch;
-    const [runningResponse, availableResponse] = await Promise.all([
-      fetchFn("/api/models/running", {}, _API_TIMEOUT_MS),
-      fetchFn("/api/models/available", {}, _API_TIMEOUT_MS),
-    ]);
-
-    const runR = await readApiJson(runningResponse);
-    if (runR.responseOk) {
-      const runningData = runR.data;
-      runningModels = Array.isArray(runningData.models)
-        ? runningData.models
-        : [];
-      _lastRunningModelsSnapshot = runningModels;
-      updateRunningModelsDisplay(runningModels);
-    }
-
-    const availR = await readApiJson(availableResponse);
-    if (availR.responseOk) {
-      const availableData = availR.data;
-      availableModels = Array.isArray(availableData.models)
-        ? availableData.models
-        : [];
-      updateAvailableModelsDisplay(availableModels);
+    if (fetchAvailable) {
+      const listsResp = await fetchFn(
+        "/api/models/lists" + refreshQ,
+        {},
+        _API_TIMEOUT_MS,
+      );
+      const listsR = await readApiJson(listsResp);
+      if (listsR.responseOk) {
+        const data = listsR.data || {};
+        runningModels = Array.isArray(data.running) ? data.running : [];
+        availableModels = Array.isArray(data.available) ? data.available : [];
+        _lastRunningModelsSnapshot = runningModels;
+        updateRunningModelsDisplay(runningModels);
+        updateAvailableModelsDisplay(availableModels);
+      }
+    } else {
+      const runningResponse = await fetchFn(
+        "/api/models/running" + refreshQ,
+        {},
+        _API_TIMEOUT_MS,
+      );
+      const runR = await readApiJson(runningResponse);
+      if (runR.responseOk) {
+        const runningData = runR.data;
+        runningModels = Array.isArray(runningData.models)
+          ? runningData.models
+          : [];
+        _lastRunningModelsSnapshot = runningModels;
+        updateRunningModelsDisplay(runningModels);
+      }
     }
   } catch (error) {
     console.log("Failed to update models:", error);
@@ -1244,6 +1242,19 @@ function updateRunningModelsDisplay(models) {
     runningModelsContainer.innerHTML = "";
     return;
   }
+
+  const newNames = new Set(
+    models.map((m) => (m.name || "").trim()).filter(Boolean),
+  );
+  const currentCards = runningModelsContainer.querySelectorAll(
+    ".model-card[data-model-name]",
+  );
+  const currentNames = new Set(
+    Array.from(currentCards).map((c) => (c.dataset.modelName || "").trim()),
+  );
+  const namesChanged =
+    newNames.size !== currentNames.size ||
+    [...newNames].some((n) => !currentNames.has(n));
 
   const buildRunningModelCardHTML = (model, index) => {
     const name = model?.name || "Unknown";
@@ -1345,12 +1356,37 @@ function updateRunningModelsDisplay(models) {
     `;
   };
 
-  const cardsHtml = models
-    .map((m, idx) => buildRunningModelCardHTML(m, idx))
-    .join("");
-  runningModelsContainer.innerHTML = cardsHtml;
-  afterModelCardsRendered();
-  // Running models must stay visible: capability filters only apply to catalog lists.
+  if (namesChanged) {
+    const cardsHtml = models
+      .map((m, idx) => buildRunningModelCardHTML(m, idx))
+      .join("");
+    runningModelsContainer.innerHTML = cardsHtml;
+    afterModelCardsRendered();
+    runningModelsContainer.querySelectorAll(".model-card").forEach((card) => {
+      setModelCardVisible(card, true);
+    });
+    return;
+  }
+
+  try {
+    const syncFn =
+      window.modelCards &&
+      typeof window.modelCards.syncModelCardFromModel === "function"
+        ? window.modelCards.syncModelCardFromModel
+        : null;
+    currentCards.forEach((card) => {
+      const name = (card.dataset.modelName || "").trim();
+      if (!name) return;
+      const matching = (models || []).find(
+        (m) => m.name && m.name.trim() === name,
+      );
+      if (!matching) return;
+      if (syncFn) syncFn(card, matching);
+      syncSettingsSavedIndicatorOnCard(card, matching);
+    });
+  } catch (err) {
+    console.log("Failed to update running model cards", err);
+  }
   runningModelsContainer.querySelectorAll(".model-card").forEach((card) => {
     setModelCardVisible(card, true);
   });
@@ -1527,9 +1563,6 @@ function updateAvailableModelsDisplay(models) {
       syncSettingsSavedIndicatorOnCard(card, matching);
     });
     applyCapabilityFilters("availableModelsContainer");
-    afterModelCardsRendered();
-    restoreAllDownloadUi();
-    applyCapabilityFilters("availableModelsContainer");
   } catch (err) {
     console.log("Failed to update capability icons for available models", err);
   }
@@ -1543,15 +1576,7 @@ function updateVersionDisplay(version) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-  const statsMs =
-    typeof getStatsPollIntervalSec === "function"
-      ? getStatsPollIntervalSec() * 1000
-      : 1000;
-  if (typeof updateSystemStats === "function") updateSystemStats();
-  setInterval(function () {
-    if (document.visibilityState !== "visible") return;
-    if (typeof updateSystemStats === "function") updateSystemStats();
-  }, statsMs);
+  if (typeof startStatsPollTimer === "function") startStatsPollTimer();
 });
 
 const AVAILABLE_SECTION_COLLAPSED_KEY = "availableModelsSectionCollapsed";

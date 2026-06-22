@@ -17,6 +17,7 @@ from typing import Iterator, Optional
 import requests
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
+from app.routes import proxy_upstream as _upstream
 from app.services.client_payload_compat import (
     _CORS_ALLOW_HEADERS,
     cap_num_predict,
@@ -28,7 +29,11 @@ from app.services.client_payload_compat import (
     sanitize_v1_chat_payload,
 )
 from app.services.copilot_pipeline import prepare_copilot_payload
-from app.services.copilot_prewarm import record_model_activity
+from app.services.copilot_prewarm import (
+    record_model_activity,
+    schedule_context_preload,
+    touch_keep_alive,
+)
 from app.services.copilot_proxy import (
     log_copilot_request,
     log_copilot_response,
@@ -62,7 +67,7 @@ from app.services.v1_native_bridge import (
     stream_native_chat_lines_to_openai_sse,
     stream_native_generate_lines_to_openai_sse,
 )
-from app.wsgi_safe import HOP_BY_HOP_HEADERS, strip_hop_by_hop_headers
+from app.wsgi_safe import strip_hop_by_hop_headers
 
 logger = logging.getLogger(__name__)
 
@@ -82,183 +87,27 @@ def _log_incoming_ollama_request():
     )
 
 
-# Upstream Ollama HTTP timeouts (seconds).
-_UPSTREAM_CONNECT_TIMEOUT = 30
-_UPSTREAM_STREAM_READ_TIMEOUT = 3600
-_UPSTREAM_STREAM_TIMEOUT = (_UPSTREAM_CONNECT_TIMEOUT, _UPSTREAM_STREAM_READ_TIMEOUT)
-_UPSTREAM_INFERENCE_TIMEOUT = 120
+# Upstream Ollama HTTP timeouts (seconds) — see proxy_upstream for pooled client helpers.
+_UPSTREAM_CONNECT_TIMEOUT = _upstream._UPSTREAM_CONNECT_TIMEOUT
+_UPSTREAM_STREAM_READ_TIMEOUT = _upstream._UPSTREAM_STREAM_READ_TIMEOUT
+_UPSTREAM_STREAM_TIMEOUT = _upstream._UPSTREAM_STREAM_TIMEOUT
+_UPSTREAM_INFERENCE_TIMEOUT = _upstream._UPSTREAM_INFERENCE_TIMEOUT
 _UPSTREAM_VISION_INFERENCE_TIMEOUT = 300
-_UPSTREAM_DEFAULT_TIMEOUT = 30
+_UPSTREAM_DEFAULT_TIMEOUT = _upstream._UPSTREAM_DEFAULT_TIMEOUT
 _UPSTREAM_PULL_TIMEOUT = 600
 
-# Streaming keep-alive tuning for IDE clients (VS Code Copilot, Continue, etc.).
-# A cold 20GB+ model can take 30-90s to load before Ollama emits its first byte; during that
-# window we send SSE comment heartbeats so the client does not give up with an empty
-# "Sorry, no response was returned" reply.
-# 5s keeps strict IDE clients (VS Code Copilot) engaged through the slow prefill of large,
-# CPU-offloaded models (e.g. gemma4:31b on 16 GB VRAM can take ~50s to the first token).
-_DEFAULT_STREAM_HEARTBEAT_SECONDS = 5.0
-_DEFAULT_STREAM_FIRST_BYTE_GRACE_SECONDS = 3.0
-
-
-def _env_float(name, default, *, minimum, maximum):
-    raw = os.getenv(name, '').strip()
-    if not raw:
-        return default
-    try:
-        value = float(raw)
-    except ValueError:
-        return default
-    return min(max(value, minimum), maximum)
-
-
-def _env_int(name, default, *, minimum, maximum):
-    raw = os.getenv(name, '').strip()
-    if not raw:
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        return default
-    return min(max(value, minimum), maximum)
-
-
-def _stream_heartbeat_seconds():
-    """How long to wait for an upstream line before emitting a keep-alive comment."""
-    return _env_float(
-        'OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS',
-        _DEFAULT_STREAM_HEARTBEAT_SECONDS,
-        minimum=1.0,
-        maximum=60.0,
-    )
-
-
-def _stream_first_byte_grace_seconds():
-    """How long to block before committing to the keep-alive stream.
-
-    Within this window an upstream connection error or non-200 status is surfaced as a proper
-    HTTP error response. Past it (a cold model still loading) we commit HTTP 200 and heartbeat.
-    """
-    return _env_float(
-        'OLLAMA_PROXY_STREAM_FIRST_BYTE_GRACE_SECONDS',
-        _DEFAULT_STREAM_FIRST_BYTE_GRACE_SECONDS,
-        minimum=0.5,
-        maximum=30.0,
-    )
-
-
-def _stream_first_token_timeout_seconds():
-    """Hard cap (seconds) for the model's first token after the stream commits.
-
-    Heartbeats keep the client alive through a cold load, but if the model never emits a token
-    we must abort with a clear error instead of heart-beating forever (a silent, infinite hang).
-    Generous by default so a large CPU-offloaded model can still finish loading.
-    """
-    return _env_float(
-        'OLLAMA_PROXY_FIRST_TOKEN_TIMEOUT_SECONDS', 300.0, minimum=15.0, maximum=3600.0,
-    )
-
-
-def _stream_stall_timeout_seconds():
-    """Max gap (seconds) between streamed tokens before the upstream is treated as stalled."""
-    return _env_float(
-        'OLLAMA_PROXY_STREAM_STALL_TIMEOUT_SECONDS', 120.0, minimum=5.0, maximum=3600.0,
-    )
-
-
-def _upstream_max_attempts():
-    """Total attempts for an upstream request that fails to connect before any byte is produced."""
-    return _env_int('OLLAMA_PROXY_UPSTREAM_MAX_ATTEMPTS', 3, minimum=1, maximum=6)
-
-
-def _upstream_retry_backoff_seconds():
-    """Base backoff (seconds) between upstream connection retries (scaled by attempt number)."""
-    return _env_float('OLLAMA_PROXY_UPSTREAM_RETRY_BACKOFF_SECONDS', 0.4, minimum=0.0, maximum=5.0)
-
-
-def _copilot_keep_alive():
-    """``keep_alive`` to inject for IDE chat turns so a model stays resident between requests.
-
-    Large models (e.g. ``gemma4:31b``) can take minutes to load; without this they are evicted
-    after Ollama's default 5 min idle and reloaded on the next turn. Returns ``None`` when
-    disabled (``COPILOT_KEEP_ALIVE=false``) so we fall back to Ollama's default.
-    """
-    if os.getenv('COPILOT_KEEP_ALIVE', 'true').strip().lower() not in ('1', 'true', 'yes'):
-        return None
-    raw = os.getenv('COPILOT_KEEP_ALIVE_MINUTES', '15').strip()
-    try:
-        minutes = max(int(raw), 1)
-    except ValueError:
-        minutes = 15
-    return f'{minutes}m'
-
-
-def _upstream_post(url, payload, *, stream=False, timeout=None):
-    """POST JSON to Ollama; always passes an explicit timeout."""
-    if timeout is None:
-        timeout = _UPSTREAM_STREAM_TIMEOUT if stream else _UPSTREAM_INFERENCE_TIMEOUT
-    return requests.post(url, json=payload, stream=stream, timeout=timeout)
-
-
-def _upstream_post_with_retry(url, payload, *, stream=False, timeout=None):
-    """POST JSON to Ollama, retrying only connection-level failures (Ollama down/restarting).
-
-    A momentarily unreachable Ollama (e.g. it is auto-restarting) recovers without any user
-    action. Non-2xx HTTP responses are returned as-is (the caller decides) and never retried.
-    """
-    attempts = _upstream_max_attempts()
-    backoff = _upstream_retry_backoff_seconds()
-    last_err: Optional[Exception] = None
-    for attempt in range(1, attempts + 1):
-        try:
-            return _upstream_post(url, payload, stream=stream, timeout=timeout)
-        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
-            last_err = err
-            if attempt < attempts:
-                time.sleep(backoff * attempt)
-                continue
-            raise
-    if last_err is not None:
-        raise last_err
-    raise RuntimeError('upstream POST failed without connecting')  # pragma: no cover
-
-
-def _upstream_request(method, url, **kwargs):
-    """Forward an arbitrary HTTP method to Ollama; always passes an explicit timeout."""
-    timeout = kwargs.pop('timeout', _UPSTREAM_DEFAULT_TIMEOUT)
-    return requests.request(
-        method=method,
-        url=url,
-        allow_redirects=False,
-        timeout=timeout,
-        **kwargs,
-    )
-
-
-def _filter_upstream_response_headers(headers):
-    """Return header pairs safe to pass through a WSGI Response.
-
-    ``requests`` transparently decompresses the body we forward (``response_data.content``), so
-    the upstream ``Content-Encoding`` and its ``Content-Length`` no longer describe what we send.
-    Drop both and let Werkzeug recompute ``Content-Length`` from the actual bytes — otherwise a
-    stale/compressed length truncates model lists and breaks VS Code's discovery JSON parsing
-    (e.g. behind a reverse proxy or a future Ollama that gzips ``/api/tags`` and ``/api/show``).
-    """
-    safe = []
-    for key, value in headers.items():
-        key_lower = key.lower()
-        if key_lower in HOP_BY_HOP_HEADERS:
-            continue
-        if key_lower in ('content-encoding', 'content-length'):
-            continue
-        safe.append((key, value))
-    return safe
-
-
-def _ollama_url():
-    svc = current_app.config['OLLAMA_SERVICE']
-    host, port = svc.get_ollama_host_port()
-    return f"http://{host}:{port}"
+_stream_heartbeat_seconds = _upstream.stream_heartbeat_seconds
+_stream_first_byte_grace_seconds = _upstream.stream_first_byte_grace_seconds
+_stream_first_token_timeout_seconds = _upstream.stream_first_token_timeout_seconds
+_stream_stall_timeout_seconds = _upstream.stream_stall_timeout_seconds
+_upstream_max_attempts = _upstream.upstream_max_attempts
+_upstream_retry_backoff_seconds = _upstream.upstream_retry_backoff_seconds
+_copilot_keep_alive = _upstream.copilot_keep_alive
+_upstream_post = _upstream.upstream_post
+_upstream_post_with_retry = _upstream.upstream_post_with_retry
+_upstream_request = _upstream.upstream_request
+_filter_upstream_response_headers = _upstream.filter_upstream_response_headers
+_ollama_url = _upstream.ollama_url
 
 
 def _settings_path():
@@ -382,6 +231,10 @@ def _forward_json_post_with_settings(upstream_url, payload, *, default_stream=Fa
             logger.warning('Upstream %s connection failed: %s', upstream_url, err)
             body = json.dumps({'error': _ollama_unreachable_text(err)}).encode('utf-8')
             return _native_stream_response(lambda: iter([body]), status=502)
+        if response_data.status_code == 200:
+            model_name = str(payload.get('model') or '').strip()
+            if model_name:
+                touch_keep_alive(_ollama_url(), model_name)
         return _proxy_upstream_response(response_data)
 
     native_stream = _NativeChatStream(
@@ -418,6 +271,22 @@ def _forward_json_post_with_settings(upstream_url, payload, *, default_stream=Fa
             yield json.dumps({'error': _ollama_unreachable_text(err)}).encode('utf-8')
 
     return _native_stream_response(stream_body)
+
+
+def _apply_ide_residency_hooks(payload: dict, ollama_url: str) -> None:
+    """Prewarm / keep-alive hooks shared by v1 and native proxy paths."""
+    model_name = str(payload.get('model') or '').strip()
+    if not model_name:
+        return
+    record_model_activity(model_name)
+    if payload.get('keep_alive') is None:
+        keep_alive = _copilot_keep_alive()
+        if keep_alive is not None:
+            payload['keep_alive'] = keep_alive
+    entry = _resolve_settings_entry(model_name)
+    options = (entry or {}).get('settings') or {}
+    if options.get('num_ctx'):
+        schedule_context_preload(ollama_url, model_name, dict(options))
 
 
 def _merge_saved_settings_into_payload(payload):
@@ -463,6 +332,7 @@ def intercept_ollama_parameters():
         request.get_json(silent=True) or {}, endpoint,
     )
     ollama_url = _ollama_url()
+    _apply_ide_residency_hooks(payload, ollama_url)
     return _forward_json_post_with_settings(
         f"{ollama_url}/api/{endpoint}",
         payload,
@@ -583,13 +453,6 @@ def _handle_v1_chat_completions():
     think_mode = (pipeline_meta.get('client_extras') or {}).get('copilot_think', 'off')
     apply_copilot_native_defaults(native_payload, payload, think_mode=think_mode)
 
-    # Keep the model resident between IDE turns so large models are not evicted and reloaded on
-    # every request (a 20 GB reload can dominate the turn). Client-supplied keep_alive wins.
-    if native_payload.get('keep_alive') is None:
-        keep_alive = _copilot_keep_alive()
-        if keep_alive is not None:
-            native_payload['keep_alive'] = keep_alive
-
     log_copilot_request(
         merged_payload,
         path=request.path,
@@ -602,9 +465,7 @@ def _handle_v1_chat_completions():
         },
     )
 
-    model_for_preload = merged_payload.get('model') or ''
-    if model_for_preload:
-        record_model_activity(model_for_preload)
+    _apply_ide_residency_hooks(native_payload, ollama_url)
 
     return _forward_v1_chat_via_native(native_payload, merged_payload)
 
@@ -928,6 +789,8 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
                     summary=tally.summary(agent=has_tools, think=think_on),
                     data_dir=current_app.config.get('DATA_DIR'),
                 )
+                if model_name and tally.error is None:
+                    touch_keep_alive(ollama_url, model_name)
 
         return _sse_response(stream_body)
 
@@ -959,6 +822,8 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
         content_type='application/json',
     )
     response.headers['Access-Control-Allow-Origin'] = '*'
+    if model_name:
+        touch_keep_alive(ollama_url, model_name)
     return response
 
 

@@ -560,9 +560,17 @@ html.light .section-icon.text-primary {
   color: var(--accent-primary) !important;
 }
 
-/* Header API proxy panel */
-html.light .dashboard-header-proxy-label {
+/* Header info panel rows */
+html.light .dashboard-header-row-label {
   color: var(--text-muted);
+}
+
+html.light .dashboard-header-row-caption {
+  color: var(--text-muted);
+}
+
+html.light .dashboard-header-row-caption--warn {
+  color: var(--warning-color);
 }
 
 html.light .dashboard-header-proxy-url {

@@ -68,7 +68,6 @@ def test_get_available_models_survives_show_enrichment_timeout(ollama_service, m
         lambda m: (m.get('name'), 8192, []),
     )
     monkeypatch.setattr(ollama_service, 'get_all_downloadable_models', lambda: [])
-    ollama_service._building_available_models_depth = 0
     ollama_service.clear_cache('available_models')
 
     def timeout_as_completed(_futures, timeout=None):

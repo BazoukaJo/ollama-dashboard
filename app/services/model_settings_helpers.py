@@ -158,7 +158,7 @@ def merge_model_info_for_recommendation(service, model_name, hint=None):
     merged = {}
     if isinstance(hint, dict):
         merged.update(hint)
-    if getattr(service, '_building_available_models_depth', 0) > 0:
+    if service._building_models_depth() > 0:
         merged.setdefault("name", name)
     else:
         try:

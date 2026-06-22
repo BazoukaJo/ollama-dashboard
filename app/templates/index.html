@@ -132,32 +132,48 @@
                 <div class="dashboard-header-meta-group" aria-label="Dashboard and API proxy info" data-model-poll-interval="10">
                 <div class="dashboard-header-info-panel" id="dashboardInfoPanel">
                     <div class="dashboard-header-panel-full">
-                    <div class="dashboard-header-info-row dashboard-header-info-row--ollama">
-                        <span class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint font-monospace dashboard-meta-host dashboard-header-endpoint-copy" role="button" tabindex="0" title="{{ ollama_api_base }}" data-copy-value="{{ ollama_api_base }}" data-dashboard-tooltip="Ollama backend URL — click to copy" aria-label="Copy Ollama backend URL">{{ ollama_host_port_label }}</span>
-                        <span class="dashboard-header-meta-chip" data-dashboard-tooltip="Version of this dashboard web app.">Dashboard v{{ dashboard_version|default('1.0003') }}</span>
-                        {% if ollama_version != 'Unknown' %}
-                        <span class="dashboard-header-meta-chip" data-dashboard-tooltip="Ollama server version returned by the API at this host:port.">Ollama v{{ ollama_version }}</span>
-                        {% elif not ollama_installed %}
-                        <span class="dashboard-header-meta-chip dashboard-header-meta-chip--warn" data-dashboard-tooltip="No Ollama install found on this machine, or the service is not reachable at the target host:port.">Ollama not detected</span>
-                        {% else %}
-                        <span class="dashboard-header-meta-chip">Ollama</span>
-                        {% endif %}
-                        <span id="ollamaBackendStatusBadge" class="dashboard-header-meta-chip api-proxy-status-badge badge bg-secondary dashboard-header-status-badge" data-dashboard-tooltip="Whether the Ollama HTTP API responds at the backend address.">
-                            <span class="ollama-backend-status-text">checking…</span>
+                    <div class="dashboard-header-info-row dashboard-header-info-row--ollama" aria-label="Ollama backend connection">
+                        <span class="dashboard-header-row-label" data-dashboard-tooltip="Direct connection to the Ollama HTTP API on this machine or network.">
+                            <i class="fas fa-server" aria-hidden="true"></i>
+                            <span class="dashboard-header-row-label-text">Ollama</span>
                         </span>
+                        <div class="dashboard-header-row-body">
+                            <span class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint font-monospace dashboard-meta-host dashboard-header-endpoint-copy" role="button" tabindex="0" title="{{ ollama_api_base }}" data-copy-value="{{ ollama_api_base }}" data-dashboard-tooltip="Ollama backend URL — click to copy" aria-label="Copy Ollama backend URL">{{ ollama_host_port_label }}</span>
+                            {% if ollama_version != 'Unknown' %}
+                            <span class="dashboard-header-row-caption" data-dashboard-tooltip="Ollama server version returned by the API at this host:port.">v{{ ollama_version }}</span>
+                            {% elif not ollama_installed %}
+                            <span class="dashboard-header-row-caption dashboard-header-row-caption--warn" data-dashboard-tooltip="No Ollama install found on this machine, or the service is not reachable at the target host:port.">Not detected</span>
+                            {% endif %}
+                        </div>
+                        <div class="dashboard-header-row-status">
+                            <span id="ollamaBackendStatusBadge" class="dashboard-header-meta-chip api-proxy-status-badge badge bg-secondary dashboard-header-status-badge" data-dashboard-tooltip="Whether the Ollama HTTP API responds at the backend address.">
+                                <span class="ollama-backend-status-text">checking…</span>
+                            </span>
+                        </div>
+                        <div class="dashboard-header-row-action" aria-hidden="true">
+                            <span class="dashboard-header-row-action-spacer"></span>
+                        </div>
                     </div>
-                    <div class="dashboard-header-info-row dashboard-header-info-row--proxy">
-                        <code class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint dashboard-header-proxy-url dashboard-header-endpoint-copy user-select-all" id="apiProxyEndpoint" role="button" tabindex="0" title="{{ proxy_endpoint }}" data-copy-value="{{ proxy_endpoint }}" data-dashboard-tooltip="API proxy URL — click to copy" aria-label="Copy API proxy URL">{{ proxy_endpoint_label }}</code>
-                        <span class="dashboard-header-meta-chip dashboard-header-proxy-label" data-dashboard-tooltip="Use this address in VS Code, Claude Code, Continue, OpenAI SDKs, and any Ollama-compatible app instead of {{ ollama_api_base }}">
-                            <i class="fas fa-exchange-alt me-1" aria-hidden="true"></i>API proxy
-                        </span>
-                        <span id="apiProxyStatusBadge" class="dashboard-header-meta-chip api-proxy-status-badge badge bg-secondary dashboard-header-status-badge" data-dashboard-tooltip="Recent activity through the settings-injecting proxy">
-                            <span class="api-proxy-status-text">checking…</span>
-                        </span>
-                        <button type="button" class="btn btn-sm btn-outline-info dashboard-header-proxy-connect flex-shrink-0" onclick="apiProxyUI.openWizard()" data-dashboard-tooltip="Verify proxy and copy setup URL for external apps" aria-label="Connect external app">
+                    <div class="dashboard-header-info-row dashboard-header-info-row--proxy" aria-label="Dashboard API proxy for external apps">
+                        <span class="dashboard-header-row-label" data-dashboard-tooltip="Settings-aware proxy URL for VS Code, Continue, OpenAI SDKs, and other Ollama-compatible clients.">
                             <i class="fas fa-plug" aria-hidden="true"></i>
-                            <span class="dashboard-header-proxy-connect-label">Connect</span>
-                        </button>
+                            <span class="dashboard-header-row-label-text">Proxy</span>
+                        </span>
+                        <div class="dashboard-header-row-body">
+                            <code class="dashboard-header-meta-chip dashboard-header-meta-chip--endpoint dashboard-header-proxy-url dashboard-header-endpoint-copy user-select-all" id="apiProxyEndpoint" role="button" tabindex="0" title="{{ proxy_endpoint }}" data-copy-value="{{ proxy_endpoint }}" data-dashboard-tooltip="API proxy URL — click to copy" aria-label="Copy API proxy URL">{{ proxy_endpoint_label }}</code>
+                            <span class="dashboard-header-row-caption" data-dashboard-tooltip="Version of this dashboard web app.">v{{ dashboard_version|default('1.0003') }}</span>
+                        </div>
+                        <div class="dashboard-header-row-status">
+                            <span id="apiProxyStatusBadge" class="dashboard-header-meta-chip api-proxy-status-badge badge bg-secondary dashboard-header-status-badge" data-dashboard-tooltip="Recent activity through the settings-injecting proxy">
+                                <span class="api-proxy-status-text">checking…</span>
+                            </span>
+                        </div>
+                        <div class="dashboard-header-row-action">
+                            <button type="button" class="btn btn-sm btn-outline-info dashboard-header-proxy-connect flex-shrink-0" onclick="apiProxyUI.openWizard()" data-dashboard-tooltip="Verify proxy and copy setup URL for external apps" aria-label="Connect external app">
+                                <i class="fas fa-link" aria-hidden="true"></i>
+                                <span class="dashboard-header-proxy-connect-label">Connect</span>
+                            </button>
+                        </div>
                     </div>
                     </div>
                     <div class="dashboard-header-panel-compact" data-dashboard-tooltip="Ollama backend and API proxy URLs — click to copy">
@@ -764,6 +780,7 @@
     <script src="{{ url_for('static', filename='js/modules/askMessageFormat.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/askModal.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/askModalDock.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/polling.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/downloads.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/bootstrap.js') }}?v={{ timestamp }}"></script>

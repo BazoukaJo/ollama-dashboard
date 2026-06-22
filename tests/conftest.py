@@ -4,6 +4,24 @@ from unittest.mock import patch
 import pytest
 
 
+def _reset_route_rate_limiters() -> None:
+    """Clear token buckets on the route module's OllamaService (module-scoped clients reuse one app)."""
+    try:
+        from app.routes import main as main_routes
+
+        svc = main_routes.ollama_service
+        if svc is None:
+            return
+        limiters = getattr(svc, 'rate_limiters', None)
+        if not limiters:
+            return
+        for limiter in limiters.values():
+            if hasattr(limiter, 'reset'):
+                limiter.reset()
+    except Exception:
+        pass
+
+
 @pytest.fixture(autouse=True)
 def no_background_stats_thread(request):
     """Prevent the BackgroundDataCollector thread from starting during tests.
@@ -25,4 +43,12 @@ def no_background_stats_thread(request):
         yield
         return
     with patch('app.services.ollama_core.OllamaServiceCore._start_background_updates'):
+        _reset_route_rate_limiters()
         yield
+        _reset_route_rate_limiters()
+        try:
+            from app.services import upstream_http
+
+            upstream_http.reset_pool()
+        except Exception:
+            pass

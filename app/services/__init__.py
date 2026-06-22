@@ -1,6 +1,1 @@
-"""Global OllamaService instance."""
-
-from app.services.ollama import OllamaService
-
-# Create singleton instance
-ollama_service = OllamaService()
+"""Service package — use ``create_app()`` → ``app.config['OLLAMA_SERVICE']`` for the live instance."""

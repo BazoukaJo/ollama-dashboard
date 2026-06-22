@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix='copilot-prewarm')
 _lock = threading.Lock()
 _last_activity: dict[str, float] = {}
+_last_keep_alive: dict[str, float] = {}
 _preload_inflight: set[str] = set()
 _default_model: str | None = None
 
@@ -72,14 +73,15 @@ def touch_keep_alive(ollama_base_url: str, model_name: str) -> None:
     """Extend model residency with a lightweight keep_alive ping (debounced)."""
     if not model_name:
         return
-    record_model_activity(model_name)
     if os.getenv('COPILOT_KEEP_ALIVE', 'true').strip().lower() not in ('1', 'true', 'yes'):
         return
     now = time.monotonic()
     with _lock:
-        last = _last_activity.get(model_name, 0)
-        if now - last < 30:
+        last_ping = _last_keep_alive.get(model_name, 0)
+        if now - last_ping < 30:
             return
+        _last_keep_alive[model_name] = now
+    record_model_activity(model_name)
 
     def _ping() -> None:
         try:

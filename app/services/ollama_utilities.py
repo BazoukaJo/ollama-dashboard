@@ -423,41 +423,60 @@ class OllamaServiceUtilities:
         return run_benchmark_all_models(self._session, host, port, names, cases=BENCHMARK_CASES)
 
     def get_system_stats_history(self):
-        """Get historical system stats"""
+        """Return persisted system stats samples (read-only)."""
         try:
             if not self.app or not hasattr(self.app, "config"):
                 return []
-            stats_history_file = os.path.join(os.path.dirname(self.app.config['HISTORY_FILE']), 'system_stats_history.json')
-
-            # Initialize or load existing history
+            stats_history_file = os.path.join(
+                os.path.dirname(self.app.config['HISTORY_FILE']),
+                'system_stats_history.json',
+            )
             if os.path.exists(stats_history_file):
                 with open(stats_history_file, encoding='utf-8') as f:
                     history = json.load(f)
-            else:
-                history = []
-
-            # Add current stats
-            try:
-                if hasattr(self, "get_system_stats") and callable(getattr(self, "get_system_stats")):
-                    stats_result = self.get_system_stats()  # type: ignore
-                    if stats_result and isinstance(stats_result, dict):
-                        stats_result['timestamp'] = datetime.now().isoformat()  # type: ignore[func-returns-value]
-                        history.append(stats_result)
-
-                        # Keep only last 100 entries
-                        history = history[-100:]
-
-                        # Save updated history
-                        with open(stats_history_file, 'w', encoding='utf-8') as f:
-                            json.dump(history, f, indent=2)
-            except (NotImplementedError, AttributeError):
-                pass
-
-            return history
-
+                return history if isinstance(history, list) else []
+            return []
         except HTTP_SERVICE_ERRORS as e:
             self.logger.exception("Error getting system stats history: %s", e)
             return []
+
+    def sample_system_stats_history(self) -> None:
+        """Append current stats to history (called from background thread)."""
+        try:
+            if not self.app or not hasattr(self.app, "config"):
+                return
+            if not hasattr(self, "get_system_stats") or not callable(getattr(self, "get_system_stats")):
+                return
+            stats_result = self.get_system_stats()
+            if not stats_result or not isinstance(stats_result, dict):
+                return
+            stats_history_file = os.path.join(
+                os.path.dirname(self.app.config['HISTORY_FILE']),
+                'system_stats_history.json',
+            )
+            lock = getattr(self, '_stats_history_lock', None)
+            if lock is None:
+                lock = threading.Lock()
+                self._stats_history_lock = lock
+            with lock:
+                history = []
+                if os.path.exists(stats_history_file):
+                    with open(stats_history_file, encoding='utf-8') as f:
+                        loaded = json.load(f)
+                    if isinstance(loaded, list):
+                        history = loaded
+                stats_result = dict(stats_result)
+                stats_result['timestamp'] = datetime.now().isoformat()
+                history.append(stats_result)
+                history = history[-100:]
+                history_dir = os.path.dirname(os.path.abspath(stats_history_file)) or '.'
+                os.makedirs(history_dir, exist_ok=True)
+                tmp_path = f"{stats_history_file}.{os.getpid()}.{threading.get_ident()}.tmp"
+                with open(tmp_path, 'w', encoding='utf-8') as f:
+                    json.dump(history, f, indent=2)
+                os.replace(tmp_path, stats_history_file)
+        except HTTP_SERVICE_ERRORS as e:
+            self.logger.debug("Stats history sample failed: %s", e)
 
     def _model_settings_file_path(self):
         """Get the path to the model settings file."""

@@ -8,7 +8,7 @@ Thanks for helping improve Ollama Dashboard.
 
    ```bash
    pip install -r requirements.txt
-   python -m pytest -q
+   python -m pytest -q -m "not integration and not playwright"
    ```
 
    This includes the in-process smoke checks (`tests/test_smoke_script.py`).
@@ -25,6 +25,8 @@ Thanks for helping improve Ollama Dashboard.
    pip install ruff
    ruff check app tests scripts ollama_dashboard_cli.py
    ```
+
+   **One-shot local check (Windows):** `scripts\check.bat` runs Ruff, pytest (`-m "not integration"`), and JS tests.
 
    Or: `pip install -r requirements-dev.txt` then `ruff check app tests scripts ollama_dashboard_cli.py`.
 

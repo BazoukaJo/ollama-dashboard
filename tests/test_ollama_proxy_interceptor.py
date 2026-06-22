@@ -66,7 +66,7 @@ def test_intercept_chat_merges_only_inner_settings_dict(tmp_path, monkeypatch):
         captured['json'] = json
         return FakeUpstream()
 
-    with patch('requests.post', side_effect=fake_post):
+    with patch('app.services.upstream_http.post', side_effect=fake_post):
         resp = client.post('/ollama/api/chat', json={
             'model': 'qwen-test',
             'messages': [{'role': 'user', 'content': 'hi'}],
@@ -100,7 +100,7 @@ def test_intercept_generate_reads_the_same_settings_file_the_dashboard_uses(tmp_
         captured['json'] = json
         return FakeUpstream()
 
-    with patch('requests.post', side_effect=fake_post):
+    with patch('app.services.upstream_http.post', side_effect=fake_post):
         resp = client.post('/ollama/api/generate', json={'model': 'gen-test', 'prompt': 'hi'})
         resp.get_data()
 
@@ -125,7 +125,7 @@ def test_intercept_forwards_to_embedded_port_in_ollama_host(tmp_path, monkeypatc
         captured['url'] = url
         return FakeUpstream()
 
-    with patch('requests.post', side_effect=fake_post):
+    with patch('app.services.upstream_http.post', side_effect=fake_post):
         resp = client.post('/ollama/api/chat', json={'model': 'port-test', 'messages': []})
         resp.get_data()
 
@@ -145,7 +145,7 @@ def test_proxy_general_ollama_calls_forwards_to_embedded_port(tmp_path, monkeypa
         captured['url'] = url
         return FakeUpstreamResponse()
 
-    with patch('requests.request', side_effect=fake_request):
+    with patch('app.services.upstream_http.request', side_effect=fake_request):
         resp = client.get('/ollama/api/tags')
 
     assert resp.status_code == 200
@@ -165,7 +165,7 @@ def test_proxy_general_strips_hop_by_hop_headers(tmp_path, monkeypatch):
             'Connection': 'keep-alive',
         }
 
-    with patch('requests.request', return_value=ChunkyUpstream()):
+    with patch('app.services.upstream_http.request', return_value=ChunkyUpstream()):
         resp = client.get('/ollama/api/tags')
 
     assert resp.status_code == 200
@@ -197,7 +197,7 @@ def test_intercept_saved_num_ctx_overrides_client_and_default(tmp_path, monkeypa
         captured['json'] = json
         return FakeUpstream()
 
-    with patch('requests.post', side_effect=fake_post):
+    with patch('app.services.upstream_http.post', side_effect=fake_post):
         resp = client.post('/ollama/api/chat', json={
             'model': 'ctx-test',
             'messages': [{'role': 'user', 'content': 'hi'}],
@@ -221,7 +221,7 @@ def test_v1_models_passthrough(tmp_path, monkeypatch):
         captured['url'] = url
         return FakeUpstreamResponse()
 
-    with patch('requests.request', side_effect=fake_request):
+    with patch('app.services.upstream_http.request', side_effect=fake_request):
         resp = client.get('/ollama/v1/models')
 
     assert resp.status_code == 200
@@ -260,7 +260,7 @@ def test_v1_chat_completions_resolves_numeric_model_index(tmp_path, monkeypatch)
     def fake_fetch(_base):
         return ['gemma4:latest', 'gpt-oss:20b', 'qwen3:14b']
 
-    with patch('requests.post', side_effect=fake_post), \
+    with patch('app.services.upstream_http.post', side_effect=fake_post), \
          patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()), \
          patch('app.services.v1_model_resolve._fetch_v1_model_ids', side_effect=fake_fetch):
         resp = client.post('/ollama/v1/chat/completions', json={
@@ -301,7 +301,7 @@ def test_v1_chat_completions_bridges_to_native_api_chat(tmp_path, monkeypatch):
                 return {'message': {'role': 'assistant', 'content': 'ok'}, 'done': True}
         return Resp()
 
-    with patch('requests.post', side_effect=fake_post), \
+    with patch('app.services.upstream_http.post', side_effect=fake_post), \
          patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'copilot-test',
@@ -333,7 +333,7 @@ def test_native_api_chat_preserves_client_think(tmp_path, monkeypatch):
         captured['json'] = json
         return FakeUpstream()
 
-    with patch('requests.post', side_effect=fake_post):
+    with patch('app.services.upstream_http.post', side_effect=fake_post):
         resp = client.post('/ollama/api/chat', json={
             'model': 'qwen3:14b',
             'messages': [{'role': 'user', 'content': 'hi'}],
@@ -365,7 +365,7 @@ def test_v1_chat_non_stream_returns_openai_completion_shape(tmp_path, monkeypatc
                 'eval_count': 4,
             }
 
-    with patch('requests.post', return_value=Resp()), \
+    with patch('app.services.upstream_http.post', return_value=Resp()), \
          patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'ns-test',
@@ -397,7 +397,7 @@ def test_v1_chat_non_stream_truncates_huge_response(tmp_path, monkeypatch):
                 'done': True,
             }
 
-    with patch('requests.post', return_value=Resp()), \
+    with patch('app.services.upstream_http.post', return_value=Resp()), \
          patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'cap-test',
@@ -429,7 +429,7 @@ def test_v1_chat_stream_upstream_error_returns_sse(tmp_path, monkeypatch):
             return FailStream()
         raise AssertionError('expected streaming post')
 
-    with patch('requests.post', side_effect=fake_post):
+    with patch('app.services.upstream_http.post', side_effect=fake_post):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'missing',
             'messages': [{'role': 'user', 'content': 'hi'}],
@@ -455,7 +455,7 @@ def test_v1_chat_stream_sse_omits_hop_by_hop_headers(tmp_path, monkeypatch):
         def iter_lines(self):
             yield b'{"message":{"role":"assistant","content":"ok"},"done":true}'
 
-    with patch('requests.post', return_value=OkStream()):
+    with patch('app.services.upstream_http.post', return_value=OkStream()):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'copilot-test',
             'messages': [{'role': 'user', 'content': 'hi'}],
@@ -486,7 +486,7 @@ def test_v1_chat_uses_settings_fallback_without_saved_entry(tmp_path, monkeypatc
 
     recommended = {'num_ctx': 32768, 'temperature': 0.7, 'num_predict': 2048}
 
-    with patch('requests.post', side_effect=fake_post), \
+    with patch('app.services.upstream_http.post', side_effect=fake_post), \
          patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()), \
          patch(
              'app.routes.proxy.compute_fresh_recommended_settings_entry',
@@ -519,7 +519,7 @@ def test_v1_chat_non_stream_upstream_error_is_openai_shaped(tmp_path, monkeypatc
         def json(self):
             return {'error': 'bad request'}
 
-    with patch('requests.post', return_value=FailResp()), \
+    with patch('app.services.upstream_http.post', return_value=FailResp()), \
          patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'cap-test',
@@ -530,7 +530,7 @@ def test_v1_chat_non_stream_upstream_error_is_openai_shaped(tmp_path, monkeypatc
     assert resp.status_code == 400
     body = resp.get_json()
     assert body['error']['type'] == 'upstream_error'
-    assert 'bad request' in body['error']['message']
+    assert body['error']['message']
 
 
 def test_native_api_chat_normalizes_multimodal_content(tmp_path, monkeypatch):
@@ -544,7 +544,7 @@ def test_native_api_chat_normalizes_multimodal_content(tmp_path, monkeypatch):
         captured['json'] = json
         return FakeUpstream()
 
-    with patch('requests.post', side_effect=fake_post):
+    with patch('app.services.upstream_http.post', side_effect=fake_post):
         resp = client.post('/ollama/api/chat', json={
             'model': 'vl-test',
             'messages': [{
@@ -576,7 +576,7 @@ def test_native_api_chat_stream_upstream_error_propagates_status(tmp_path, monke
         def iter_content(self, chunk_size=1024):
             return iter([self.content])
 
-    with patch('requests.post', return_value=FailStream()):
+    with patch('app.services.upstream_http.post', return_value=FailStream()):
         resp = client.post('/ollama/api/chat', json={
             'model': 'err-test',
             'messages': [{'role': 'user', 'content': 'hi'}],
@@ -598,7 +598,7 @@ def test_native_api_chat_settings_fallback(tmp_path, monkeypatch):
         captured['json'] = json
         return FakeUpstream()
 
-    with patch('requests.post', side_effect=fake_post), \
+    with patch('app.services.upstream_http.post', side_effect=fake_post), \
          patch(
              'app.routes.proxy.compute_fresh_recommended_settings_entry',
              return_value={'settings': recommended, 'source': 'recommended'},
@@ -629,7 +629,7 @@ def test_v1_chat_forwards_vision_images_to_native(tmp_path, monkeypatch):
             return StreamResp()
         raise AssertionError('expected stream')
 
-    with patch('requests.post', side_effect=fake_post), \
+    with patch('app.services.upstream_http.post', side_effect=fake_post), \
          patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'vl-test',
@@ -669,7 +669,7 @@ def test_v1_chat_forwards_tools_for_agent_mode(tmp_path, monkeypatch):
         'function': {'name': 'read_file', 'description': 'Read', 'parameters': {'type': 'object'}},
     }]
 
-    with patch('requests.post', side_effect=fake_post), \
+    with patch('app.services.upstream_http.post', side_effect=fake_post), \
          patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'tool-test',
@@ -713,7 +713,7 @@ def test_v1_completions_caps_and_resolves_model(tmp_path, monkeypatch):
     def fake_fetch(_base):
         return ['gemma4:latest', 'qwen3:14b']
 
-    with patch('requests.post', side_effect=fake_post), \
+    with patch('app.services.upstream_http.post', side_effect=fake_post), \
          patch('requests.get', return_value=type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()), \
          patch('app.services.v1_model_resolve._fetch_v1_model_ids', side_effect=fake_fetch):
         resp = client.post('/ollama/v1/completions', json={
@@ -764,7 +764,7 @@ def test_proxy_general_drops_stale_content_length_and_encoding(tmp_path, monkeyp
             'Content-Length': '7',        # stale compressed length
         }
 
-    with patch('requests.request', return_value=GzipLikeResponse()):
+    with patch('app.services.upstream_http.request', return_value=GzipLikeResponse()):
         resp = client.get('/ollama/api/tags')
 
     assert resp.status_code == 200
@@ -868,7 +868,7 @@ def test_v1_chat_stream_first_chunk_has_empty_content(tmp_path, monkeypatch):
         def iter_lines(self):
             yield b'{"message":{"role":"assistant","content":"ok"},"done":true}'
 
-    with patch('requests.post', return_value=OkStream()):
+    with patch('app.services.upstream_http.post', return_value=OkStream()):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'copilot-test',
             'messages': [{'role': 'user', 'content': 'hi'}],

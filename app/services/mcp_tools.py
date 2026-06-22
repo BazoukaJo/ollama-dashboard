@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from flask import current_app, has_app_context
 
+from app.services.copilot_prewarm import schedule_context_preload
 from app.services.warm_start import post_warm_start
 from app.services.web_tools import (
     fetch_url,
@@ -36,10 +37,14 @@ def _svc():
     raise RuntimeError('MCP tools require Flask application context')
 
 
-def _ollama_generate_url(suffix: str = 'generate') -> str:
+def _ollama_base_url() -> str:
     svc = _svc()
     host, port = svc.get_ollama_host_port()
-    return f'http://{host}:{port}/api/{suffix}'
+    return f'http://{host}:{port}'
+
+
+def _ollama_generate_url(suffix: str = 'generate') -> str:
+    return f'{_ollama_base_url()}/api/{suffix}'
 
 
 def _json_result(payload: Any) -> str:
@@ -126,6 +131,19 @@ def _handle_fetch_url(arguments: dict[str, Any]) -> Any:
 
 def _handle_web_search(arguments: dict[str, Any]) -> Any:
     return web_search(arguments)
+
+
+def _handle_prewarm_model(arguments: dict[str, Any]) -> Any:
+    model_name = str(arguments.get('model_name') or arguments.get('model') or '').strip()
+    if not model_name:
+        return {'success': False, 'error': 'model_name is required'}
+    svc = _svc()
+    entry = svc.get_model_settings_with_fallback(model_name) or {}
+    options = entry.get('settings') or {}
+    if not options.get('num_ctx'):
+        return {'success': False, 'error': 'No saved num_ctx for this model; set context in Settings first'}
+    schedule_context_preload(_ollama_base_url(), model_name, dict(options))
+    return {'success': True, 'message': f'Context preload scheduled for {model_name}'}
 
 
 def _handle_start_model(arguments: dict[str, Any]) -> Any:
@@ -260,6 +278,18 @@ _TOOL_SPECS: list[dict[str, Any]] = [
             ['query'],
         ),
         'handler': _handle_web_search,
+    },
+    {
+        'name': 'prewarm_model',
+        'description': 'Schedule background context preload for a model using saved num_ctx.',
+        'write': False,
+        'schema': _tool(
+            'prewarm_model',
+            'Schedule background context preload for a model (uses saved Settings num_ctx).',
+            {'model_name': {'type': 'string', 'description': 'Ollama model tag to prewarm'}},
+            ['model_name'],
+        ),
+        'handler': _handle_prewarm_model,
     },
     {
         'name': 'start_model',

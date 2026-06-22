@@ -156,7 +156,7 @@
           );
           if (card) delete card.dataset.downloadActive;
           if (typeof updateModelData === "function") {
-            void updateModelData();
+            void updateModelData(true);
           }
         }
       } catch (_) {}

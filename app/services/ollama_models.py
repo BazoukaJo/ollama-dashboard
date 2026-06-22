@@ -461,15 +461,32 @@ class OllamaServiceModels:
             raise OllamaConnectionError(f"Error fetching models: {exc}") from exc
 
     def get_model_info_cached(self, model_name):
-        """Get cached model info from running or available models."""
+        """Get cached model info from show cache or model lists."""
         try:
-            if getattr(self, '_building_available_models_depth', 0) > 0:
+            if self._building_models_depth() > 0:
                 detailed = self.get_detailed_model_info(model_name)
                 return detailed if isinstance(detailed, dict) else None
+            show_cached = self._get_cached(f'show:{model_name}', ttl_seconds=300)
+            if show_cached is not None:
+                ctx, caps_list, show_details = show_cached
+                entry = {'name': model_name}
+                if isinstance(show_details, dict):
+                    entry.update(show_details)
+                if ctx is not None:
+                    entry.setdefault('details', {})['context_length'] = ctx
+                if caps_list:
+                    entry['capabilities'] = caps_list
+                flags = self._ensure_capability_flags(entry)
+                if isinstance(flags, dict):
+                    entry.update(flags)
+                return entry
             running_models = self.get_running_models()
             for model in running_models:
                 if model.get('name') == model_name:
                     return model
+            detailed = self.get_detailed_model_info(model_name)
+            if isinstance(detailed, dict):
+                return detailed
             available_models = self.get_available_models()
             for model in available_models:
                 if model.get('name') == model_name:

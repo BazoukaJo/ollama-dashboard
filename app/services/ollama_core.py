@@ -251,10 +251,10 @@ class OllamaServiceCore:
     def _background_updates_worker(self):
         """Update system stats every 1s; ping Ollama every ~15s for health recovery only (no model list)."""
         _health_check_interval = 15
+        _stats_history_interval = 10
         _cycle = 0
         while not self._stop_background.is_set():
             try:
-                # System stats every 1s (used by /api/system/stats)
                 if hasattr(self, '_get_system_stats_raw') and callable(getattr(self, '_get_system_stats_raw', None)):
                     stats = getattr(self, '_get_system_stats_raw')() or {}
                 else:
@@ -262,6 +262,12 @@ class OllamaServiceCore:
                 self._set_cached('system_stats', stats)
 
                 _cycle += 1
+                if _cycle % _stats_history_interval == 0:
+                    if hasattr(self, 'sample_system_stats_history'):
+                        try:
+                            self.sample_system_stats_history()
+                        except Exception as e:
+                            self.logger.debug("Background stats history sample failed: %s", e)
                 if _cycle >= _health_check_interval:
                     _cycle = 0
                     # Lightweight Ollama ping so /api/health can recover when Ollama comes back

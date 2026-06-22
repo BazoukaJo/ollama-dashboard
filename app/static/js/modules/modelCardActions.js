@@ -235,7 +235,7 @@
               : JSON.stringify(data, null, 2);
         out.textContent = text;
         if (typeof updateModelData === "function") {
-          void updateModelData();
+          void updateModelData(true);
         }
       } catch (err) {
         const errText = err.message || String(err);

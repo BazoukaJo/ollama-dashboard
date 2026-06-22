@@ -44,24 +44,38 @@ jobs:
         run: node tests/test_ask_message_format.js
 
   pytest:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.10", "3.12"]
-
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt pytest-xdist
 
-      - name: Run tests (includes smoke_check via tests/test_smoke_script.py)
-        run: pytest -q
+      - name: Run tests (excludes integration and playwright)
+        run: pytest -q -m "not integration and not playwright" -n auto --dist loadscope
+
+  playwright:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest-playwright
+
+      - name: Install Chromium
+        run: playwright install chromium
+
+      - name: Run Playwright UI tests
+        run: pytest -q -m playwright

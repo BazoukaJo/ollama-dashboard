@@ -19,6 +19,7 @@ def get_endpoints():
         ('GET', '/api/system/stats'),
         ('GET', '/api/models/available'),
         ('GET', '/api/models/running'),
+        ('GET', '/api/models/lists'),
         ('GET', '/api/models/settings/test-model'),
         ('GET', '/api/models/settings/recommended/test-model'),
         ('POST', '/api/models/settings/test-model'),

@@ -13,6 +13,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -94,6 +95,9 @@ def create_app(config_name='development'):
     env_config = os.getenv('OLLAMA_DASHBOARD_CONFIG', '').strip().lower()
     if env_config in ('development', 'production'):
         config_name = env_config
+
+    base_dir = Path(__file__).parent.parent
+    load_dotenv(base_dir / '.env', override=False)
 
     _log_name = os.getenv("LOG_LEVEL", "INFO").strip().upper()
     _log_level = getattr(logging, _log_name, logging.INFO)

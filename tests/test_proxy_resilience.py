@@ -125,7 +125,7 @@ def test_v1_chat_self_heals_connection_error(tmp_path, monkeypatch):
         return OkStream()
 
     fake_models = type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()
-    with patch('requests.post', side_effect=flaky_post), patch('requests.get', return_value=fake_models):
+    with patch('app.services.upstream_http.post', side_effect=flaky_post), patch('requests.get', return_value=fake_models):
         resp = client.post('/ollama/v1/chat/completions', json={
             'model': 'healme',
             'messages': [{'role': 'user', 'content': 'hi'}],

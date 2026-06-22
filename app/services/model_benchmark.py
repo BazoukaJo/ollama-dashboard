@@ -6,8 +6,10 @@ real capability (reasoning, coding, knowledge, instruction-following, speed).
 
 from __future__ import annotations
 
+import os
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Any, Callable
 
@@ -518,14 +520,41 @@ def run_benchmark_all_models(
     timeout: int = 120,
     options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Benchmark every model in model_names and return fleet advice."""
-    results = [
-        run_benchmark_for_model(
+    """Benchmark every model in model_names and return fleet advice.
+
+    Models run concurrently when ``BENCHMARK_MAX_WORKERS`` > 1 (default 1 — one model at a
+    time so Ollama is not overloaded on a single GPU).
+    """
+    if not model_names:
+        return {
+            'models': [],
+            'advice': build_fleet_advice([]),
+            'benchmark_count': len(BENCHMARK_CASES if cases is None else cases),
+        }
+
+    try:
+        max_workers = max(1, int(os.getenv('BENCHMARK_MAX_WORKERS', '1').strip() or '1'))
+    except ValueError:
+        max_workers = 1
+    max_workers = min(max_workers, len(model_names))
+
+    def _run_one(name: str) -> dict[str, Any]:
+        return run_benchmark_for_model(
             session, host, port, name,
             cases=cases, timeout=timeout, options=options,
         )
-        for name in model_names
-    ]
+
+    if max_workers == 1:
+        results = [_run_one(name) for name in model_names]
+    else:
+        order: dict[str, dict[str, Any]] = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_run_one, name): name for name in model_names}
+            for fut in as_completed(futures):
+                row = fut.result()
+                order[row.get('model', futures[fut])] = row
+        results = [order[name] for name in model_names if name in order]
+
     return {
         'models': results,
         'advice': build_fleet_advice(results),

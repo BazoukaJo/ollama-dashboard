@@ -56,17 +56,17 @@ required. Point a client's **base URL** at `http://<dashboard-host>:<port>/ollam
 port **5000**). Traffic is forwarded to the real Ollama backend (`OLLAMA_HOST` /
 `OLLAMA_PORT`, usually `http://localhost:11434`).
 
-**What gets your saved settings (`model_settings.json`)?**  
+**What gets your saved settings (`model_settings.json`)?**
 Settings are merged into the request `options` on **inference** calls (when Ollama loads or
 runs the model for that request). Saved values **win** over whatever the client sent.
 
-| Client route (via dashboard) | Upstream Ollama | Settings injected? |
-|------------------------------|-----------------|-------------------|
-| `POST /ollama/api/chat` | `/api/chat` | Yes |
-| `POST /ollama/api/generate` | `/api/generate` | Yes |
-| `POST /ollama/v1/chat/completions` | `/api/chat` (bridged) | Yes (**OpenAI-compatible clients**) |
-| `POST /ollama/v1/completions` | `/api/generate` (bridged) | Yes |
-| `GET /ollama/api/tags`, `GET /ollama/v1/models`, etc. | passthrough | No (list/show only) |
+| Client route (via dashboard)                          | Upstream Ollama           | Settings injected?                  |
+| ----------------------------------------------------- | ------------------------- | ----------------------------------- |
+| `POST /ollama/api/chat`                               | `/api/chat`               | Yes                                 |
+| `POST /ollama/api/generate`                           | `/api/generate`           | Yes                                 |
+| `POST /ollama/v1/chat/completions`                    | `/api/chat` (bridged)     | Yes (**OpenAI-compatible clients**) |
+| `POST /ollama/v1/completions`                         | `/api/generate` (bridged) | Yes                                 |
+| `GET /ollama/api/tags`, `GET /ollama/v1/models`, etc. | passthrough               | No (list/show only)                 |
 
 Ollama applies `options` **per request** — it does not remember them after unload. External
 apps do **not** use the dashboard **Start** button; the first chat message loads the model
@@ -88,14 +88,14 @@ http://<dashboard-host>:<port>/ollama
 
 Examples (default port **5000**):
 
-| App | Where to paste the address |
-|-----|----------------------------|
-| **Any Ollama-compatible tool** | Ollama server URL / host field |
-| **OpenAI SDK** (`base_url`) | `http://127.0.0.1:5000/ollama/v1` |
+| App                                   | Where to paste the address        |
+| ------------------------------------- | --------------------------------- |
+| **Any Ollama-compatible tool**        | Ollama server URL / host field    |
+| **OpenAI SDK** (`base_url`)           | `http://127.0.0.1:5000/ollama/v1` |
 | **VS Code — GitHub Copilot (Ollama)** | Ollama endpoint (no `/v1` suffix) |
-| **Continue** | `apiBase` in config |
-| **Claude Code / other IDE agents** | Ollama or model server URL field |
-| **LangChain, curl, custom scripts** | Base URL pointing at `/ollama` |
+| **Continue**                          | `apiBase` in config               |
+| **Claude Code / other IDE agents**    | Ollama or model server URL field  |
+| **LangChain, curl, custom scripts**   | Base URL pointing at `/ollama`    |
 
 **Dashboard UI:** click **Connect app** in the header for live checks and copy-paste URLs.
 
@@ -144,11 +144,11 @@ see a lone `I` and "Sorry, no response was returned"). To actually use a model's
 Copilot, open the model's **Settings** in the dashboard and set **Reasoning for external clients
 (Copilot)**:
 
-| Mode | Behavior (plain chat) |
-|------|-----------------------|
-| **Off** (default) | Force `think: false` — fast, direct answers. |
-| **Auto** | Follow the client's reasoning request (Copilot's `reasoning_effort`), else off. |
-| **On** | Always think; the reasoning is **mirrored into the visible answer** since Copilot only renders content. |
+| Mode              | Behavior (plain chat)                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------- |
+| **Off** (default) | Force `think: false` — fast, direct answers.                                                            |
+| **Auto**          | Follow the client's reasoning request (Copilot's `reasoning_effort`), else off.                         |
+| **On**            | Always think; the reasoning is **mirrored into the visible answer** since Copilot only renders content. |
 
 This is a per-model setting saved under the model's `client` block. The legacy environment
 variable `OLLAMA_COPILOT_ALLOW_THINKING=true` still works as a global **Auto** default.
@@ -191,10 +191,10 @@ Default: **`http://127.0.0.1:5000/mcp`**
 
 This is **separate from the Ollama proxy** above:
 
-| Connection | URL | Purpose |
-|------------|-----|---------|
+| Connection       | URL                            | Purpose                                               |
+| ---------------- | ------------------------------ | ----------------------------------------------------- |
 | **Ollama proxy** | `http://127.0.0.1:5000/ollama` | LLM inference (chat, completions) with saved settings |
-| **MCP tools** | `http://127.0.0.1:5000/mcp` | Dashboard tools (models, stats, proxy status) |
+| **MCP tools**    | `http://127.0.0.1:5000/mcp`    | Dashboard tools (models, stats, proxy status)         |
 
 Use **both** in Cursor or VS Code: proxy for the model, MCP for dashboard actions.
 
@@ -213,6 +213,10 @@ and copy-paste JSON for Cursor (`.cursor/mcp.json`) and VS Code.
 }
 ```
 
+**One-step setup:** from the repo root, run `python scripts/setup_cursor.py` — it merges the MCP
+entry above (with a timestamped backup). Add `--with-ollama-override` to also set the OpenAI base
+URL to `http://127.0.0.1:5000/ollama/v1`. See [API.md](API.md) for the full HTTP surface.
+
 **VS Code** (MCP extension / settings JSON — exact key depends on your extension):
 
 ```json
@@ -228,13 +232,13 @@ and copy-paste JSON for Cursor (`.cursor/mcp.json`) and VS Code.
 
 **Available tools (read-only by default):**
 
-| Tool | Description |
-|------|-------------|
+| Tool                    | Description                           |
+| ----------------------- | ------------------------------------- |
 | `list_available_models` | Installed models and capability flags |
-| `list_running_models` | Models loaded in Ollama memory |
-| `get_model_info` | Metadata for one model tag |
-| `get_system_stats` | CPU, RAM, VRAM snapshot |
-| `get_proxy_status` | External IDE proxy activity |
+| `list_running_models`   | Models loaded in Ollama memory        |
+| `get_model_info`        | Metadata for one model tag            |
+| `get_system_stats`      | CPU, RAM, VRAM snapshot               |
+| `get_proxy_status`      | External IDE proxy activity           |
 
 Optional **write** tools (`start_model`, `stop_model`) are off unless you set
 `MCP_ALLOW_WRITE=true` and restart the dashboard.
@@ -254,10 +258,10 @@ The Connect wizard also runs an `mcp_endpoint` check.
 
 **MCP environment variables (optional):**
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `MCP_ALLOW_WRITE` | `false` | Set `true` to expose `start_model` / `stop_model` |
-| `ASK_AGENT_MAX_ITERATIONS` | `8` | Max tool rounds per Ask? agent request (1–20) |
+| Variable                   | Default | Purpose                                           |
+| -------------------------- | ------- | ------------------------------------------------- |
+| `MCP_ALLOW_WRITE`          | `false` | Set `true` to expose `start_model` / `stop_model` |
+| `ASK_AGENT_MAX_ITERATIONS` | `8`     | Max tool rounds per Ask? agent request (1–20)     |
 
 Implementation: `app/services/mcp_tools.py` (shared registry),
 `app/services/mcp_server.py` (Streamable HTTP at `/mcp`),
@@ -265,19 +269,19 @@ Implementation: `app/services/mcp_tools.py` (shared registry),
 
 **Proxy environment variables (optional):**
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `OLLAMA_PROXY_MAX_PREDICT` | `8192` | Max output tokens for external clients (plain chat); raise up to 16384 for longer answers |
-| `OLLAMA_PROXY_MAX_PREDICT_AGENT` | `32768` | Max output tokens for agent/tool turns (long edits) |
-| `OLLAMA_COPILOT_ALLOW_THINKING` | `false` | Global default for **Auto** reasoning (per-model **Reasoning** setting overrides) |
-| `OLLAMA_PROXY_MAX_RESPONSE_CHARS` | `96000` | Max chars in non-streaming responses returned to IDEs |
-| `OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS` | `5` | Idle seconds before sending SSE keep-alives (comment + empty content chunk) while a model loads/stalls (keeps VS Code Copilot from timing out on cold loads) |
-| `OLLAMA_PROXY_STREAM_FIRST_BYTE_GRACE_SECONDS` | `3` | Seconds to wait for a fast upstream error before committing the keep-alive stream |
-| `OLLAMA_V1_PASSTHROUGH` | `false` | Set `true` to forward `/v1/chat/completions` to Ollama `/v1` instead of bridging to `/api/chat` |
-| `CONTEXT_TRIM_ENABLED` | `true` | Auto-trim long prompts to fit `num_ctx` |
-| `COPILOT_PREWARM_MODEL` | *(unset)* | Model tag to preload on dashboard startup (e.g. `qwen3:8b`) |
-| `COPILOT_PREWARM_ON_START` | `true` | When `COPILOT_PREWARM_MODEL` is set, warm-load that model on startup |
-| *(API)* | — | `POST /api/proxy/prewarm` — manually trigger a prewarm for a model |
+| Variable                                       | Default   | Purpose                                                                                                                                                      |
+| ---------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OLLAMA_PROXY_MAX_PREDICT`                     | `8192`    | Max output tokens for external clients (plain chat); raise up to 16384 for longer answers                                                                    |
+| `OLLAMA_PROXY_MAX_PREDICT_AGENT`               | `32768`   | Max output tokens for agent/tool turns (long edits)                                                                                                          |
+| `OLLAMA_COPILOT_ALLOW_THINKING`                | `true`    | Global default for **Auto** reasoning (per-model **Reasoning** setting overrides)                                                                            |
+| `OLLAMA_PROXY_MAX_RESPONSE_CHARS`              | `96000`   | Max chars in non-streaming responses returned to IDEs                                                                                                        |
+| `OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS`        | `5`       | Idle seconds before sending SSE keep-alives (comment + empty content chunk) while a model loads/stalls (keeps VS Code Copilot from timing out on cold loads) |
+| `OLLAMA_PROXY_STREAM_FIRST_BYTE_GRACE_SECONDS` | `3`       | Seconds to wait for a fast upstream error before committing the keep-alive stream                                                                            |
+| `OLLAMA_V1_PASSTHROUGH`                        | `false`   | Set `true` to forward `/v1/chat/completions` to Ollama `/v1` instead of bridging to `/api/chat`                                                              |
+| `CONTEXT_TRIM_ENABLED`                         | `true`    | Auto-trim long prompts to fit `num_ctx`                                                                                                                      |
+| `COPILOT_PREWARM_MODEL`                        | *(unset)* | Model tag to preload on dashboard startup (e.g. `qwen3:8b`)                                                                                                  |
+| `COPILOT_PREWARM_ON_START`                     | `true`    | When `COPILOT_PREWARM_MODEL` is set, warm-load that model on startup                                                                                         |
+| *(API)*                                        | —         | `POST /api/proxy/prewarm` — manually trigger a prewarm for a model                                                                                           |
 
 Original model names are kept. **Every** saved option in `options` is applied — including
 `presence_penalty`, `frequency_penalty`, `typical_p`, and `penalize_newline` (not valid in a
@@ -382,16 +386,16 @@ starts/stops the **dashboard** accordingly — see [Deployment Guide](DEPLOYMENT
 `AUTO_START_OLLAMA=false` if you'd rather always start Ollama yourself or via your own process
 manager.
 
-Create a `.env` file with your settings; defaults work out-of-the-box for local use.
+Create a `.env` file with your settings (see [`.env.example`](../.env.example)); defaults work out-of-the-box for local use.
 
 **Persistence files** (written next to `HISTORY_FILE` unless paths are absolute):
 
-| File | Purpose |
-|------|---------|
-| `data/history.json` | Rolling model-list snapshots (`MAX_HISTORY`, default 50) |
-| `data/chat_history.json` | Ask? chat sessions (max 100) |
-| `data/model_settings.json` | Per-model saved settings |
-| `data/system_stats_history.json` | Sparkline data for system metrics |
+| File                             | Purpose                                                  |
+| -------------------------------- | -------------------------------------------------------- |
+| `data/history.json`              | Rolling model-list snapshots (`MAX_HISTORY`, default 50) |
+| `data/chat_history.json`         | Ask? chat sessions (max 100)                             |
+| `data/model_settings.json`       | Per-model saved settings                                 |
+| `data/system_stats_history.json` | Sparkline data for system metrics                        |
 
 ---
 
@@ -401,12 +405,12 @@ The dashboard ships batch scripts that share one process manager:
 `scripts/dashboard-process.ps1`. It detects dashboard processes by **command line and repo
 path**, not just "whatever is on port 5000".
 
-| Script | Mode | Server |
-|--------|------|--------|
-| `start.bat` | **release** | Waitress (`wsgi:app`) — background, no staying terminal |
-| `start_dev.bat` | **dev** | Flask debug reloader — visible console |
-| `stop_app.bat` | — | Stops dashboard instance; refuses to kill foreign apps on port 5000 |
-| `restart_app.bat` | auto | Restarts in the **currently running** mode (or saved mode if stopped) |
+| Script            | Mode        | Server                                                                |
+| ----------------- | ----------- | --------------------------------------------------------------------- |
+| `start.bat`       | **release** | Waitress (`wsgi:app`) — background, no staying terminal               |
+| `start_dev.bat`   | **dev**     | Flask debug reloader — visible console                                |
+| `stop_app.bat`    | —           | Stops dashboard instance; refuses to kill foreign apps on port 5000   |
+| `restart_app.bat` | auto        | Restarts in the **currently running** mode (or saved mode if stopped) |
 
 **Examples:**
 

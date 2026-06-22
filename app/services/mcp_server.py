@@ -46,6 +46,11 @@ def _build_mcp():
         """Summarize external IDE proxy activity (VS Code, Cursor, Continue)."""
         return mcp_tools.execute_tool('get_proxy_status', {})
 
+    @mcp.tool()
+    def prewarm_model(model_name: str) -> str:
+        """Schedule background context preload using saved num_ctx."""
+        return mcp_tools.execute_tool('prewarm_model', {'model_name': model_name})
+
     if mcp_tools.mcp_allow_web():
 
         @mcp.tool()

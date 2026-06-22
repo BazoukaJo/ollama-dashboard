@@ -8,7 +8,9 @@ Provides:
 """
 
 import threading
+import time
 from collections import defaultdict, deque
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Dict, List
 
@@ -64,6 +66,11 @@ class RateLimiter:
             active = sum(1 for t in self.requests if t >= cutoff)
             return max(0, self.max_requests - active)
 
+    def reset(self) -> None:
+        """Clear recorded requests (used between tests sharing one app instance)."""
+        with self.lock:
+            self.requests.clear()
+
 
 class PerformanceMetrics:
     """Track performance metrics for monitoring and optimization.
@@ -99,10 +106,13 @@ class PerformanceMetrics:
 
         # Thresholds for alerts (in seconds)
         self.thresholds = {
-            "model_start": 30.0,  # Model start should complete within 30s
-            "model_stop": 5.0,    # Model stop should be quick
-            "model_delete": 10.0, # Delete should complete within 10s
-            "background_update": 5.0,  # Background updates should be quick
+            "model_start": 30.0,
+            "model_stop": 5.0,
+            "model_delete": 10.0,
+            "background_update": 5.0,
+            "models_available": 15.0,
+            "models_running": 10.0,
+            "models_lists": 20.0,
         }
 
     def record_operation(
@@ -192,3 +202,20 @@ class PerformanceMetrics:
         """Get recent performance anomalies/alerts."""
         with self.lock:
             return list(self.performance_alerts)[-20:]  # Last 20 alerts
+
+
+@contextmanager
+def timed_operation(metrics: PerformanceMetrics | None, operation_type: str):
+    """Record duration and success for a block when metrics is available."""
+    if metrics is None:
+        yield
+        return
+    start = time.perf_counter()
+    success = True
+    try:
+        yield
+    except Exception:
+        success = False
+        raise
+    finally:
+        metrics.record_operation(operation_type, time.perf_counter() - start, success)

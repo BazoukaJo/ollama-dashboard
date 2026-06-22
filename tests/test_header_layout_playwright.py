@@ -17,10 +17,17 @@ import pytest
 import requests
 
 PLAYWRIGHT_AVAILABLE = importlib.util.find_spec("playwright") is not None
-pytestmark = pytest.mark.skipif(
-    not PLAYWRIGHT_AVAILABLE,
-    reason="Playwright not installed (pip install playwright && playwright install chromium)",
-)
+PYTEST_PLAYWRIGHT = importlib.util.find_spec("pytest_playwright") is not None
+
+pytest_plugins = ["pytest_playwright"] if PYTEST_PLAYWRIGHT else []
+
+pytestmark = [
+    pytest.mark.playwright,
+    pytest.mark.skipif(
+        not (PLAYWRIGHT_AVAILABLE and PYTEST_PLAYWRIGHT),
+        reason="Playwright not installed (pip install pytest-playwright && playwright install chromium)",
+    ),
+]
 
 VIEWPORTS = [
     (390, 844, "phone"),
@@ -318,7 +325,10 @@ def test_header_css_rules_present():
         ".dashboard-header-meta-group",
         ".dashboard-header-info-panel",
         ".dashboard-header-info-row",
+        ".dashboard-header-row-label",
+        ".dashboard-header-row-body",
         ".dashboard-header-panel-full",
+        "grid-template-columns: subgrid",
         ".dashboard-header-panel-compact",
         "@container dash-hdr",
         "grid-template-columns: max-content",
@@ -377,11 +387,16 @@ def test_index_html_header_structure():
     proxy_row_start = html.find("dashboard-header-info-row--proxy", ollama_row_start)
     assert ollama_row_start != -1 and proxy_row_start != -1
     ollama_section = html[ollama_row_start:proxy_row_start]
-    proxy_section = html[proxy_row_start : proxy_row_start + 1400]
+    proxy_section = html[proxy_row_start : proxy_row_start + 2200]
+    assert "dashboard-header-row-label" in ollama_section
+    assert "dashboard-header-row-body" in ollama_section
+    assert "dashboard-header-row-label" in proxy_section
+    assert "dashboard-header-row-body" in proxy_section
     assert "dashboard-meta-host" in ollama_section
     assert ollama_section.index("dashboard-meta-host") < ollama_section.index("ollamaBackendStatusBadge")
     assert 'id="apiProxyEndpoint"' in proxy_section
     assert 'id="apiProxyStatusBadge"' in proxy_section
     assert 'dashboard-header-proxy-connect' in proxy_section
-    assert proxy_section.index("apiProxyEndpoint") < proxy_section.index("dashboard-header-proxy-label")
+    assert proxy_section.index("apiProxyEndpoint") < proxy_section.index("dashboard-header-row-caption")
+    assert proxy_section.index("dashboard-header-row-caption") < proxy_section.index("apiProxyStatusBadge")
     assert proxy_section.index("apiProxyStatusBadge") < proxy_section.index("dashboard-header-proxy-connect")
