@@ -6,7 +6,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Module-private MCP singletons (lazy init — not UPPER_CASE constants).
 _mcp_instance = None  # pylint: disable=invalid-name
 _mcp_asgi_app = None  # pylint: disable=invalid-name
 
@@ -46,6 +45,21 @@ def _build_mcp():
     def get_proxy_status() -> str:
         """Summarize external IDE proxy activity (VS Code, Cursor, Continue)."""
         return mcp_tools.execute_tool('get_proxy_status', {})
+
+    if mcp_tools.mcp_allow_web():
+
+        @mcp.tool()
+        def fetch_url(url: str) -> str:
+            """Fetch a public web page and return readable text."""
+            return mcp_tools.execute_tool('fetch_url', {'url': url})
+
+        @mcp.tool()
+        def web_search(query: str, max_results: int | None = None) -> str:
+            """Search the public web and return result titles and URLs."""
+            args: dict[str, Any] = {'query': query}
+            if max_results is not None:
+                args['max_results'] = max_results
+            return mcp_tools.execute_tool('web_search', args)
 
     if mcp_tools.mcp_allow_write():
 
@@ -105,4 +119,5 @@ def mcp_health_check(flask_app) -> dict[str, Any]:
             ).mcp_allow_write(),
         }
     except Exception as err:  # pylint: disable=broad-except
-        return {'ok': False, 'error': str(err)}
+        logger.warning('MCP status check failed: %s', err)
+        return {'ok': False, 'error': 'MCP status unavailable'}

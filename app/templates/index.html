@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v={{ timestamp }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v={{ timestamp }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/atom-one-dark.min.css') }}?v={{ timestamp }}">
 </head>
 <body id="dashboard-body" data-ollama-api-base="{{ ollama_api_base }}" data-ollama-host="{{ ollama_public_host }}" data-ollama-port="{{ ollama_public_port }}">
     {% macro model_title_block(model) -%}
@@ -274,7 +275,7 @@
                             {% if models %}
                             {% for model in models %}
                             <div class="col">
-                                <div class="model-card h-100 model-card--running" data-model-name="{{ model.name|e }}">
+                                <div class="model-card h-100 model-card--running" data-model-name="{{ model.name|e }}"{% if model.has_vision is true %} data-has-vision="true"{% elif model.has_vision is false %} data-has-vision="false"{% endif %}{% if model.has_tools is true %} data-has-tools="true"{% elif model.has_tools is false %} data-has-tools="false"{% endif %}{% if model.has_reasoning is true %} data-has-reasoning="true"{% elif model.has_reasoning is false %} data-has-reasoning="false"{% endif %}{% if model.has_moe is true %} data-has-moe="true"{% elif model.has_moe is false %} data-has-moe="false"{% endif %}>
                                     <div class="model-header model-card-head">
                                         <div class="model-icon-wrapper">
                                             <i class="fas fa-brain model-icon-main"></i>
@@ -401,7 +402,7 @@
                         <div class="row g-3 model-cards-row" id="availableModelsContainer">
                             {% for model in available_models %}
                             <div class="col">
-                                <div class="model-card h-100" data-model-name="{{ model.name|e }}"{% if model.has_vision is true %} data-has-vision="true"{% elif model.has_vision is false %} data-has-vision="false"{% endif %}{% if model.has_moe is true %} data-has-moe="true"{% elif model.has_moe is false %} data-has-moe="false"{% endif %}>
+                                <div class="model-card h-100" data-model-name="{{ model.name|e }}"{% if model.has_vision is true %} data-has-vision="true"{% elif model.has_vision is false %} data-has-vision="false"{% endif %}{% if model.has_tools is true %} data-has-tools="true"{% elif model.has_tools is false %} data-has-tools="false"{% endif %}{% if model.has_reasoning is true %} data-has-reasoning="true"{% elif model.has_reasoning is false %} data-has-reasoning="false"{% endif %}{% if model.has_moe is true %} data-has-moe="true"{% elif model.has_moe is false %} data-has-moe="false"{% endif %}>
                                     <div class="model-header model-card-head">
                                         <div class="model-icon-wrapper">
                                             <i class="fas fa-box model-icon-main"></i>
@@ -612,16 +613,17 @@
     {% endif %}
 
     <div class="modal fade" id="askModelModal" tabindex="-1" aria-labelledby="askModelModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content bg-dark text-light">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="askModelModalLabel">Ask <span id="askModelModalName" class="text-success"></span></h5>
+                <div class="modal-header ask-modal-drag-handle">
+                    <span class="ask-modal-grip me-2" aria-hidden="true"><i class="fas fa-grip-vertical"></i></span>
+                    <h5 class="modal-title flex-grow-1 mb-0" id="askModelModalLabel">Ask <span id="askModelModalName" class="text-success"></span></h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <ul class="nav nav-tabs mb-3" id="askModalTabs" role="tablist">
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="askTabBtn" data-bs-toggle="tab" data-bs-target="#askTabPane" type="button" role="tab" aria-controls="askTabPane" aria-selected="true">Ask</button>
+                            <button class="nav-link active" id="askTabBtn" data-bs-toggle="tab" data-bs-target="#askTabPane" type="button" role="tab" aria-controls="askTabPane" aria-selected="true">Chat</button>
                         </li>
                         <li class="nav-item" role="presentation">
                             <button class="nav-link" id="askHistoryTabBtn" data-bs-toggle="tab" data-bs-target="#askHistoryTabPane" type="button" role="tab" aria-controls="askHistoryTabPane" aria-selected="false">
@@ -631,61 +633,48 @@
                     </ul>
                     <div class="tab-content" id="askModalTabContent">
                         <div class="tab-pane fade show active" id="askTabPane" role="tabpanel" aria-labelledby="askTabBtn" tabindex="0">
-                            <p id="askModelCapabilitiesHint" class="small text-muted mb-2"></p>
-                            <div id="askAgentModeWrap" class="ask-agent-mode-wrap mb-2" style="display:none;">
-                                <span class="badge bg-info ask-agent-badge">Agent mode</span>
-                                <span class="small text-muted ms-2">Uses dashboard MCP tools</span>
-                                <button type="button" id="askMcpConnectBtn" class="btn btn-link btn-sm p-0 ms-2 text-info">Connect MCP in VS Code / Cursor</button>
-                            </div>
-                            <div id="askAgentSteps" class="ask-agent-steps mb-2" style="display:none;" aria-live="polite"></div>
-                            <div class="ask-attachments-toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
-                                <input type="file" id="askImageInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
-                                <input type="file" id="askPdfInput" class="d-none" accept=".pdf,application/pdf">
-                                <input type="file" id="askDocInput" class="d-none" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
-                                <button type="button" id="askAttachImageBtn" class="btn btn-sm btn-outline-info">
-                                    <i class="fas fa-image me-1" aria-hidden="true"></i>Image
-                                </button>
-                                <button type="button" id="askAttachPdfBtn" class="btn btn-sm btn-outline-info">
-                                    <i class="fas fa-file-pdf me-1" aria-hidden="true"></i>PDF
-                                </button>
-                                <button type="button" id="askAttachDocBtn" class="btn btn-sm btn-outline-info">
-                                    <i class="fas fa-file-word me-1" aria-hidden="true"></i>Word
-                                </button>
-                                <button type="button" id="askAttachCodeBtn" class="btn btn-sm btn-outline-info">
-                                    <i class="fas fa-code me-1" aria-hidden="true"></i>Code
-                                </button>
-                            </div>
-                            <div id="askAttachmentsList" class="ask-attachments-list mb-2" style="display:none;"></div>
-                            <div id="askCodeSnippetWrap" class="ask-code-snippet-wrap mb-3 p-2 border border-secondary rounded" style="display:none;">
-                                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                                    <label class="small text-muted mb-0" for="askCodeLanguage">Language</label>
-                                    <select id="askCodeLanguage" class="form-select form-select-sm ask-model-input" style="width:auto; min-width:8rem;"></select>
-                                    <button type="button" id="askCodeConfirmBtn" class="btn btn-sm btn-success ms-auto">
-                                        <i class="fas fa-plus me-1" aria-hidden="true"></i>Add snippet
+                            <div class="ask-chat-layout">
+                                <div class="ask-chat-meta d-flex flex-wrap align-items-start gap-2 mb-2">
+                                    <p id="askModelCapabilitiesHint" class="small text-muted mb-0 flex-grow-1"></p>
+                                    <button type="button" id="askNewChatBtn" class="btn btn-sm btn-outline-secondary flex-shrink-0">
+                                        <i class="fas fa-plus me-1" aria-hidden="true"></i>New chat
                                     </button>
                                 </div>
-                                <textarea id="askCodeInput" class="form-control form-control-sm ask-model-input font-monospace" rows="5" placeholder="Paste code here…" aria-label="Code snippet"></textarea>
-                            </div>
-                            <div class="mb-3">
-                                <textarea id="askModelInput" class="form-control ask-model-input" rows="3" placeholder="Type your question and press Enter (or click Send)…" aria-label="Question for the model"></textarea>
-                            </div>
-                            <div id="askModelResponseWrap" style="display:none;">
-                                <div class="d-flex align-items-center gap-2 mb-2">
-                                    <span class="text-muted small">Response</span>
-                                    <div id="askModelSpinner" class="spinner-border spinner-border-sm text-success" role="status" style="display:none;">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
+                                <div id="askThread" class="ask-thread mb-2" aria-live="polite" aria-relevant="additions"></div>
+                                <div id="askTypingRow" class="ask-typing-row small text-muted mb-2" style="display:none;">
+                                    <span class="spinner-border spinner-border-sm text-success me-2" role="status" aria-hidden="true"></span>
+                                    <span>Model is thinking…</span>
                                 </div>
-                                <div class="ask-model-response-shell position-relative">
-                                    <div class="ask-model-response-actions">
-                                        <button type="button" id="askModelCopyBtn" class="btn btn-sm btn-outline-secondary ask-model-action-btn" data-dashboard-tooltip="Copy response to clipboard" aria-label="Copy response" disabled>
-                                            <i class="fas fa-copy" aria-hidden="true"></i><span class="ms-1">Copy</span>
+                                <div class="ask-composer border border-secondary rounded p-2">
+                                    <div class="ask-attachments-toolbar d-flex flex-wrap align-items-center gap-2 mb-2">
+                                        <input type="file" id="askImageInput" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp" multiple>
+                                        <input type="file" id="askPdfInput" class="d-none" accept=".pdf,application/pdf">
+                                        <input type="file" id="askDocInput" class="d-none" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+                                        <button type="button" id="askAttachImageBtn" class="btn btn-sm btn-outline-info">
+                                            <i class="fas fa-image me-1" aria-hidden="true"></i>Image
                                         </button>
-                                        <button type="button" id="askModelSaveBtn" class="btn btn-sm btn-outline-success ask-model-action-btn" data-dashboard-tooltip="Save question and answer to history" aria-label="Save to history" disabled>
-                                            <i class="fas fa-bookmark" aria-hidden="true"></i><span class="ms-1">Save</span>
+                                        <button type="button" id="askAttachPdfBtn" class="btn btn-sm btn-outline-info">
+                                            <i class="fas fa-file-pdf me-1" aria-hidden="true"></i>PDF
+                                        </button>
+                                        <button type="button" id="askAttachDocBtn" class="btn btn-sm btn-outline-info">
+                                            <i class="fas fa-file-word me-1" aria-hidden="true"></i>Word
+                                        </button>
+                                        <button type="button" id="askAttachCodeBtn" class="btn btn-sm btn-outline-info">
+                                            <i class="fas fa-code me-1" aria-hidden="true"></i>Code
                                         </button>
                                     </div>
-                                    <div id="askModelResponse" class="ask-model-response-area p-3 border border-secondary rounded" style="white-space:pre-wrap; max-height:400px; overflow-y:auto; font-size:0.9rem; background:#1a1a1a;"></div>
+                                    <div id="askAttachmentsList" class="ask-attachments-list mb-2" style="display:none;"></div>
+                                    <div id="askCodeSnippetWrap" class="ask-code-snippet-wrap mb-2 p-2 border border-secondary rounded" style="display:none;">
+                                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                            <label class="small text-muted mb-0" for="askCodeLanguage">Language</label>
+                                            <select id="askCodeLanguage" class="form-select form-select-sm ask-model-input" style="width:auto; min-width:8rem;"></select>
+                                            <button type="button" id="askCodeConfirmBtn" class="btn btn-sm btn-success ms-auto">
+                                                <i class="fas fa-plus me-1" aria-hidden="true"></i>Add snippet
+                                            </button>
+                                        </div>
+                                        <textarea id="askCodeInput" class="form-control form-control-sm ask-model-input font-monospace" rows="4" placeholder="Paste code here…" aria-label="Code snippet"></textarea>
+                                    </div>
+                                    <textarea id="askModelInput" class="form-control ask-model-input" rows="2" placeholder="Message the model… Enter to send, Shift+Enter for a new line" aria-label="Message for the model"></textarea>
                                 </div>
                             </div>
                         </div>
@@ -700,7 +689,7 @@
                                 </button>
                             </div>
                             <div id="askHistoryEmpty" class="ask-history-empty text-muted small text-center py-4">
-                                No saved answers yet. Ask a question, then click Save.
+                                No saved chats yet. Use <strong>Save chat</strong> in the Chat tab after a conversation.
                             </div>
                             <div id="askHistoryList" class="ask-history-list"></div>
                         </div>
@@ -708,6 +697,12 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" id="askModelCopyBtn" class="btn btn-outline-secondary" disabled>
+                        <i class="fas fa-copy me-1" aria-hidden="true"></i>Copy last reply
+                    </button>
+                    <button type="button" id="askModelSaveBtn" class="btn btn-outline-success" disabled>
+                        <i class="fas fa-bookmark me-1" aria-hidden="true"></i>Save chat
+                    </button>
                     <button id="askModelSendBtn" type="button" class="btn btn-success" onclick="sendAskModelQuestion()">
                         <i class="fas fa-paper-plane me-1"></i>Send
                     </button>
@@ -758,14 +753,19 @@
     <script src="{{ url_for('static', filename='js/theme.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/tooltips.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/utils.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/notifications.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/modelCardActions.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/modelCards.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/serviceControl.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/settings.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/api_proxy.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/askHistory.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='vendor/highlight.min.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/askMessageFormat.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/askModal.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/askModalDock.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}?v={{ timestamp }}"></script>
+    <script src="{{ url_for('static', filename='js/modules/downloads.js') }}?v={{ timestamp }}"></script>
     <script src="{{ url_for('static', filename='js/modules/bootstrap.js') }}?v={{ timestamp }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>

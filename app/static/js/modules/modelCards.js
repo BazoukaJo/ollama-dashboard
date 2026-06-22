@@ -1,4 +1,3 @@
-// Ensure getCapabilitiesHTML is available globally (uses capState from main.js when loaded)
 if (!window.getCapabilitiesHTML) {
   window.getCapabilitiesHTML = function (model) {
     const capState = (v) =>

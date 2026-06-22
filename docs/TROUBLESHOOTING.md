@@ -194,7 +194,7 @@ fields it sends are not accepted by Ollama when clients talk to `:11434` directl
 3. Start a **new Copilot chat** and retry.
 
 The proxy (`app/services/client_payload_compat.py`) strips unsupported fields, maps
-`max_completion_tokens`, caps output tokens (default **4096** via `OLLAMA_PROXY_MAX_PREDICT`),
+`max_completion_tokens`, caps output tokens (default **8192** via `OLLAMA_PROXY_MAX_PREDICT`),
 and bridges v1 chat to native `/api/chat` so saved settings apply.
 
 **Optional tuning:**
@@ -393,14 +393,14 @@ they do **not** extend VS Code's client-side wait.
 **Streaming keep-alive (cold loads no longer look empty)** — Ollama withholds its HTTP response
 until the model is loaded and generation starts, so a cold 20GB+ model used to send **zero
 bytes** for 30-90s, which VS Code surfaces as *"Sorry, no response was returned."* The proxy now
-commits the SSE response early and sends periodic **SSE comment heartbeats**
-(`: ollama-dashboard keep-alive`) while the model loads or stalls, keeping the connection open
-until the first token. Heartbeats are SSE comments, so OpenAI/SSE parsers ignore them — they
-never appear in chat text. Tunable (server-side, restart to apply):
+commits the SSE response early and sends periodic keep-alives while the model loads or stalls:
+**SSE comment heartbeats** (`: ollama-dashboard keep-alive`) plus **empty-content data chunks**
+(for VS Code's chunk parser). OpenAI/SSE parsers ignore comments — they never appear in chat
+text. Tunable (server-side, restart to apply):
 
 | Env var | Default | Meaning |
 |---------|---------|---------|
-| `OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS` | `10` | Idle seconds before sending a keep-alive comment (1-60) |
+| `OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS` | `5` | Idle seconds before sending a keep-alive (1-60) |
 | `OLLAMA_PROXY_STREAM_FIRST_BYTE_GRACE_SECONDS` | `3` | How long to wait for a fast upstream error before committing the stream (0.5-30) |
 
 **Workarounds:**
@@ -423,8 +423,9 @@ See also [GUIDE.md — VS Code Copilot](GUIDE.md#vs-code-copilot-ollama).
 | Symptom | What to do |
 |---------|------------|
 | `start.bat` says already running | Expected — use `stop_app.bat` or `restart_app.bat` |
-| Release started but no window | Expected — release runs in the background. Check status with `scripts\dashboard-process.ps1 -Action status` or open http://127.0.0.1:5000. Logs: `data\dashboard-release-launch.log`, `data\dashboard-release-error.log` |
-| Release start failed silently | Run `start.bat console` for a visible launcher, or read `data\dashboard-release-launch.log` |
+| Release started but no window | Expected — release runs in a minimized background window. Check status with `scripts\dashboard-process.ps1 -Action status` or open http://127.0.0.1:5000. Logs: `data\dashboard-release-launch.log`, `data\dashboard-release-error.log` |
+| Release start failed / Application Control Policy blocked | Device Guard often blocks `.venv\Scripts\waitress-serve.exe`. Release mode now uses `python -m waitress` instead. If startup still fails, use `start.bat console`, `start_dev.bat`, or `python ollama_dashboard_cli.py` |
+| Release start failed silently | Run `start.bat console` for a visible foreground server, or read `data\dashboard-release-launch.log` |
 | `stop_app.bat` refuses to stop | Another app (not this dashboard) owns port 5000 — check Task Manager or `netstat -aon \| findstr :5000` |
 | Wrong mode after restart | Use `restart_app.bat dev` or `restart_app.bat release` to force the mode |
 | Stale dev + release both running | Run `stop_app.bat` once; scripts kill all dashboard processes for this repo |
@@ -446,7 +447,7 @@ See [GUIDE.md — Windows: start, stop, and restart](GUIDE.md#windows-start-stop
 
 Set `LOG_LEVEL` to `DEBUG`, `INFO`, `WARNING`, or `ERROR` (default `INFO`) before starting the app to tune server verbosity.
 
-**Release mode (Windows):** Waitress runs without a console. Check `data\dashboard-release-launch.log` (startup) and `data\dashboard-release-error.log` (server output). Development mode logs to the open terminal instead.
+**Release mode (Windows):** Waitress runs in a minimized window (logs redirected to files). Check `data\dashboard-release-launch.log` (startup) and `data\dashboard-release-error.log` (server output). Development mode logs to the open terminal instead.
 
 ## Ollama version
 

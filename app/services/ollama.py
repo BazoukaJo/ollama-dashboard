@@ -103,6 +103,19 @@ class OllamaService(
         """
         return TransientErrorDetector.is_transient(error_text)
 
+    def consume_rate_limit(self, limiter_key: str) -> tuple[bool, str | None]:
+        """Return ``(True, None)`` when allowed, or ``(False, message)`` when throttled."""
+        limiter = self.rate_limiters.get(limiter_key)
+        if limiter is None:
+            return True, None
+        if not limiter.allow_request():
+            window = limiter.window_seconds
+            return False, (
+                f'Too many {limiter_key.replace("_", " ")} requests '
+                f'(limit: {limiter.max_requests} per {window}s). Try again shortly.'
+            )
+        return True, None
+
     def get_rate_limit_status(self) -> Dict[str, Dict[str, Any]]:
         """Get current rate limit status for all operation types.
 

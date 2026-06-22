@@ -38,9 +38,8 @@ def wait_modal(page, selector: str, timeout: int = 60_000) -> None:
 
 
 def screenshot_modal(page, selector: str, path: Path) -> None:
-    modal = page.locator(f"{selector}.show")
-    page.screenshot(path=str(path))
-    print(f"Saved {path}")
+    wait_modal(page, selector)
+    screenshot_viewport(page, path)
 
 
 def reload_dashboard(page) -> None:
@@ -53,13 +52,42 @@ def running_card(page):
     return page.locator("#runningModelsContainer .model-card--running").first
 
 
+def dock_ask_modal(page, side: str = "right", split_pct: float = 50) -> None:
+    """Snap the open Ask? modal to a screen edge (left or right half-panel)."""
+    page.evaluate(
+        """({ side, splitPct }) => {
+          document.documentElement.style.setProperty('--ask-dock-ask-width-vw', String(splitPct));
+          try { sessionStorage.setItem('askModalDockSplitPct', String(splitPct)); } catch (_) {}
+          const modal = document.getElementById('askModelModal');
+          if (!modal) return;
+          modal.classList.remove('ask-mode-center', 'ask-mode-float', 'ask-mode-left', 'ask-mode-right');
+          modal.classList.add('ask-mode-' + side);
+          document.body.classList.remove('ask-dock-left-open', 'ask-dock-right-open', 'ask-dock-floating');
+          document.body.classList.add('ask-dock-' + side + '-open');
+          const backdrop = document.querySelector('.modal-backdrop');
+          if (backdrop) backdrop.classList.add('ask-backdrop-hidden');
+          try { sessionStorage.setItem('askModalDockMode', side); } catch (_) {}
+        }""",
+        {"side": side, "splitPct": split_pct},
+    )
+    page.wait_for_timeout(600)
+
+
+def screenshot_viewport(page, path: Path) -> None:
+    page.screenshot(path=str(path))
+    print(f"Saved {path}")
+
+
 def capture_overlays(page) -> None:
     card = running_card(page)
     card.wait_for(timeout=120_000)
 
     card.locator('button.btn-success:has-text("Ask?")').click()
     wait_modal(page, "#askModelModal")
-    screenshot_modal(page, "#askModelModal", OUT_DIR / "overlay-ask.png")
+    screenshot_viewport(page, OUT_DIR / "overlay-ask.png")
+
+    dock_ask_modal(page, "right")
+    screenshot_viewport(page, OUT_DIR / "overlay-ask-side.png")
     close_modal(page)
     reload_dashboard(page)
 

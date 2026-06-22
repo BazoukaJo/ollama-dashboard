@@ -23,7 +23,16 @@ from app import __version__ as DASHBOARD_VERSION
 from app.routes import bp
 from app.services import mcp_tools
 from app.services.ask_agent import stream_ask_agent
-from app.services.ask_attachments import AttachmentError, prepare_chat_from_attachments
+from app.services.chat_prep import (
+    model_has_reasoning as _model_has_reasoning,
+)
+from app.services.chat_prep import (
+    model_has_tools as _model_has_tools,
+)
+from app.services.chat_prep import (
+    prepare_ask_chat_messages,
+)
+from app.services.error_messages import log_upstream_error
 from app.services.model_helpers import (
     attach_last_token_usage_to_model,
     attach_request_context_to_model,
@@ -38,6 +47,7 @@ from app.services.ollama_models import OllamaConnectionError
 from app.services.ollama_update_check import run_startup_ollama_update_check
 from app.services.service_errors import HTTP_SERVICE_ERRORS
 from app.services.validators import InputValidator
+from app.services.warm_start import build_warm_start_payload
 
 # Set by init_app from app.config['OLLAMA_SERVICE']; tests patch this
 ollama_service = None
@@ -235,6 +245,27 @@ def _get_ollama_url(endpoint=""):
     return f"http://{host}:{int(port)}/api/{endpoint}"
 
 
+def _merge_model_chat_options(model_name: str) -> dict[str, Any]:
+    options = _get_ollama_service().get_default_settings()
+    try:
+        model_settings_entry = _get_ollama_service().get_model_settings_with_fallback(model_name)
+        if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
+            for k, v in model_settings_entry['settings'].items():
+                options[k] = v
+    except _ROUTE_ERRORS as e:
+        current_app.logger.error("Failed to merge per-model settings for %s: %s", model_name, e)
+    return options
+
+
+def _rate_limit_response(limiter_key: str) -> tuple[dict[str, Any], int] | None:
+    """Return a 429 JSON body when the rate limiter rejects the request."""
+    ok, msg = _get_ollama_service().consume_rate_limit(limiter_key)
+    if ok:
+        return None
+    body = {'success': False, 'message': msg, 'error': msg}
+    return body, 429
+
+
 # Force kill the dashboard app and all children
 @bp.route('/api/force_kill', methods=['POST'])
 def force_kill_app():
@@ -313,9 +344,15 @@ def _handle_model_error(response, model_name, operation="operation") -> tuple[di
         }, 400
 
     status_code = getattr(response, "status_code", None)
+    log_upstream_error(
+        current_app.logger,
+        status_code=status_code,
+        detail=(response.text or '')[:500],
+        context=f"model {model_name} {operation}",
+    )
     return {
         "success": False,
-        "message": f"Failed to {operation} model: {response.text}"
+        "message": f"Failed to {operation} model '{model_name}'. Check server logs for details.",
     }, int(status_code) if status_code else 500
 
 
@@ -332,17 +369,17 @@ def start_model(model_name=None):
     model_name, err_resp = _resolve_model_name(model_name)
     if err_resp:
         return err_resp
+    limited = _rate_limit_response('model_operations')
+    if limited:
+        return limited
     try:
-        # Check if model is already running
         running_models = _get_ollama_service().get_running_models(force_refresh=True)
         if any(model['name'] == model_name for model in running_models):
             return {"success": True, "message": f"Model {model_name} is already running"}
 
-        # Check if Ollama service is running
         if not _get_ollama_service().get_service_status():
             return {"success": False, "message": "Ollama service is not running. Please start the service first."}, 503
 
-        # Use service method to check if error is transient
         def _is_transient_error(error_text):
             """Check if error is transient (connection forcibly closed, etc.)"""
             return _get_ollama_service().is_transient_error(error_text)
@@ -358,27 +395,9 @@ def start_model(model_name=None):
             # Avoid unbounded timeout growth across retries.
             timeout = min(int(timeout), 120)
 
-            # Load and merge per-model settings into warm generate request
-            # This ensures custom parameters are applied when the model is first loaded
-            warm_payload = {
-                "model": model_name,
-                "prompt": "Hello",
-                "stream": False,
-                "keep_alive": "24h"
-            }
-            try:
-                # Start with defaults, then apply user/custom settings
-                options = _get_ollama_service().get_default_settings()
-                model_settings_entry = _get_ollama_service().get_model_settings_with_fallback(model_name)
-                if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
-                    for k, v in model_settings_entry['settings'].items():
-                        options[k] = v
-                warm_payload["options"] = options
-            except _ROUTE_ERRORS as e:
-                current_app.logger.debug(f"Failed to apply per-model settings to warm start {model_name}: {e}")
+            warm_payload = build_warm_start_payload(_get_ollama_service(), model_name)
 
             try:
-                # Explicit timeout prevents hanging on unresponsive Ollama
                 response = _get_ollama_service()._session.post(
                     _get_ollama_url("generate"),
                     json=warm_payload,
@@ -386,15 +405,12 @@ def start_model(model_name=None):
                 )
 
                 if response.status_code == 200:
-                    # Record activity so the UI can distinguish actively used
-                    # models from those that are merely loaded in memory.
                     try:
                         _get_ollama_service().record_model_activity(model_name)
                     except _ROUTE_ERRORS:
                         pass
                     return {"success": True, "response": response}
 
-                # Check if it's a transient error - check both text and JSON
                 error_text = response.text
                 try:
                     error_json = response.json()
@@ -403,7 +419,6 @@ def start_model(model_name=None):
                 except _ROUTE_ERRORS:
                     pass
 
-                # Log the error for debugging
                 current_app.logger.debug(f"Attempt {retry_num + 1}/{max_retries + 1}: Response status {response.status_code}")
                 current_app.logger.debug(f"Error text: {error_text[:200]}")  # First 200 chars
                 current_app.logger.debug(f"Is transient: {_is_transient_error(error_text)}")
@@ -427,7 +442,6 @@ def start_model(model_name=None):
                     return _attempt_generate(retry_num + 1, max_retries, min(timeout + 30, 120))
                 raise
 
-        # Try to generate with the model to load it
         try:
             result = _attempt_generate()
 
@@ -438,22 +452,16 @@ def start_model(model_name=None):
                     )
                 except _ROUTE_ERRORS:
                     pass
-                # Clear the cache for running models to force a refresh
-                # This ensures the UI shows the model as loaded immediately
                 _get_ollama_service().clear_cache('running_models')
-                # Force immediate refresh to populate cache with current state
                 try:
                     _get_ollama_service().get_running_models(force_refresh=True)
                 except _ROUTE_ERRORS:
-                    pass  # Best-effort refresh, don't fail if it errors
+                    pass
                 return {"success": True, "message": f"Model {model_name} started successfully"}
 
-            # Handle specific errors
             error_result, status_code = _handle_model_error(result["response"], model_name, "start")
             if error_result["success"] is False:
-                # Try to pull the model first, then generate
                 try:
-                    # Pull timeout set to 10 minutes for large models
                     pull_response = _get_ollama_service()._session.post(
                         _get_ollama_url("pull"),
                         json={"name": model_name, "stream": False},
@@ -567,6 +575,9 @@ def stop_model(model_name=None):
     model_name, err_resp = _resolve_model_name(model_name)
     if err_resp:
         return err_resp
+    limited = _rate_limit_response('model_operations')
+    if limited:
+        return limited
     try:
         payload = request.get_json(silent=True) or {}
         force = bool(payload.get('force'))
@@ -669,6 +680,9 @@ def restart_model(model_name=None):
     model_name, err_resp = _resolve_model_name(model_name)
     if err_resp:
         return err_resp
+    limited = _rate_limit_response('model_operations')
+    if limited:
+        return limited
     try:
         # Verify Ollama service is running
         if not _get_ollama_service().get_service_status():
@@ -718,24 +732,9 @@ def restart_model(model_name=None):
 
         for attempt in range(max_retries):
             try:
-                # Warm start with extended keep_alive - apply per-model custom settings
-                start_payload = {
-                    "model": model_name,
-                    "prompt": "test",
-                    "stream": False,
-                    "keep_alive": "24h"
-                }
-                try:
-                    # Start with defaults, then apply user/custom settings
-                    options = _get_ollama_service().get_default_settings()
-                    model_settings_entry = _get_ollama_service().get_model_settings_with_fallback(model_name)
-                    if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
-                        for k, v in model_settings_entry['settings'].items():
-                            options[k] = v
-                    start_payload["options"] = options
-                except _ROUTE_ERRORS as e:
-                    current_app.logger.debug(f"Failed to apply per-model settings to restart warm start {model_name}: {e}")
-
+                start_payload = build_warm_start_payload(
+                    _get_ollama_service(), model_name, prompt='test',
+                )
                 start_response = _get_ollama_service()._session.post(
                     _get_ollama_url("generate"),
                     json=start_payload,
@@ -958,19 +957,8 @@ def get_combined_models():
             entry = by_name[name]
             entry['is_running'] = True
             entry['running_info'] = model
-            # If we don't yet have details, prefer running model details
             if 'details' not in entry and isinstance(model.get('details'), dict):
                 entry['details'] = model.get('details') or {}
-
-        # Optional debug logging to help diagnose UI vs backend mismatches
-        try:
-            current_app.logger.debug(
-                "[models.combined] total=%d names=%s",
-                len(by_name),
-                list(by_name.keys()),
-            )
-        except _ROUTE_ERRORS:
-            pass
 
         return {"models": list(by_name.values())}
     except _ROUTE_ERRORS as exc:
@@ -1174,6 +1162,9 @@ def get_ollama_version():
 @bp.route('/api/models/bulk/start', methods=['POST'])
 def bulk_start_models():
     """Start multiple models in bulk."""
+    limited = _rate_limit_response('model_operations')
+    if limited:
+        return limited
     try:
         data = request.get_json(silent=True) or {}
         model_names = data.get('models', [])
@@ -1189,23 +1180,7 @@ def bulk_start_models():
                 results.append({"model": model_name, "success": False, "error": msg})
                 continue
             try:
-                # Warm start: apply per-model custom settings
-                bulk_payload = {
-                    "model": model_name,
-                    "prompt": "Hello",
-                    "stream": False,
-                    "keep_alive": "24h"
-                }
-                try:
-                    options = _get_ollama_service().get_default_settings()
-                    model_settings_entry = _get_ollama_service().get_model_settings_with_fallback(model_name)
-                    if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
-                        for k, v in model_settings_entry['settings'].items():
-                            options[k] = v
-                    bulk_payload["options"] = options
-                except _ROUTE_ERRORS as e:
-                    current_app.logger.debug(f"Failed to apply per-model settings to bulk start {model_name}: {e}")
-
+                bulk_payload = build_warm_start_payload(svc, model_name)
                 response = svc._session.post(
                     _get_ollama_url("generate"),
                     json=bulk_payload,
@@ -1214,7 +1189,7 @@ def bulk_start_models():
                 results.append({
                     "model": model_name,
                     "success": response.status_code == 200,
-                    "error": response.text if response.status_code != 200 else None
+                    "error": None if response.status_code == 200 else 'Model start failed. Check server logs.',
                 })
             except _ROUTE_ERRORS as e:
                 results.append({"model": model_name, "success": False, "error": str(e)})
@@ -1230,69 +1205,43 @@ def chat():
     """
     Handle chat requests with Ollama models.
 
-    Supports streaming, optional attachments (images, PDF, Word, code snippets).
+    Supports multi-turn ``messages``, streaming, and optional attachments on the latest user turn.
     """
     try:
         data = request.get_json(silent=True) or {}
         model_name = data.get('model')
-        prompt = data.get('prompt')
         stream = data.get('stream', False)
-        context = data.get('context', [])
-        attachments = data.get('attachments')
 
         if not model_name:
             return {"error": "Model name is required"}, 400
 
-        if not (prompt or '').strip() and not attachments:
-            return {"error": "Enter a question or add an attachment"}, 400
+        is_valid, msg = InputValidator.validate_model_name(model_name)
+        if not is_valid:
+            return {"error": msg}, 400
 
-        # Verify model exists
         model_info = _get_ollama_service().get_model_info_cached(model_name)
         if not model_info:
             return {"error": f"Model '{model_name}' not found. Please ensure it's installed."}, 404
 
-        model_has_vision = model_info.get('has_vision')
-        if model_has_vision is None and isinstance(model_info.get('capabilities'), list):
-            caps = {str(c).lower() for c in model_info['capabilities']}
-            model_has_vision = bool(caps & {'vision', 'image', 'multimodal'})
-
-        try:
-            prepared = prepare_chat_from_attachments(
-                prompt or '',
-                attachments,
-                model_has_vision=model_has_vision,
-            )
-        except AttachmentError as exc:
-            return {"error": str(exc)}, 400
+        messages, err_body, err_status = prepare_ask_chat_messages(data, model_info)
+        if err_body is not None:
+            return err_body, err_status or 400
 
         chat_data = {
             "model": model_name,
-            "prompt": prepared["prompt"],
+            "messages": messages,
             "stream": stream,
+            "options": _merge_model_chat_options(model_name),
         }
-        if prepared.get("images"):
-            chat_data["images"] = prepared["images"]
-        if context:
-            chat_data["context"] = context
-
-        # Use service defaults then merge per-model recommended/ saved settings (global settings removed)
-        options = _get_ollama_service().get_default_settings()
-        # Merge per-model settings (fallback recommended if no saved entry)
-        try:
-            model_settings_entry = _get_ollama_service().get_model_settings_with_fallback(model_name)
-            if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
-                for k, v in model_settings_entry['settings'].items():
-                    options[k] = v
-        except _ROUTE_ERRORS as e:
-            current_app.logger.error("Failed to merge per-model settings for %s: %s", model_name, e)
-        chat_data["options"] = options
+        if _model_has_reasoning(model_info):
+            chat_data["think"] = True
 
         try:
             response = _get_ollama_service()._session.post(
-                _get_ollama_url("generate"),
+                _get_ollama_url("chat"),
                 json=chat_data,
                 timeout=120,
-                stream=stream
+                stream=stream,
             )
         except requests.exceptions.Timeout:
             return {"error": "Request timed out. Try a smaller model."}, 408
@@ -1300,8 +1249,6 @@ def chat():
             return {"error": "Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct."}, 503
 
         if response.status_code == 200:
-            # Record recent activity so the dashboard can show "running"
-            # for models that are actively handling chat traffic.
             try:
                 _get_ollama_service().record_model_activity(model_name)
             except _ROUTE_ERRORS:
@@ -1318,12 +1265,11 @@ def chat():
                 pass
             return response.json()
 
-        # Handle error responses
         error_result, status_code = _handle_model_error(response, model_name, "chat with")
         return error_result, status_code
 
-    except _ROUTE_ERRORS as e:
-        return {"error": f"Unexpected error: {str(e)}"}, 500
+    except _ROUTE_ERRORS:
+        return {"error": "Unexpected error during chat. Check server logs for details."}, 500
 
 
 @bp.route('/api/chat/agent', methods=['POST'])
@@ -1332,45 +1278,32 @@ def chat_agent():
     try:
         data = request.get_json(silent=True) or {}
         model_name = data.get('model')
-        prompt = data.get('prompt')
-        attachments = data.get('attachments')
 
         if not model_name:
             return {"error": "Model name is required"}, 400
-        if not (prompt or '').strip() and not attachments:
-            return {"error": "Enter a question or add an attachment"}, 400
+
+        is_valid, msg = InputValidator.validate_model_name(model_name)
+        if not is_valid:
+            return {"error": msg}, 400
 
         model_info = _get_ollama_service().get_model_info_cached(model_name)
         if not model_info:
             return {"error": f"Model '{model_name}' not found. Please ensure it's installed."}, 404
 
-        model_has_vision = model_info.get('has_vision')
-        if model_has_vision is None and isinstance(model_info.get('capabilities'), list):
-            caps = {str(c).lower() for c in model_info['capabilities']}
-            model_has_vision = bool(caps & {'vision', 'image', 'multimodal'})
+        if not _model_has_tools(model_info):
+            return {
+                "error": (
+                    f"Model '{model_name}' does not support tools. "
+                    "Web search and agent tools require a tool-capable model "
+                    "(e.g. qwen3, llama3.2, mistral with tools)."
+                ),
+            }, 400
 
-        try:
-            prepared = prepare_chat_from_attachments(
-                prompt or '',
-                attachments,
-                model_has_vision=model_has_vision,
-            )
-        except AttachmentError as exc:
-            return {"error": str(exc)}, 400
+        messages, err_body, err_status = prepare_ask_chat_messages(data, model_info)
+        if err_body is not None:
+            return err_body, err_status or 400
 
-        user_message: dict = {'role': 'user', 'content': prepared['prompt']}
-        if prepared.get('images'):
-            user_message['images'] = prepared['images']
-        messages = [user_message]
-
-        options = _get_ollama_service().get_default_settings()
-        try:
-            model_settings_entry = _get_ollama_service().get_model_settings_with_fallback(model_name)
-            if model_settings_entry and isinstance(model_settings_entry.get('settings'), dict):
-                for k, v in model_settings_entry['settings'].items():
-                    options[k] = v
-        except _ROUTE_ERRORS as e:
-            current_app.logger.error("Failed to merge per-model settings for %s: %s", model_name, e)
+        options = _merge_model_chat_options(model_name)
 
         allow_write = mcp_tools.mcp_allow_write()
         auth_svc = current_app.config.get('AUTH_SERVICE')
@@ -1400,8 +1333,8 @@ def chat_agent():
             stream_with_context(_generate()),
             content_type='application/x-ndjson',
         )
-    except _ROUTE_ERRORS as e:
-        return {"error": f"Unexpected error: {str(e)}"}, 500
+    except _ROUTE_ERRORS:
+        return {"error": "Unexpected error during agent chat. Check server logs for details."}, 500
 
 
 def _verify_model_deleted(model_name, max_attempts=5, delay_seconds=1):
@@ -1425,6 +1358,9 @@ def delete_model(model_name=None):
     model_name, err_resp = _resolve_model_name(model_name)
     if err_resp:
         return err_resp
+    limited = _rate_limit_response('model_operations')
+    if limited:
+        return limited
     try:
         svc = _get_ollama_service()
         # Unload model first if it is running (Ollama may refuse or fail to delete loaded models)
@@ -1564,6 +1500,40 @@ def get_model_performance(model_name):
         return {"error": str(e)}, 500
 
 
+@bp.route('/api/models/benchmark', methods=['POST'])
+def benchmark_all_models():
+    """Run the benchmark suite on all installed models (slow — may take several minutes)."""
+    limited = _rate_limit_response('model_operations')
+    if limited:
+        return limited
+    try:
+        body = request.get_json(silent=True) or {}
+        raw_names = body.get('models')
+        names = None
+        if isinstance(raw_names, list):
+            names = [str(n).strip() for n in raw_names if str(n).strip()]
+        result = _get_ollama_service().run_all_model_benchmarks(model_names=names)
+        return result
+    except _ROUTE_ERRORS as e:
+        return {"error": str(e)}, 500
+
+
+@bp.route('/api/models/benchmark/<model_name>', methods=['POST'])
+def benchmark_model(model_name):
+    """Run the benchmark suite on a single model."""
+    err, status = _validate_model_name(model_name)
+    if err is not None:
+        return err, status or 400
+    limited = _rate_limit_response('model_operations')
+    if limited:
+        return limited
+    try:
+        result = _get_ollama_service().run_model_benchmark(model_name)
+        return result
+    except _ROUTE_ERRORS as e:
+        return {"error": str(e)}, 500
+
+
 @bp.route('/api/system/stats/history')
 def get_system_stats_history():
     """Get historical system statistics."""
@@ -1691,6 +1661,9 @@ def api_pull_model(model_name=None):
     model_name, err_resp = _resolve_model_name(model_name)
     if err_resp:
         return err_resp
+    limited = _rate_limit_response('model_pull')
+    if limited:
+        return limited
     stream = request.args.get('stream', 'false').lower() == 'true'
     try:
         if stream:

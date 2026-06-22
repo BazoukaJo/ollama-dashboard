@@ -192,14 +192,3 @@ class PerformanceMetrics:
         """Get recent performance anomalies/alerts."""
         with self.lock:
             return list(self.performance_alerts)[-20:]  # Last 20 alerts
-
-
-# Global rate limiters for different operation types
-RATE_LIMITERS = {
-    "model_operations": RateLimiter(max_requests=5, window_seconds=60),  # 5 ops/min
-    "model_pull": RateLimiter(max_requests=2, window_seconds=300),  # 2 pulls/5min
-    "background_updates": RateLimiter(max_requests=6, window_seconds=60),  # 6 updates/min
-}
-
-# Global performance metrics
-PERFORMANCE_METRICS = PerformanceMetrics(window_size=100)

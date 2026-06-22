@@ -68,8 +68,9 @@ def test_match_profile_coding_before_general_qwen():
 
 
 def test_openai_error_sse_lines():
-    from app.services.v1_native_bridge import openai_error_sse_lines
     import json
+
+    from app.services.v1_native_bridge import openai_error_sse_lines
 
     lines = list(openai_error_sse_lines('boom', status_code=503, model='m'))
     assert len(lines) == 3

@@ -1,6 +1,6 @@
 # Ollama Dashboard — Complete Guide
 
-Detailed setup, configuration, proxy and MCP integration, and development reference. For a quick start, see the [README](../README.md).
+Detailed setup, configuration, proxy and MCP integration, and development reference. For a quick start, see the [README](../README.md). Browser-side customization (poll intervals, Ask dock, filters) is in [UI customization](UI.md).
 
 ---
 
@@ -242,7 +242,7 @@ Optional **write** tools (`start_model`, `stop_model`) are off unless you set
 **Ask? agent mode:** On the dashboard, **Ask?** on a model with **tool support** (`has_tools`)
 automatically uses the same tool registry via `POST /api/chat/agent` (server-side tool loop).
 The modal shows an **Agent mode** badge and live tool steps. Plain models still use
-`POST /api/chat` → Ollama `/api/generate` without tools.
+`POST /api/chat` → Ollama `/api/chat` without tools.
 
 **Verify MCP:**
 
@@ -271,11 +271,13 @@ Implementation: `app/services/mcp_tools.py` (shared registry),
 | `OLLAMA_PROXY_MAX_PREDICT_AGENT` | `32768` | Max output tokens for agent/tool turns (long edits) |
 | `OLLAMA_COPILOT_ALLOW_THINKING` | `false` | Global default for **Auto** reasoning (per-model **Reasoning** setting overrides) |
 | `OLLAMA_PROXY_MAX_RESPONSE_CHARS` | `96000` | Max chars in non-streaming responses returned to IDEs |
-| `OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS` | `10` | Idle seconds before sending an SSE keep-alive comment while a model loads/stalls (keeps VS Code Copilot from timing out on cold loads) |
+| `OLLAMA_PROXY_STREAM_HEARTBEAT_SECONDS` | `5` | Idle seconds before sending SSE keep-alives (comment + empty content chunk) while a model loads/stalls (keeps VS Code Copilot from timing out on cold loads) |
 | `OLLAMA_PROXY_STREAM_FIRST_BYTE_GRACE_SECONDS` | `3` | Seconds to wait for a fast upstream error before committing the keep-alive stream |
 | `OLLAMA_V1_PASSTHROUGH` | `false` | Set `true` to forward `/v1/chat/completions` to Ollama `/v1` instead of bridging to `/api/chat` |
 | `CONTEXT_TRIM_ENABLED` | `true` | Auto-trim long prompts to fit `num_ctx` |
-| `OLLAMA_COPILOT_PRELOAD_CTX` | `true` | Preload model context before first v1 chat request |
+| `COPILOT_PREWARM_MODEL` | *(unset)* | Model tag to preload on dashboard startup (e.g. `qwen3:8b`) |
+| `COPILOT_PREWARM_ON_START` | `true` | When `COPILOT_PREWARM_MODEL` is set, warm-load that model on startup |
+| *(API)* | — | `POST /api/proxy/prewarm` — manually trigger a prewarm for a model |
 
 Original model names are kept. **Every** saved option in `options` is applied — including
 `presence_penalty`, `frequency_penalty`, `typical_p`, and `penalize_newline` (not valid in a
@@ -422,9 +424,10 @@ restart_app.bat release    REM force restart in release mode
 - `start.bat` / `start_dev.bat` check port 5000 first. If the **same** mode is already
   running, they report it and exit. If the **other** mode is running, they stop it and start
   the requested mode.
-- **Release** (`start.bat`) starts Waitress as a hidden background process. Startup and server
-  logs go to `data\dashboard-release-launch.log` and `data\dashboard-release-error.log`. Use
-  `start.bat console` for a visible launcher when troubleshooting.
+- **Release** (`start.bat`) starts Waitress in a **minimized** background window (App Control
+  friendly — no WScript or hidden PowerShell process APIs). Startup and server logs go to
+  `data\dashboard-release-launch.log` and `data\dashboard-release-error.log`. Use
+  `start.bat console` for a visible foreground server when troubleshooting.
 - **Development** (`start_dev.bat`) keeps a console open with Flask debug output.
 - `restart_app.bat` detects the live process mode (`release`, `dev`, or `cli` from
   `ollama_dashboard_cli.py`) before choosing which start script to open.
@@ -451,7 +454,7 @@ The service runs a background thread for:
 | System stats | 1s       | CPU, RAM, VRAM; cached for `/api/system/stats` (1s TTL) |
 | Health ping  | ~15s     | Lightweight Ollama check for `/api/health` recovery     |
 
-**Model list** (running and available) is **not** polled in the background; it is fetched when you load the page or click **Refresh**. The frontend polls system stats every 1s and health every 15s.
+The browser polls **system stats** every 1s (`data-stats-poll-interval` on the dashboard page) and **model lists** every ~10s (`data-model-poll-interval`). Click **Refresh** in the header for an immediate update. See [UI customization](UI.md#refresh-intervals).
 
 The background thread is automatically managed and restarts on crash.
 
@@ -462,23 +465,15 @@ The background thread is automatically managed and restarts on crash.
 ### Testing
 
 ```bash
-# Run all tests
 python -m pytest -q
-
-# Lint (same as CI lint job)
-pip install ruff && ruff check app tests scripts
-
-# Optional: same checks as tests/test_smoke_script.py (also run by pytest)
+node tests/test_ask_message_format.js
+pip install ruff && ruff check app tests scripts ollama_dashboard_cli.py
 python scripts/smoke_check.py
-
-# Run specific test
 python -m pytest tests/test_start_model_pytest.py::test_start_model_success -q
-
-# Coverage report
 python -m pytest --cov=app --cov-report=html
 ```
 
-CI runs `pytest -q` on Ubuntu and Windows; smoke checks run inside pytest via `tests/test_smoke_script.py` (see `.github/workflows/ci.yml`).
+CI runs `pytest -q` on Ubuntu and Windows, Ruff lint, and `node tests/test_ask_message_format.js` (see `.github/workflows/ci.yml`).
 
 ### Workflow
 

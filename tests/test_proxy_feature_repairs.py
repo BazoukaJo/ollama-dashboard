@@ -14,7 +14,6 @@ import json
 
 import pytest
 import requests
-
 from app.services.capabilities import detect_capabilities, ensure_capability_flags
 from app.services.client_payload_compat import (
     cap_num_predict,

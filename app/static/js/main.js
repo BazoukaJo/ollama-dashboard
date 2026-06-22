@@ -2,7 +2,6 @@
  * Main JavaScript functionality for Ollama Dashboard
  */
 
-// Model data poll interval (seconds) - read from DOM or default 10
 function getPollIntervalSec() {
   const el = document.querySelector(".dashboard-header-meta-group[data-model-poll-interval]");
   const val = el && el.dataset.modelPollInterval;
@@ -20,200 +19,6 @@ function getStatsPollIntervalSec() {
 
 let refreshCountdown = 10;
 
-const DOWNLOAD_STATE_KEY = "ollamaDashboardActiveDownloads";
-const DOWNLOAD_RESUME_POLL_MS = 2500;
-const DOWNLOAD_RESUME_TIMEOUT_MS = 7200000;
-const _downloadResumeTimers = new Map();
-
-function getActiveDownloads() {
-  try {
-    const raw = sessionStorage.getItem(DOWNLOAD_STATE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (_) {
-    return {};
-  }
-}
-
-function saveActiveDownloads(map) {
-  try {
-    sessionStorage.setItem(DOWNLOAD_STATE_KEY, JSON.stringify(map || {}));
-  } catch (_) {}
-}
-
-function setDownloadState(modelName, state) {
-  const name = String(modelName || "").trim();
-  if (!name) return;
-  const all = getActiveDownloads();
-  if (!state) {
-    delete all[name];
-  } else {
-    all[name] = { ...state, updatedAt: Date.now() };
-  }
-  saveActiveDownloads(all);
-}
-
-function clearDownloadState(modelName) {
-  setDownloadState(modelName, null);
-  const t = _downloadResumeTimers.get(modelName);
-  if (t) {
-    clearInterval(t);
-    _downloadResumeTimers.delete(modelName);
-  }
-}
-
-function hasAnyActiveDownload() {
-  return Object.keys(getActiveDownloads()).length > 0;
-}
-
-function augmentAvailableModelsForDownloads(models) {
-  const list = Array.isArray(models) ? models.slice() : [];
-  const apiNames = new Set(
-    list.map((m) => (m && m.name ? String(m.name).trim() : "")).filter(Boolean),
-  );
-  for (const [name, state] of Object.entries(getActiveDownloads())) {
-    if (!name || apiNames.has(name)) continue;
-    list.unshift({
-      name,
-      details: { family: "Unknown", parameter_size: "Unknown" },
-      formatted_size: state.percent != null ? "Downloading…" : "Downloading…",
-      context_length: "—",
-      _downloadPlaceholder: true,
-    });
-  }
-  return list;
-}
-
-function applyDownloadStateToCard(modelName, state) {
-  const esc = cssEscape(modelName);
-  const card =
-    document.querySelector(
-      `#availableModelsContainer .model-card[data-model-name="${esc}"]`,
-    ) || document.querySelector(`.model-card[data-model-name="${esc}"]`);
-  if (!card || !state) return;
-
-  card.dataset.downloadActive = "true";
-  const button =
-    card.querySelector(".btn-dashboard-download") ||
-    card.querySelector(".model-actions--available .btn-primary");
-  const progressContainer = card.querySelector(".download-progress");
-  const progressBar = progressContainer
-    ? progressContainer.querySelector(".progress-bar")
-    : null;
-  const progressText = progressContainer
-    ? progressContainer.querySelector("small")
-    : null;
-
-  if (progressContainer) {
-    progressContainer.classList.remove("d-none");
-    progressContainer.style.display = "block";
-  }
-  if (button) {
-    button.disabled = true;
-    const msg = state.message || "Downloading...";
-    if (state.status === "complete") {
-      button.innerHTML = '<i class="fas fa-check me-1"></i>Downloaded';
-    } else {
-      button.innerHTML = `<i class="fas fa-download me-1"></i>${typeof escapeHtml === "function" ? escapeHtml(msg) : msg}`;
-    }
-  }
-  const percent =
-    state.percent != null && !Number.isNaN(Number(state.percent))
-      ? Math.max(0, Math.min(100, Number(state.percent)))
-      : null;
-  if (percent != null) {
-    if (progressBar) {
-      progressBar.style.width = `${percent}%`;
-      progressBar.setAttribute("aria-valuenow", String(percent));
-    }
-    if (progressText) {
-      progressText.textContent = `${percent}%`;
-    }
-  } else if (progressText && state.status === "downloading") {
-    progressText.textContent = "…";
-  }
-}
-
-function restoreAllDownloadUi() {
-  for (const [name, state] of Object.entries(getActiveDownloads())) {
-    ensureAvailableCardForDownload(name);
-    applyDownloadStateToCard(name, state);
-  }
-}
-
-function pollForDownloadCompletion(modelName) {
-  const name = String(modelName || "").trim();
-  if (!name || _downloadResumeTimers.has(name)) return;
-
-  const started = Date.now();
-  const timer = setInterval(async function () {
-    if (Date.now() - started > DOWNLOAD_RESUME_TIMEOUT_MS) {
-      clearDownloadState(name);
-      return;
-    }
-    try {
-      const response = await fetch("/api/models/available");
-      const ar = await readApiJson(response);
-      if (!ar.responseOk) return;
-      const models = Array.isArray(ar.data?.models) ? ar.data.models : [];
-      const found = models.some(
-        (m) => m && String(m.name || "").trim() === name,
-      );
-      if (found) {
-        clearDownloadState(name);
-        const card = document.querySelector(
-          `#availableModelsContainer .model-card[data-model-name="${cssEscape(name)}"]`,
-        );
-        if (card) delete card.dataset.downloadActive;
-        if (typeof updateModelData === "function") {
-          void updateModelData();
-        }
-      }
-    } catch (_) {}
-  }, DOWNLOAD_RESUME_POLL_MS);
-
-  _downloadResumeTimers.set(name, timer);
-}
-
-function resumeActiveDownloads() {
-  const active = getActiveDownloads();
-  for (const [name, state] of Object.entries(active)) {
-    ensureAvailableCardForDownload(name);
-    applyDownloadStateToCard(name, state);
-    if (state.status === "downloading") {
-      pollForDownloadCompletion(name);
-    }
-  }
-}
-
-function scheduleReloadUnlessDownloading() {
-  if (typeof hasAnyActiveDownload === "function" && hasAnyActiveDownload()) {
-    const started = Date.now();
-    const wait = setInterval(function () {
-      if (!hasAnyActiveDownload()) {
-        clearInterval(wait);
-        location.reload();
-        return;
-      }
-      if (Date.now() - started > DOWNLOAD_RESUME_TIMEOUT_MS) {
-        clearInterval(wait);
-        location.reload();
-      }
-    }, 2000);
-    return;
-  }
-  location.reload();
-}
-
-window.hasAnyActiveDownload = hasAnyActiveDownload;
-window.scheduleReloadUnlessDownloading = scheduleReloadUnlessDownloading;
-window.resumeActiveDownloads = resumeActiveDownloads;
-
-function resetRefreshCountdown() {
-  /* Header refresh countdown removed; model poll uses fixed interval. */
-}
-
-// Background model list refresh (no header countdown UI).
 function updateTimes() {
   const intervalSec = getPollIntervalSec();
   setInterval(function () {
@@ -222,8 +27,6 @@ function updateTimes() {
     }
   }, intervalSec * 1000);
 }
-
-// Model management functions
 
 /** Refresh all dashboard data (models + stats) without full page reload. */
 function refreshDashboardData() {
@@ -560,7 +363,6 @@ async function showModelInfo(modelName) {
     const info = ir.data;
 
     {
-      // Fetch backend cards data to ensure capability flags match the main cards
       let flagsFromCards = null;
       const normalizeName = (n) => {
         if (!n || typeof n !== "string") return "";
@@ -568,7 +370,6 @@ async function showModelInfo(modelName) {
       };
       const stripTag = (n) => n.replace(/:[^\s]+$/, "");
       const baseSegment = (n) => {
-        // Take last path segment if name contains slashes
         const parts = n.split("/");
         return parts[parts.length - 1];
       };
@@ -624,7 +425,6 @@ async function showModelInfo(modelName) {
           if (dmatch) flagsFromCards = dmatch;
         }
       } catch (e) {
-        // Non-fatal: fallback to info-derived flags below
       }
 
       const details = info.details || {};
@@ -633,7 +433,6 @@ async function showModelInfo(modelName) {
         flagsFromCards || info,
       );
       const capabilityBadges = renderCapabilityBadges(capabilityPayload);
-      // flagsSourceLabel removed after verification
       const modelfileBlock = info.modelfile
         ? `<pre class="model-code-block">${escapeHtml(info.modelfile)}</pre>`
         : '<span class="text-muted">No modelfile provided</span>';
@@ -745,8 +544,6 @@ async function showModelInfo(modelName) {
     showNotification("Failed to get model info: " + error.message, "error");
   }
 }
-
-// Ask? modal — see static/js/modules/askModal.js (openAskModal, sendAskModelQuestion)
 
 function buildModelSummary(info, details, modelName) {
   const summaryItems = [];
@@ -875,15 +672,6 @@ function renderCapabilityBadges(info) {
     .join("");
 }
 
-// Settings logic extracted to modules/settings.js; legacy global kept via window.openModelSettingsModal
-
-// Service control logic extracted to modules/serviceControl.js
-
-// Model settings related helper functions removed (submit/delete) now in settings.js
-
-// Health status & service control update functions extracted to serviceControl.js
-// submitModelSettings & deleteModelSettings moved to settings.js
-
 function jsonToTable(json, level = 0) {
   if (json === null || json === undefined) {
     return '<span class="text-muted">null</span>';
@@ -969,48 +757,6 @@ function jsonToTable(json, level = 0) {
   return String(json);
 }
 
-// Moved escapeHtml and cssEscape to modules/utils.js; legacy globals preserved there.
-
-function showNotification(message, type) {
-  const notification = document.createElement("div");
-  const isError = type === "error" || type === "danger";
-  const alertClass = isError
-    ? "danger"
-    : type === "success"
-      ? "success"
-      : "info";
-  notification.className = `alert alert-${alertClass} alert-dismissible fade show position-fixed`;
-  notification.style.cssText =
-    "top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 500px;";
-
-  // Add copy button for error messages
-  const copyButton = isError
-    ? `
-    <button type="button" class="btn btn-sm btn-outline-light" onclick="copyErrorToClipboard(this)"
-            style="padding: 0.25rem 0.5rem; font-size: 0.75rem; flex-shrink: 0;" data-dashboard-tooltip="Copy error to clipboard">
-      <i class="fas fa-copy"></i> Copy
-    </button>
-  `
-    : "";
-
-  notification.innerHTML = `
-        <div style="display: flex; align-items: start; gap: 10px;">
-          <div style="flex: 1; min-width: 0;" data-error-message="${message.replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}">${message}</div>
-          <div style="display: flex; gap: 5px; align-items: center; flex-shrink: 0;">
-            ${copyButton}
-            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
-          </div>
-        </div>
-    `;
-  document.body.appendChild(notification);
-
-  setTimeout(() => {
-    if (notification.parentNode) {
-      notification.remove();
-    }
-  }, 5000);
-}
-
 function afterModelCardsRendered() {
   if (
     window.modelCardActions &&
@@ -1076,34 +822,6 @@ function ensureCapabilityFilterButtons() {
   });
 }
 
-function copyErrorToClipboard(button) {
-  const errorDiv = button
-    .closest(".alert")
-    .querySelector("[data-error-message]");
-  const errorMessage = errorDiv.getAttribute("data-error-message");
-
-  navigator.clipboard
-    .writeText(errorMessage)
-    .then(() => {
-      const originalContent = button.innerHTML;
-      button.innerHTML = '<i class="fas fa-check"></i> Copied!';
-      button.disabled = true;
-
-      setTimeout(() => {
-        button.innerHTML = originalContent;
-        button.disabled = false;
-      }, 2000);
-    })
-    .catch((err) => {
-      console.error("Failed to copy error:", err);
-      button.innerHTML = '<i class="fas fa-times"></i> Failed';
-      setTimeout(() => {
-        button.innerHTML = '<i class="fas fa-copy"></i> Copy';
-      }, 2000);
-    });
-}
-
-// Capability state: green=enabled, grey=disabled (known not functional), yellow=unknown
 function capState(val) {
   if (val === true) return "enabled";
   if (val === false) return "disabled";
@@ -1115,7 +833,6 @@ function capTitle(val, label) {
   return `${label}: Unknown`;
 }
 
-// Capability rendering using backend-provided flags
 /** Backend + API may expose has_custom_settings as boolean; normalize for UI. */
 function modelHasCustomSettings(model) {
   if (!model || typeof model !== "object") return false;
@@ -1227,7 +944,6 @@ function buildCapabilityPayloadForModal(src) {
   };
 }
 
-// Historical data storage for timelines
 const timelineData = {
   cpu: [],
   memory: [],
@@ -1236,27 +952,23 @@ const timelineData = {
   disk: [],
 };
 
-const MAX_TIMELINE_POINTS = 60; // 60 seconds of data
+const MAX_TIMELINE_POINTS = 60;
 
-// System Resources sparklines — CPU / memory / disk palette
 const TIMELINE_COLOR_CPU = "#3b82f6";
 const TIMELINE_COLOR_MEMORY = "#22c55e";
 const TIMELINE_COLOR_VRAM = "#06b6d4";
 const TIMELINE_COLOR_GPU3D = "#f59e0b";
 const TIMELINE_COLOR_DISK = "#a855f7";
 
-// Timeline drawing function
 function drawTimeline(canvas, data, color) {
   const ctx = canvas.getContext("2d");
   const width = canvas.width;
   const height = canvas.height;
 
-  // Clear canvas
   ctx.clearRect(0, 0, width, height);
 
   if (data.length < 2) return;
 
-  // Draw background grid
   ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -1268,10 +980,9 @@ function drawTimeline(canvas, data, color) {
   ctx.lineTo(width, height * 0.75);
   ctx.stroke();
 
-  // Fill area under the line
   ctx.fillStyle = color.replace("rgb", "rgba").replace(")", ", 0.3)");
   ctx.beginPath();
-  ctx.moveTo(0, height); // Start from bottom-left
+  ctx.moveTo(0, height);
 
   const stepX = width / (data.length - 1);
   for (let i = 0; i < data.length; i++) {
@@ -1280,11 +991,10 @@ function drawTimeline(canvas, data, color) {
     ctx.lineTo(x, y);
   }
 
-  ctx.lineTo(width, height); // Close path to bottom-right
+  ctx.lineTo(width, height);
   ctx.closePath();
   ctx.fill();
 
-  // Draw timeline line
   ctx.strokeStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -1301,7 +1011,6 @@ function drawTimeline(canvas, data, color) {
   }
   ctx.stroke();
 
-  // Draw current value point
   const currentValue = data[data.length - 1];
   const currentX = (data.length - 1) * stepX;
   const currentY = height - (currentValue / 100) * height;
@@ -1312,7 +1021,6 @@ function drawTimeline(canvas, data, color) {
   ctx.fill();
 }
 
-// System stats update function
 async function updateSystemStats() {
   try {
     const fetchFn = typeof fetchWithTimeout === "function" ? fetchWithTimeout : fetch;
@@ -1355,7 +1063,6 @@ async function updateSystemStats() {
         : 0;
 
     {
-      // Update percentages
       const cpuPercentEl = document.getElementById("cpuPercent");
       const memoryPercentEl = document.getElementById("memoryPercent");
       const vramPercentEl = document.getElementById("vramPercent");
@@ -1376,14 +1083,12 @@ async function updateSystemStats() {
       if (diskActivityPercentEl)
         diskActivityPercentEl.textContent = `${diskActivity.toFixed(1)}%`;
 
-      // Store historical data
       timelineData.cpu.push(cpu);
       timelineData.memory.push(memPct);
       timelineData.vram.push(vramTotal > 0 ? vramPct : 0);
       timelineData.gpu3d.push(typeof vram.gpu_3d === "number" ? gpu3d : 0);
       timelineData.disk.push(diskActivity);
 
-      // Limit data points
       if (timelineData.cpu.length > MAX_TIMELINE_POINTS) {
         timelineData.cpu.shift();
         timelineData.memory.shift();
@@ -1392,7 +1097,6 @@ async function updateSystemStats() {
         timelineData.disk.shift();
       }
 
-      // Update timelines
       const cpuCanvas = document.getElementById("cpuTimeline");
       const memoryCanvas = document.getElementById("memoryTimeline");
       const vramCanvas = document.getElementById("vramTimeline");
@@ -1410,7 +1114,6 @@ async function updateSystemStats() {
       if (diskCanvas)
         drawTimeline(diskCanvas, timelineData.disk, TIMELINE_COLOR_DISK);
 
-      // Update last update time
       const lastUpdateTimeEl = document.getElementById("lastUpdateTime");
       if (lastUpdateTimeEl)
         lastUpdateTimeEl.textContent = new Date().toLocaleTimeString();
@@ -1423,10 +1126,8 @@ async function updateSystemStats() {
 let _versionPollCounter = 0;
 let _updateModelDataInFlight = false;
 const _API_TIMEOUT_MS = 15000;
-// Version fetch every N model polls (default poll interval 10s from data-poll-interval → ~120s).
 const VERSION_POLL_EVERY_N = 12;
 
-// Model data update function
 async function updateModelData() {
   if (_updateModelDataInFlight) return;
   _updateModelDataInFlight = true;
@@ -1479,8 +1180,6 @@ async function updateModelData() {
       console.log("Failed to update Ollama version:", error);
     }
   }
-
-  resetRefreshCountdown();
 }
 
 function _escModelCard(s) {
@@ -1536,13 +1235,11 @@ function updateRunningModelsDisplay(models) {
   );
   if (!runningModelsContainer) return;
 
-  // Update the count display
   const countEl = document.getElementById("runningModelsCount");
   if (countEl) {
     countEl.textContent = models.length;
   }
 
-  // Rebuild the running models list from the latest API payload
   if (!models || models.length === 0) {
     runningModelsContainer.innerHTML = "";
     return;
@@ -1578,9 +1275,34 @@ function updateRunningModelsDisplay(models) {
         ? window.modelCards.buildSpecsRowsRunning(model, cardIndex)
         : "";
 
-    return `
+  const visionDataAttr =
+    model?.has_vision === true
+      ? ' data-has-vision="true"'
+      : model?.has_vision === false
+        ? ' data-has-vision="false"'
+        : "";
+  const toolsDataAttr =
+    model?.has_tools === true
+      ? ' data-has-tools="true"'
+      : model?.has_tools === false
+        ? ' data-has-tools="false"'
+        : "";
+  const reasoningDataAttr =
+    model?.has_reasoning === true
+      ? ' data-has-reasoning="true"'
+      : model?.has_reasoning === false
+        ? ' data-has-reasoning="false"'
+        : "";
+  const moeDataAttr =
+    model?.has_moe === true
+      ? ' data-has-moe="true"'
+      : model?.has_moe === false
+        ? ' data-has-moe="false"'
+        : "";
+
+  return `
       <div class="col">
-        <div class="model-card h-100 model-card--running" data-model-name="${safeDataName}">
+        <div class="model-card h-100 model-card--running" data-model-name="${safeDataName}"${visionDataAttr}${toolsDataAttr}${reasoningDataAttr}${moeDataAttr}>
           <div class="model-header model-card-head">
             <div class="model-icon-wrapper">
               <i class="fas fa-brain model-icon-main"></i>
@@ -1670,6 +1392,18 @@ function buildAvailableModelCardHTML(model) {
       : model?.has_vision === false
         ? ' data-has-vision="false"'
         : "";
+  const toolsDataAttr =
+    model?.has_tools === true
+      ? ' data-has-tools="true"'
+      : model?.has_tools === false
+        ? ' data-has-tools="false"'
+        : "";
+  const reasoningDataAttr =
+    model?.has_reasoning === true
+      ? ' data-has-reasoning="true"'
+      : model?.has_reasoning === false
+        ? ' data-has-reasoning="false"'
+        : "";
   const moeDataAttr =
     model?.has_moe === true
       ? ' data-has-moe="true"'
@@ -1679,7 +1413,7 @@ function buildAvailableModelCardHTML(model) {
 
   return `
       <div class="col">
-        <div class="model-card h-100" data-model-name="${safeDataName}"${visionDataAttr}${moeDataAttr}>
+        <div class="model-card h-100" data-model-name="${safeDataName}"${visionDataAttr}${toolsDataAttr}${reasoningDataAttr}${moeDataAttr}>
           <div class="model-header model-card-head">
             <div class="model-icon-wrapper">
               <i class="fas fa-box model-icon-main"></i>
@@ -1808,13 +1542,6 @@ function updateVersionDisplay(version) {
   }
 }
 
-// updateModelMemoryDisplay removed (was already a no-op; call eliminated from polling)
-
-// Service management functions moved to serviceControl.js
-
-// updateHealthStatus & updateServiceControlButtons moved to serviceControl.js
-
-// System stats: dedicated fast poll (data-stats-poll-interval on .compact-system-resources).
 document.addEventListener("DOMContentLoaded", function () {
   const statsMs =
     typeof getStatsPollIntervalSec === "function"
@@ -2048,234 +1775,6 @@ document.addEventListener("DOMContentLoaded", function () {
   );
 });
 
-function ensureAvailableCardForDownload(modelName) {
-  const esc = cssEscape(modelName);
-  const availableContainer = document.getElementById("availableModelsContainer");
-  let card = availableContainer
-    ? availableContainer.querySelector(
-        `.model-card[data-model-name="${esc}"]`,
-      )
-    : null;
-  if (card) return card;
-
-  if (!availableContainer || typeof buildAvailableModelCardHTML !== "function") {
-    return document.querySelector(`.model-card[data-model-name="${esc}"]`);
-  }
-
-  const placeholder = {
-    name: modelName,
-    details: { family: "Unknown", parameter_size: "Unknown" },
-    formatted_size: "Downloading…",
-    context_length: "—",
-  };
-  const cardHtml = buildAvailableModelCardHTML(placeholder);
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = cardHtml.trim();
-  const col = wrapper.firstElementChild;
-  if (col) {
-    availableContainer.insertBefore(col, availableContainer.firstChild);
-    card = availableContainer.querySelector(
-      `.model-card[data-model-name="${esc}"]`,
-    );
-    const countEl = document.getElementById("availableModelsCount");
-    if (countEl) {
-      const n = availableContainer.querySelectorAll(
-        ".model-card[data-model-name]",
-      ).length;
-      countEl.textContent = String(n);
-    }
-    afterModelCardsRendered();
-    applyCapabilityFilters("availableModelsContainer");
-  }
-  return card;
-}
-
-async function pullModel(modelName) {
-  let card = ensureAvailableCardForDownload(modelName);
-  if (!card) {
-    card = document.querySelector(
-      `.model-card[data-model-name="${cssEscape(modelName)}"]`,
-    );
-  }
-  const button = card
-    ? card.querySelector(".btn-dashboard-download") ||
-      card.querySelector(".model-actions--available .btn-primary")
-    : null;
-  const progressContainer = card
-    ? card.querySelector(".download-progress")
-    : null;
-  const progressBar = progressContainer
-    ? progressContainer.querySelector(".progress-bar")
-    : null;
-  const progressText = progressContainer
-    ? progressContainer.querySelector("small")
-    : null;
-  const originalText = button ? button.innerHTML : null;
-
-  setDownloadState(modelName, {
-    status: "downloading",
-    percent: 0,
-    message: "Starting download...",
-  });
-
-  if (button) {
-    button.innerHTML =
-      '<i class="fas fa-spinner fa-spin me-1"></i>Downloading...';
-    button.disabled = true;
-  }
-
-  if (progressContainer) {
-    progressContainer.classList.remove("d-none");
-    progressContainer.style.display = "block";
-  }
-  if (card) card.dataset.downloadActive = "true";
-
-  showNotification(
-    `Starting download for ${modelName}. This may take a while...`,
-    "info",
-  );
-
-  try {
-    // Step 1: Pull model with streaming status updates
-    const pullResp = await fetch(
-      modelActionUrl("pull", modelName, { stream: "true" }),
-      { method: "POST" },
-    );
-    if (!pullResp.ok) {
-      const pr = await readApiJson(pullResp);
-      throw new Error(
-        pr.message || `Failed to start download (${pullResp.status})`,
-      );
-    }
-
-    let pullSucceeded = false;
-    let pullMessage = "Download finished";
-
-    if (pullResp.body) {
-      const reader = pullResp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      const handleEvents = (eventStrings) => {
-        for (const event of eventStrings) {
-          const dataLine = event.trim().replace(/^data:\s*/, "");
-          if (!dataLine) continue;
-
-          let payload;
-          try {
-            payload = JSON.parse(dataLine);
-          } catch (e) {
-            console.warn("Failed to parse pull event", e, dataLine);
-            continue;
-          }
-
-          if (payload.event === "status") {
-            const msg = payload.message || "Downloading...";
-            let percent = null;
-            if (payload.total && payload.completed !== undefined) {
-              percent = Math.round((payload.completed / payload.total) * 100);
-            }
-            setDownloadState(modelName, {
-              status: "downloading",
-              percent,
-              message: msg,
-            });
-            if (button) {
-              button.innerHTML = `<i class="fas fa-download me-1"></i>${msg}`;
-            }
-
-            if (percent != null) {
-              if (progressBar) {
-                progressBar.style.width = `${percent}%`;
-                progressBar.setAttribute("aria-valuenow", percent);
-              }
-              if (progressText) {
-                progressText.textContent = `${percent}%`;
-              }
-            }
-          } else if (payload.event === "error") {
-            throw new Error(payload.message || "Pull failed");
-          } else if (payload.event === "done") {
-            pullSucceeded = payload.success !== false;
-            pullMessage = payload.message || pullMessage;
-            setDownloadState(modelName, {
-              status: "complete",
-              percent: 100,
-              message: pullMessage,
-            });
-            if (progressBar) {
-              progressBar.style.width = "100%";
-              progressBar.setAttribute("aria-valuenow", 100);
-            }
-            if (progressText) {
-              progressText.textContent = "100%";
-            }
-          }
-        }
-      };
-
-      // Process Server-Sent Events from the streaming pull endpoint
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const events = buffer.split("\n\n");
-        buffer = events.pop();
-        handleEvents(events);
-      }
-
-      if (buffer.trim()) {
-        handleEvents([buffer]);
-      }
-    } else {
-      // Fallback for environments without streaming support
-      const fallback = await fetch(modelActionUrl("pull", modelName), {
-        method: "POST",
-      });
-      const fr = await readApiJson(fallback);
-      const fallbackResult = fr.responseOk ? fr.data : {};
-      pullSucceeded = !!fallbackResult.success;
-      pullMessage = fallbackResult.message || fr.message || pullMessage;
-    }
-
-    if (!pullSucceeded) {
-      throw new Error(pullMessage || "Pull failed");
-    }
-
-    showNotification(pullMessage, "success");
-
-    if (button) {
-      button.innerHTML = '<i class="fas fa-check me-1"></i>Downloaded';
-    }
-    clearDownloadState(modelName);
-    if (card) delete card.dataset.downloadActive;
-    setTimeout(() => {
-      if (typeof updateModelData === "function") {
-        void updateModelData();
-      }
-    }, 800);
-  } catch (err) {
-    clearDownloadState(modelName);
-    if (card) delete card.dataset.downloadActive;
-    showNotification(`Download failed: ${err.message}`, "error");
-    if (button && originalText !== null) {
-      button.innerHTML = originalText;
-      button.disabled = false;
-    }
-    if (progressContainer) {
-      progressContainer.classList.add("d-none");
-      progressContainer.style.display = "none";
-    }
-    if (progressBar) {
-      progressBar.style.width = "0%";
-    }
-    if (progressText) {
-      progressText.textContent = "0%";
-    }
-  }
-}
-
-// Capability filtering logic
 function modelCardColumn(card) {
   if (!card) return null;
   const parent = card.parentElement;
@@ -2432,7 +1931,6 @@ function applyCapabilityFilters(containerId) {
 
   const cards = container.querySelectorAll(".model-card");
 
-  // No active filters → show every card.
   if (!reasoningRequired && !visionRequired && !toolsRequired && !moeRequired) {
     cards.forEach((card) => setModelCardVisible(card, true));
     if (containerId === "availableModelsContainer") {
@@ -2441,7 +1939,6 @@ function applyCapabilityFilters(containerId) {
     return;
   }
 
-  // Active filters combine with AND: model must satisfy every selected capability.
   cards.forEach((card) => {
     if (isDownloadActiveCard(card)) {
       setModelCardVisible(card, true);
@@ -2469,6 +1966,5 @@ function applyCapabilityFilters(containerId) {
   }
 }
 
-// Global exposure
 window.toggleCapabilityFilter = toggleCapabilityFilter;
 window.applyCapabilityFilters = applyCapabilityFilters;

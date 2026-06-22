@@ -276,10 +276,25 @@ class OllamaServiceUtilities:
         if not session_data or not isinstance(session_data, dict):
             raise ValueError("Invalid session data")
         model = str(session_data.get('model') or '').strip()
+        messages = session_data.get('messages')
         prompt = str(session_data.get('prompt') or '').strip()
         response = str(session_data.get('response') or '').strip()
         if not model:
             raise ValueError("Model name is required")
+        if isinstance(messages, list) and messages:
+            for msg in reversed(messages):
+                if not isinstance(msg, dict):
+                    continue
+                role = msg.get('role')
+                content = str(msg.get('content') or '').strip()
+                if role == 'user' and content and not prompt:
+                    prompt = content
+                elif role == 'assistant' and content and not response:
+                    response = content
+                if prompt and response:
+                    break
+            session_data['prompt'] = prompt
+            session_data['response'] = response
         if not prompt and not response:
             raise ValueError("At least prompt or response is required")
 
@@ -380,6 +395,32 @@ class OllamaServiceUtilities:
                 "status": "error",
                 "error": str(e)
             }
+
+    def run_model_benchmark(self, model_name, cases=None):
+        """Run the objective benchmark suite for one installed model."""
+        host, port = self._get_ollama_host_port()
+        from app.services.model_benchmark import BENCHMARK_CASES, run_benchmark_for_model
+
+        suite = cases or BENCHMARK_CASES
+        entry = self.get_model_settings_with_fallback(model_name)
+        options = dict(self.get_default_settings())
+        if entry and isinstance(entry.get('settings'), dict):
+            options.update(entry['settings'])
+        return run_benchmark_for_model(
+            self._session, host, port, model_name,
+            cases=suite, options=options,
+        )
+
+    def run_all_model_benchmarks(self, model_names=None):
+        """Benchmark all installed models (or a provided subset) and return fleet advice."""
+        host, port = self._get_ollama_host_port()
+        from app.services.model_benchmark import BENCHMARK_CASES, run_benchmark_all_models
+
+        if model_names is None:
+            available = self.get_available_models()
+            model_names = [m.get('name') for m in available if m.get('name')]
+        names = [str(n).strip() for n in model_names if str(n).strip()]
+        return run_benchmark_all_models(self._session, host, port, names, cases=BENCHMARK_CASES)
 
     def get_system_stats_history(self):
         """Get historical system stats"""

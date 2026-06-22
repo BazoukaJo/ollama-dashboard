@@ -1,4 +1,3 @@
-// Utility functions extracted from main.js (global, non-module).
 function escapeHtml(str) {
   if (!str && str !== 0) return '';
   return String(str)
@@ -105,7 +104,6 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   }
 }
 
-// Expose on window for inline handlers and other scripts.
 window.escapeHtml = escapeHtml;
 window.cssEscape = cssEscape;
 window.readApiJson = readApiJson;

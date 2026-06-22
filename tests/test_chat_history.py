@@ -133,3 +133,30 @@ def test_chat_history_assigns_ids_to_legacy_entries(tmp_path):
     items = get_resp.get_json().get("history") or []
     assert len(items) == 1
     assert items[0].get("id")
+
+
+def test_chat_history_save_multi_turn_messages(tmp_path):
+    client, _app = _client_with_history(tmp_path)
+
+    payload = {
+        "model": "llama3.2:3b",
+        "messages": [
+            {"role": "user", "content": "Hi"},
+            {"role": "assistant", "content": "Hello"},
+            {"role": "user", "content": "Follow up?"},
+            {"role": "assistant", "content": "Sure."},
+        ],
+    }
+    save_resp = client.post(
+        "/api/chat/history",
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+    assert save_resp.status_code == 200
+
+    get_resp = client.get("/api/chat/history")
+    history = get_resp.get_json().get("history") or []
+    assert len(history) == 1
+    assert history[0]["prompt"] == "Follow up?"
+    assert history[0]["response"] == "Sure."
+    assert len(history[0]["messages"]) == 4

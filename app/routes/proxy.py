@@ -12,6 +12,7 @@ import queue
 import threading
 import time
 from pathlib import Path
+from typing import Iterator, Optional
 
 import requests
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
@@ -33,6 +34,11 @@ from app.services.copilot_proxy import (
     log_copilot_response,
     log_ollama_proxy_hit,
 )
+from app.services.error_messages import (
+    GENERIC_CONNECTION,
+    GENERIC_UPSTREAM,
+    log_upstream_error,
+)
 from app.services.model_settings_helpers import (
     compute_fresh_recommended_settings_entry,
     get_default_settings_template,
@@ -43,6 +49,7 @@ from app.services.settings_cache import load_settings_file
 from app.services.v1_model_resolve import resolve_v1_model_name
 from app.services.v1_native_bridge import (
     STREAM_HEARTBEAT,
+    StreamRawLine,
     apply_copilot_native_defaults,
     merge_v1_payload_options,
     native_chat_response_to_openai,
@@ -201,7 +208,7 @@ def _upstream_post_with_retry(url, payload, *, stream=False, timeout=None):
     """
     attempts = _upstream_max_attempts()
     backoff = _upstream_retry_backoff_seconds()
-    last_err: Exception | None = None
+    last_err: Optional[Exception] = None
     for attempt in range(1, attempts + 1):
         try:
             return _upstream_post(url, payload, stream=stream, timeout=timeout)
@@ -211,7 +218,9 @@ def _upstream_post_with_retry(url, payload, *, stream=False, timeout=None):
                 time.sleep(backoff * attempt)
                 continue
             raise
-    raise last_err  # pragma: no cover - loop always returns or raises above
+    if last_err is not None:
+        raise last_err
+    raise RuntimeError('upstream POST failed without connecting')  # pragma: no cover
 
 
 def _upstream_request(method, url, **kwargs):
@@ -311,7 +320,13 @@ def _resolve_settings_entry(model_name):
 
 def _openai_error_response(upstream, model_name=''):
     """OpenAI-shaped JSON error for non-streaming Copilot clients."""
-    err_text = (upstream.text or upstream.reason or 'Upstream error')[:2000]
+    log_upstream_error(
+        logger,
+        status_code=upstream.status_code,
+        detail=(upstream.text or upstream.reason or 'Upstream error')[:2000],
+        context='openai bridge',
+    )
+    err_text = GENERIC_UPSTREAM
     body: dict = {
         'error': {
             'message': err_text,
@@ -474,10 +489,8 @@ def _sse_response(stream_body, *, status=200):
 
 
 def _ollama_unreachable_text(err):
-    return (
-        f'Cannot reach Ollama at {_ollama_url()}: {err}. '
-        'Start the Ollama service (the dashboard header can do this) and retry.'
-    )
+    log_upstream_error(logger, detail=err, context='ollama connection')
+    return GENERIC_CONNECTION
 
 
 def _openai_error_json(message, *, status_code=502, model_name=''):
@@ -606,7 +619,7 @@ class _ResponseTally:
         self.heartbeats = 0
         self.first_content = ''
         self.finish_reason = None
-        self.error = None
+        self.error: Optional[str] = None
 
     def observe(self, chunk):
         if not isinstance(chunk, str):
@@ -627,7 +640,8 @@ class _ResponseTally:
         if not isinstance(choices, list) or not choices:
             return
         choice = choices[0] if isinstance(choices[0], dict) else {}
-        delta = choice.get('delta') if isinstance(choice.get('delta'), dict) else {}
+        raw_delta = choice.get('delta')
+        delta = raw_delta if isinstance(raw_delta, dict) else {}
         content = delta.get('content')
         if isinstance(content, str) and content:
             self.content_chars += len(content)
@@ -776,7 +790,7 @@ class _NativeChatStream:
         self._pending = item
         return None
 
-    def iter_raw(self):
+    def iter_raw(self) -> Iterator[StreamRawLine]:
         """Yield raw items, interleaving STREAM_HEARTBEAT and bounding total/stall wait time."""
         if self._finished:
             return
@@ -795,7 +809,7 @@ class _NativeChatStream:
             while True:
                 try:
                     kind, first, _second = self._queue.get(timeout=self._heartbeat_seconds)
-                except queue.Empty:
+                except queue.Empty as exc:
                     now = time.monotonic()
                     if (
                         not first_seen
@@ -807,7 +821,7 @@ class _NativeChatStream:
                             'Model did not start generating within '
                             f'{int(self._first_token_timeout)}s; aborted to avoid a hang. '
                             'The model may still be loading — please retry.',
-                        )
+                        ) from exc
                     if (
                         first_seen
                         and self._stall_timeout is not None

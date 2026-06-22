@@ -1,10 +1,13 @@
-/** Ask? modal — streaming chat with optional attachments (image, PDF, Word, code). */
+/** Ask? modal — multi-turn chat with optional attachments (image, PDF, Word, code). */
 (function () {
   var _askModelName = null;
   var _askAbortController = null;
   var _askAttachments = [];
-  var _askModelCaps = { has_vision: null };
+  var _askModelCaps = { has_vision: null, has_tools: null, has_reasoning: null };
+  var _askCapsLoading = false;
   var _askControlsBound = false;
+  var _askThread = [];
+  var _askIsSending = false;
 
   var CODE_LANGS = [
     "text",
@@ -26,6 +29,20 @@
     "markdown",
   ];
 
+  function renderAskMessageContent(text, options) {
+    options = options || {};
+    if (typeof window.formatAskMessageHtml === "function") {
+      return window.formatAskMessageHtml(text, options);
+    }
+    var esc =
+      typeof escapeHtml === "function"
+        ? escapeHtml
+        : function (s) {
+            return String(s || "");
+          };
+    return esc(String(text || ""));
+  }
+
   function readFileAsBase64(file) {
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
@@ -38,19 +55,6 @@
         reject(reader.error || new Error("Could not read file"));
       };
       reader.readAsDataURL(file);
-    });
-  }
-
-  function readFileAsText(file) {
-    return new Promise(function (resolve, reject) {
-      var reader = new FileReader();
-      reader.onload = function () {
-        resolve(String(reader.result || ""));
-      };
-      reader.onerror = function () {
-        reject(reader.error || new Error("Could not read file"));
-      };
-      reader.readAsText(file);
     });
   }
 
@@ -94,7 +98,7 @@
     );
   }
 
-  function capsFromModelCard(modelName) {
+  function findModelCardElement(modelName) {
     var esc =
       typeof cssEscape === "function" ? cssEscape(String(modelName || "")) : String(modelName || "");
     var card = document.querySelector('.model-card[data-model-name="' + esc + '"]');
@@ -105,10 +109,31 @@
         }
       });
     }
+    return card || null;
+  }
+
+  function capsFromModelCard(modelName) {
+    var card = findModelCardElement(modelName);
     if (!card || !card.dataset) return null;
-    var vision = triStateFlag(card.dataset.hasVision);
-    if (vision === null) return null;
-    return { has_vision: vision, has_tools: null, has_reasoning: null };
+    var caps = {
+      has_vision: triStateFlag(card.dataset.hasVision),
+      has_tools: triStateFlag(card.dataset.hasTools),
+      has_reasoning: triStateFlag(card.dataset.hasReasoning),
+    };
+    if (caps.has_tools === null) {
+      var toolsIcon = card.querySelector(".capability-icon .fa-tools");
+      if (toolsIcon) {
+        var toolsWrap = toolsIcon.closest(".capability-icon");
+        if (toolsWrap) {
+          if (toolsWrap.classList.contains("enabled")) caps.has_tools = true;
+          else if (toolsWrap.classList.contains("disabled")) caps.has_tools = false;
+        }
+      }
+    }
+    if (caps.has_vision === null && caps.has_tools === null && caps.has_reasoning === null) {
+      return null;
+    }
+    return caps;
   }
 
   function applyModelCapsFromRecord(caps, record) {
@@ -138,6 +163,38 @@
       }
     } catch (_) {}
 
+    if (caps.has_tools === null || caps.has_vision === null) {
+      try {
+        var infoResp = await fetch("/api/models/info/" + encodeURIComponent(modelName));
+        var infoJr = await readApiJson(infoResp);
+        if (infoJr.responseOk && infoJr.data && typeof infoJr.data === "object") {
+          var info = infoJr.data;
+          if (caps.has_tools === null && Array.isArray(info.capabilities)) {
+            var capSet = info.capabilities.map(function (c) {
+              return String(c || "").toLowerCase();
+            });
+            if (capSet.indexOf("tools") >= 0 || capSet.indexOf("tool") >= 0) {
+              caps.has_tools = true;
+            } else if (capSet.length) {
+              caps.has_tools = false;
+            }
+          }
+          if (caps.has_vision === null && Array.isArray(info.capabilities)) {
+            var visionSet = info.capabilities.map(function (c) {
+              return String(c || "").toLowerCase();
+            });
+            if (
+              visionSet.indexOf("vision") >= 0 ||
+              visionSet.indexOf("image") >= 0 ||
+              visionSet.indexOf("multimodal") >= 0
+            ) {
+              caps.has_vision = true;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     if (caps.has_vision === null) {
       var lower = normalizeModelName(modelName);
       if (/llava|vision|vl\b|bakllava|moondream|minicpm-v|gemma.*vision/i.test(lower)) {
@@ -147,70 +204,183 @@
     return caps;
   }
 
-  function updateAskAgentModeUi() {
-    var wrap = document.getElementById("askAgentModeWrap");
-    var steps = document.getElementById("askAgentSteps");
-    var agentOn = _askModelCaps.has_tools === true;
-    if (wrap) wrap.style.display = agentOn ? "" : "none";
-    if (steps && !agentOn) {
-      steps.style.display = "none";
-      steps.innerHTML = "";
-    }
+  function threadMessagesForApi() {
+    return _askThread
+      .filter(function (msg) {
+        return (
+          msg &&
+          !msg.pending &&
+          (msg.role === "user" || msg.role === "assistant") &&
+          msg.content != null
+        );
+      })
+      .map(function (msg) {
+        return { role: msg.role, content: msg.content };
+      });
   }
 
-  function bindAskMcpConnectButton() {
-    var btn = document.getElementById("askMcpConnectBtn");
-    if (!btn || btn.dataset.bound === "1") return;
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", function (e) {
-      e.preventDefault();
-      if (window.apiProxyUI && window.apiProxyUI.openWizard) {
-        window.apiProxyUI.openWizard(true);
+  function threadMessagesForHistory() {
+    return _askThread
+      .filter(function (msg) {
+        return (
+          msg &&
+          (msg.role === "user" || msg.role === "assistant") &&
+          (msg.content != null || msg.thinking)
+        );
+      })
+      .map(function (msg) {
+        var out = { role: msg.role, content: String(msg.content || "") };
+        if (msg.thinking) out.thinking = String(msg.thinking);
+        return out;
+      });
+  }
+
+  function lastAssistantContent() {
+    for (var i = _askThread.length - 1; i >= 0; i--) {
+      if (_askThread[i].role === "assistant") {
+        return String(_askThread[i].content || "").trim();
       }
+    }
+    return "";
+  }
+
+  function lastUserContent() {
+    for (var i = _askThread.length - 1; i >= 0; i--) {
+      if (_askThread[i].role === "user") {
+        return String(_askThread[i].content || "").trim();
+      }
+    }
+    return "";
+  }
+
+  function scrollAskThreadToBottom() {
+    var thread = document.getElementById("askThread");
+    if (thread) thread.scrollTop = thread.scrollHeight;
+  }
+
+  function renderAskThread() {
+    var thread = document.getElementById("askThread");
+    if (!thread) return;
+
+    if (!_askThread.length) {
+      thread.querySelectorAll(".ask-msg").forEach(function (el) {
+        el.remove();
+      });
+      updateAskActionButtons();
+      return;
+    }
+
+    thread.querySelectorAll(".ask-msg").forEach(function (el) {
+      el.remove();
+    });
+
+    _askThread.forEach(function (msg, idx) {
+      var isUser = msg.role === "user";
+      var bubble = document.createElement("div");
+      bubble.className =
+        "ask-msg ask-msg--" + (isUser ? "user" : "assistant") + (msg.pending ? " ask-msg--pending" : "");
+      bubble.dataset.index = String(idx);
+      var bodyHtml = "";
+      if (!isUser && msg.toolSteps && msg.toolSteps.length) {
+        bodyHtml += '<div class="ask-msg-tools">';
+        msg.toolSteps.forEach(function (step) {
+          if (!step || !step.name) return;
+          var label = step.phase === "result" ? "Tool result" : "Tool call";
+          var detail = step.detail != null ? String(step.detail) : "";
+          bodyHtml +=
+            '<div class="ask-msg-tool-step ask-msg-tool-step--' +
+            (step.phase === "result" ? "result" : "call") +
+            '">' +
+            '<div class="ask-msg-tool-step-label small text-muted">' +
+            escapeHtml(label + ": " + step.name) +
+            "</div>";
+          if (detail) {
+            bodyHtml +=
+              '<div class="ask-msg-tool-step-body">' + escapeHtml(detail) + "</div>";
+          }
+          bodyHtml += "</div>";
+        });
+        bodyHtml += "</div>";
+      }
+      if (!isUser && msg.thinking) {
+        bodyHtml +=
+          '<div class="ask-msg-thinking">' +
+          '<div class="ask-msg-thinking-label small text-muted mb-1">Reasoning</div>' +
+          '<div class="ask-msg-thinking-body">' +
+          escapeHtml(msg.thinking) +
+          "</div></div>";
+      }
+      bodyHtml +=
+        '<div class="ask-msg-body ask-msg-body--rich">' +
+        (isUser
+          ? renderAskMessageContent(msg.content || "")
+          : renderAskMessageContent(msg.content || "", {
+              streaming: !!msg.pending,
+              pending: msg.pending && !msg.thinking && !msg.content,
+            })) +
+        "</div>";
+      bubble.innerHTML =
+        '<div class="ask-msg-label small text-muted mb-1">' +
+        (isUser ? "You" : "Assistant") +
+        "</div>" +
+        bodyHtml;
+      thread.appendChild(bubble);
+    });
+    if (typeof window.bindAskCodeCopyButtons === "function") {
+      window.bindAskCodeCopyButtons(thread);
+    }
+    if (typeof window.highlightAskCodeBlocks === "function") {
+      window.highlightAskCodeBlocks(thread);
+    }
+    scrollAskThreadToBottom();
+    updateAskActionButtons();
+  }
+
+  function clearAskThread() {
+    _askThread = [];
+    renderAskThread();
+  }
+
+  function loadAskConversation(modelName, messages) {
+    if (!modelName) return;
+    _askModelName = modelName;
+    var nameEl = document.getElementById("askModelModalName");
+    if (nameEl) nameEl.textContent = modelName;
+    _askThread = (messages || [])
+      .filter(function (m) {
+        return m && (m.role === "user" || m.role === "assistant") && m.content != null;
+      })
+      .map(function (m) {
+        var entry = { role: m.role, content: String(m.content || "") };
+        if (m.thinking) entry.thinking = String(m.thinking);
+        return entry;
+      });
+    resetAskAttachments();
+    renderAskThread();
+    activateAskTab();
+    var input = document.getElementById("askModelInput");
+    if (input) {
+      input.value = "";
+      input.focus();
+    }
+    resolveAskModelCapabilities(modelName).then(function (caps) {
+      _askModelCaps = caps;
+      updateAskCapabilityHint();
     });
   }
 
-  function resetAskAgentSteps() {
-    var steps = document.getElementById("askAgentSteps");
-    if (!steps) return;
-    steps.innerHTML = "";
-    steps.style.display = "none";
+  function updateAskActionButtons() {
+    var hasReply = !!lastAssistantContent();
+    var hasChat = _askThread.length > 0;
+    var copyBtn = document.getElementById("askModelCopyBtn");
+    var saveBtn = document.getElementById("askModelSaveBtn");
+    if (copyBtn) copyBtn.disabled = !hasReply || _askIsSending;
+    if (saveBtn) saveBtn.disabled = !hasChat || _askIsSending;
   }
 
-  function ensureAskAgentStepRow(name) {
-    var steps = document.getElementById("askAgentSteps");
-    if (!steps) return null;
-    steps.style.display = "";
-    var rowId = "ask-agent-step-" + String(name || "tool").replace(/[^a-z0-9_-]/gi, "_");
-    var existing = document.getElementById(rowId);
-    if (existing) return existing;
-    var row = document.createElement("div");
-    row.id = rowId;
-    row.className = "ask-agent-step small p-2 mb-1 rounded border border-secondary";
-    row.innerHTML =
-      '<div class="ask-agent-step-head d-flex align-items-center gap-2">' +
-      '<i class="fas fa-cog fa-spin text-info ask-agent-step-spinner" aria-hidden="true"></i>' +
-      '<code class="ask-agent-step-name">' +
-      escapeHtml(name || "tool") +
-      "</code></div>" +
-      '<div class="ask-agent-step-result text-muted mt-1" style="display:none;"></div>';
-    steps.appendChild(row);
-    return row;
-  }
-
-  function finishAskAgentStep(name, summary) {
-    var row = ensureAskAgentStepRow(name);
-    if (!row) return;
-    var spinner = row.querySelector(".ask-agent-step-spinner");
-    if (spinner) {
-      spinner.classList.remove("fa-spin", "fa-cog");
-      spinner.classList.add("fa-check-circle", "text-success");
-    }
-    var result = row.querySelector(".ask-agent-step-result");
-    if (result) {
-      result.style.display = "";
-      result.textContent = summary || "Done";
-    }
+  function setAskTyping(visible) {
+    var row = document.getElementById("askTypingRow");
+    if (row) row.style.display = visible ? "" : "none";
   }
 
   function updateAskCapabilityHint() {
@@ -219,20 +389,22 @@
     if (!hint) return;
 
     var parts = [];
+    if (_askThread.length) {
+      parts.push("Follow-up messages include earlier turns in this chat.");
+    }
     if (_askModelCaps.has_tools === true) {
-      parts.push("Agent mode: this model can call dashboard MCP tools.");
+      parts.push("Agent mode: web search, fetch URL, and dashboard tools are available.");
+    } else if (_askModelCaps.has_tools === false) {
+      parts.push("This model does not support tools — web search is unavailable.");
+    } else if (_askCapsLoading) {
+      parts.push("Detecting model capabilities…");
     }
     if (_askModelCaps.has_vision === true) {
       parts.push("Vision: attach images for this model.");
     } else if (_askModelCaps.has_vision === false) {
       parts.push("This model is text-only — images are disabled.");
-    } else {
-      parts.push("Image attachments work best with vision-capable models.");
     }
-    parts.push("PDF and Word text is extracted for all models.");
-    parts.push("Code snippets are included in the prompt.");
     hint.textContent = parts.join(" ");
-    updateAskAgentModeUi();
 
     if (imageBtn) {
       var hideImage = _askModelCaps.has_vision === false;
@@ -240,12 +412,6 @@
       imageBtn.disabled = false;
       imageBtn.classList.remove("disabled");
       imageBtn.style.display = hideImage ? "none" : "";
-      imageBtn.setAttribute(
-        "title",
-        hideImage
-          ? "This model does not support images"
-          : "Attach image (JPEG, PNG, GIF, WebP)",
-      );
       var imageInput = document.getElementById("askImageInput");
       if (imageInput) imageInput.disabled = hideImage;
     }
@@ -307,23 +473,15 @@
     if (!file) return;
     var maxBytes = 8 * 1024 * 1024;
     if (file.size > maxBytes) {
-      if (window.showNotification) {
-        showNotification("File exceeds 8 MB limit", "error");
-      }
+      if (window.showNotification) showNotification("File exceeds 8 MB limit", "error");
       return;
     }
     try {
       var b64 = await readFileAsBase64(file);
-      _askAttachments.push({
-        type: type,
-        name: file.name,
-        content: b64,
-      });
+      _askAttachments.push({ type: type, name: file.name, content: b64 });
       renderAskAttachments();
     } catch (err) {
-      if (window.showNotification) {
-        showNotification(err.message || "Could not attach file", "error");
-      }
+      if (window.showNotification) showNotification(err.message || "Could not attach file", "error");
     }
   }
 
@@ -374,6 +532,8 @@
     var docBtn = document.getElementById("askAttachDocBtn");
     var codeBtn = document.getElementById("askAttachCodeBtn");
     var codeConfirm = document.getElementById("askCodeConfirmBtn");
+    var newChatBtn = document.getElementById("askNewChatBtn");
+    var copyBtn = document.getElementById("askModelCopyBtn");
 
     if (imageBtn && imageInput) {
       imageBtn.addEventListener("click", function () {
@@ -391,9 +551,7 @@
         pdfInput.click();
       });
       pdfInput.addEventListener("change", function () {
-        if (pdfInput.files && pdfInput.files[0]) {
-          addFileAttachment(pdfInput.files[0], "pdf");
-        }
+        if (pdfInput.files && pdfInput.files[0]) addFileAttachment(pdfInput.files[0], "pdf");
         pdfInput.value = "";
       });
     }
@@ -402,15 +560,21 @@
         docInput.click();
       });
       docInput.addEventListener("change", function () {
-        if (docInput.files && docInput.files[0]) {
-          addFileAttachment(docInput.files[0], "doc");
-        }
+        if (docInput.files && docInput.files[0]) addFileAttachment(docInput.files[0], "doc");
         docInput.value = "";
       });
     }
     if (codeBtn) codeBtn.addEventListener("click", addCodeSnippet);
     if (codeConfirm) codeConfirm.addEventListener("click", confirmCodeSnippet);
-    var copyBtn = document.getElementById("askModelCopyBtn");
+    if (newChatBtn) {
+      newChatBtn.addEventListener("click", function () {
+        clearAskThread();
+        resetAskAttachments();
+        updateAskCapabilityHint();
+        var input = document.getElementById("askModelInput");
+        if (input) input.focus();
+      });
+    }
     if (copyBtn) copyBtn.addEventListener("click", copyAskModelResponse);
   }
 
@@ -421,25 +585,14 @@
   }
 
   function getAskExchangeState() {
-    var question = (document.getElementById("askModelInput")?.value || "").trim();
-    var response = (document.getElementById("askModelResponse")?.textContent || "").trim();
+    var messages = threadMessagesForHistory();
     return {
       model: _askModelName,
-      prompt: question,
-      response: response,
+      messages: messages,
+      prompt: lastUserContent(),
+      response: lastAssistantContent(),
       attachments: getAttachmentMetadata(),
     };
-  }
-
-  function setAskResponseActionsEnabled(enabled) {
-    var copyBtn = document.getElementById("askModelCopyBtn");
-    var saveBtn = document.getElementById("askModelSaveBtn");
-    if (copyBtn) copyBtn.disabled = !enabled;
-    if (saveBtn) saveBtn.disabled = !enabled;
-  }
-
-  function setAskCopyEnabled(enabled) {
-    setAskResponseActionsEnabled(enabled);
   }
 
   function activateAskTab() {
@@ -450,8 +603,7 @@
   }
 
   async function copyAskModelResponse() {
-    var responseEl = document.getElementById("askModelResponse");
-    var text = (responseEl && responseEl.textContent ? responseEl.textContent : "").trim();
+    var text = lastAssistantContent();
     if (!text) {
       if (window.showNotification) showNotification("Nothing to copy yet", "warning");
       return;
@@ -468,7 +620,6 @@
     if (_askControlsBound) return;
     _askControlsBound = true;
     bindAskAttachmentControls();
-    bindAskMcpConnectButton();
     var modalEl = document.getElementById("askModelModal");
     if (modalEl) {
       modalEl.addEventListener("hidden.bs.modal", function () {
@@ -481,7 +632,8 @@
     }
   }
 
-  async function openAskModal(modelName) {
+  async function openAskModal(modelName, options) {
+    options = options || {};
     if (!modelName) {
       if (window.showNotification) showNotification("Could not determine model name", "error");
       return;
@@ -490,13 +642,16 @@
     activateAskTab();
     _askModelName = modelName;
     _askAbortController = null;
-    resetAskAttachments();
+    if (!options.keepThread) {
+      clearAskThread();
+      resetAskAttachments();
+    }
     _askModelCaps = capsFromModelCard(modelName) || {
       has_vision: null,
       has_tools: null,
       has_reasoning: null,
     };
-    resetAskAgentSteps();
+    _askCapsLoading = true;
     updateAskCapabilityHint();
 
     var nameEl = document.getElementById("askModelModalName");
@@ -504,7 +659,7 @@
 
     var input = document.getElementById("askModelInput");
     if (input) {
-      input.value = "";
+      if (!options.keepThread) input.value = "";
       input.onkeydown = function (e) {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
@@ -513,17 +668,16 @@
       };
     }
 
-    var responseWrap = document.getElementById("askModelResponseWrap");
-    if (responseWrap) responseWrap.style.display = "none";
-
-    var responseEl = document.getElementById("askModelResponse");
-    if (responseEl) responseEl.textContent = "";
-    setAskCopyEnabled(false);
-
-    var spinner = document.getElementById("askModelSpinner");
-    if (spinner) spinner.style.display = "none";
+    updateAskActionButtons();
+    setAskTyping(false);
 
     var sendBtn = document.getElementById("askModelSendBtn");
+    if (sendBtn) sendBtn.disabled = true;
+
+    _askModelCaps = await resolveAskModelCapabilities(modelName);
+    _askCapsLoading = false;
+    updateAskCapabilityHint();
+
     if (sendBtn) sendBtn.disabled = false;
 
     var modalEl = document.getElementById("askModelModal");
@@ -542,21 +696,130 @@
       },
       { once: true },
     );
-
-    _askModelCaps = await resolveAskModelCapabilities(modelName);
-    updateAskCapabilityHint();
   }
 
-  function summarizeToolResult(content) {
-    var text = String(content || "");
-    if (text.length <= 120) return text;
-    return text.slice(0, 117) + "...";
+  function parseStreamToken(parsed) {
+    if (parsed.response != null) return String(parsed.response);
+    var msg = parsed.message;
+    if (msg && msg.content != null) return String(msg.content);
+    return null;
   }
 
-  async function consumeAgentStream(reader, responseEl, spinner) {
+  function parseStreamThinking(parsed) {
+    var msg = parsed.message;
+    if (!msg || typeof msg !== "object") return null;
+    var keys = ["thinking", "reasoning", "reasoning_content"];
+    for (var i = 0; i < keys.length; i++) {
+      var piece = msg[keys[i]];
+      if (piece != null && String(piece)) return String(piece);
+    }
+    return null;
+  }
+
+  function formatToolStepDetail(name, payload) {
+    if (payload == null) return "";
+    if (typeof payload === "string") {
+      try {
+        payload = JSON.parse(payload);
+      } catch (_) {
+        return payload.length > 180 ? payload.slice(0, 180) + "…" : payload;
+      }
+    }
+    if (typeof payload !== "object" || !payload) return "";
+    if (name === "web_search" && Array.isArray(payload.results)) {
+      return payload.results
+        .slice(0, 3)
+        .map(function (r) {
+          return r && r.title ? String(r.title) : "";
+        })
+        .filter(Boolean)
+        .join(" · ");
+    }
+    if (name === "fetch_url" && payload.url) {
+      var text = String(payload.text || "");
+      var preview = text.length > 120 ? text.slice(0, 120) + "…" : text;
+      return String(payload.url) + (preview ? " — " + preview : "");
+    }
+    if (payload.query) return String(payload.query);
+    if (payload.url) return String(payload.url);
+    if (payload.error) return String(payload.error);
+    return "";
+  }
+
+  function updatePendingAssistant(content, thinking, toolSteps) {
+    for (var i = _askThread.length - 1; i >= 0; i--) {
+      if (_askThread[i].role === "assistant") {
+        if (content != null) _askThread[i].content = content;
+        if (thinking != null) _askThread[i].thinking = thinking;
+        if (toolSteps != null) _askThread[i].toolSteps = toolSteps.slice();
+        _askThread[i].pending = false;
+        break;
+      }
+    }
+    renderAskThread();
+  }
+
+  function appendAssistantError(message) {
+    _askThread.push({ role: "assistant", content: "Error: " + message, pending: false });
+    renderAskThread();
+  }
+
+  function failPendingAssistant(message) {
+    for (var i = _askThread.length - 1; i >= 0; i--) {
+      if (_askThread[i].role === "assistant") {
+        _askThread[i] = { role: "assistant", content: "Error: " + message, pending: false };
+        renderAskThread();
+        return;
+      }
+    }
+    appendAssistantError(message);
+  }
+
+  async function consumeAgentStream(reader) {
     var decoder = new TextDecoder();
     var buffer = "";
+    var assistantText = "";
+    var thinkingText = "";
+    var toolSteps = [];
     var gotFirstToken = false;
+
+    function noteStreamActivity() {
+      if (!gotFirstToken) {
+        gotFirstToken = true;
+        setAskTyping(false);
+      }
+    }
+
+    function handleAgentEvent(evt) {
+      if (!evt || !evt.type) return;
+      if (evt.type === "thinking" && evt.text != null) {
+        noteStreamActivity();
+        thinkingText += evt.text;
+        updatePendingAssistant(assistantText, thinkingText, toolSteps);
+      } else if (evt.type === "content" && evt.text != null) {
+        noteStreamActivity();
+        assistantText += evt.text;
+        updatePendingAssistant(assistantText, thinkingText, toolSteps);
+      } else if (evt.type === "tool_call") {
+        noteStreamActivity();
+        toolSteps.push({
+          phase: "call",
+          name: String(evt.name || "tool"),
+          detail: evt.arguments ? JSON.stringify(evt.arguments) : "",
+        });
+        updatePendingAssistant(assistantText, thinkingText, toolSteps);
+      } else if (evt.type === "tool_result") {
+        noteStreamActivity();
+        toolSteps.push({
+          phase: "result",
+          name: String(evt.name || "tool"),
+          detail: formatToolStepDetail(String(evt.name || ""), evt.content),
+        });
+        updatePendingAssistant(assistantText, thinkingText, toolSteps);
+      } else if (evt.type === "error") {
+        updatePendingAssistant("Error: " + (evt.message || "Request failed"), thinkingText, toolSteps);
+      }
+    }
 
     while (true) {
       var chunk = await reader.read();
@@ -568,26 +831,56 @@
         var trimmed = lines[i].trim();
         if (!trimmed) continue;
         try {
-          var evt = JSON.parse(trimmed);
-          if (evt.type === "content" && evt.text != null) {
-            if (!gotFirstToken) {
-              gotFirstToken = true;
-              if (spinner) spinner.style.display = "none";
-            }
-            if (responseEl) {
-              responseEl.textContent += evt.text;
-              responseEl.scrollTop = responseEl.scrollHeight;
-              setAskCopyEnabled(true);
-            }
-          } else if (evt.type === "tool_call") {
-            ensureAskAgentStepRow(evt.name || "tool");
-          } else if (evt.type === "tool_result") {
-            finishAskAgentStep(evt.name || "tool", summarizeToolResult(evt.content));
-          } else if (evt.type === "error") {
-            if (responseEl) {
-              responseEl.textContent = "Error: " + (evt.message || "Agent failed");
-              setAskCopyEnabled(true);
-            }
+          handleAgentEvent(JSON.parse(trimmed));
+        } catch (_) {}
+      }
+    }
+    if (buffer.trim()) {
+      try {
+        handleAgentEvent(JSON.parse(buffer.trim()));
+      } catch (_) {}
+    }
+    if (!assistantText.trim() && !thinkingText.trim() && !toolSteps.length) {
+      updatePendingAssistant("(No response text returned.)", "", toolSteps);
+    }
+  }
+
+  async function consumeChatStream(reader) {
+    var decoder = new TextDecoder();
+    var buffer = "";
+    var assistantText = "";
+    var thinkingText = "";
+    var gotFirstToken = false;
+
+    function noteStreamActivity() {
+      if (!gotFirstToken) {
+        gotFirstToken = true;
+        setAskTyping(false);
+      }
+    }
+
+    while (true) {
+      var chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      var lines = buffer.split("\n");
+      buffer = lines.pop();
+      for (var i = 0; i < lines.length; i++) {
+        var trimmed = lines[i].trim();
+        if (!trimmed) continue;
+        try {
+          var parsed = JSON.parse(trimmed);
+          var think = parseStreamThinking(parsed);
+          if (think != null) {
+            noteStreamActivity();
+            thinkingText += think;
+            updatePendingAssistant(assistantText, thinkingText);
+          }
+          var token = parseStreamToken(parsed);
+          if (token != null) {
+            noteStreamActivity();
+            assistantText += token;
+            updatePendingAssistant(assistantText, thinkingText);
           }
         } catch (_) {}
       }
@@ -595,54 +888,82 @@
     if (buffer.trim()) {
       try {
         var last = JSON.parse(buffer.trim());
-        if (last.type === "content" && last.text != null && responseEl) {
-          responseEl.textContent += last.text;
-          setAskCopyEnabled(true);
+        var tailThink = parseStreamThinking(last);
+        if (tailThink != null) {
+          thinkingText += tailThink;
+          updatePendingAssistant(assistantText, thinkingText);
+        }
+        var tail = parseStreamToken(last);
+        if (tail != null) {
+          assistantText += tail;
+          updatePendingAssistant(assistantText, thinkingText);
         }
       } catch (_) {}
+    }
+    if (!assistantText.trim() && !thinkingText.trim()) {
+      updatePendingAssistant("(No response text returned.)", "");
     }
   }
 
   async function sendAskModelQuestion() {
-    var question = (document.getElementById("askModelInput")?.value || "").trim();
+    var input = document.getElementById("askModelInput");
+    var question = (input && input.value ? input.value : "").trim();
     if (!question && !_askAttachments.length) {
-      if (window.showNotification) showNotification("Enter a question or attach a file", "warning");
+      if (window.showNotification) showNotification("Enter a message or attach a file", "warning");
+      return;
+    }
+    if (_askIsSending) return;
+    if (_askCapsLoading) {
+      if (window.showNotification) showNotification("Still detecting model capabilities…", "warning");
       return;
     }
 
     var sendBtn = document.getElementById("askModelSendBtn");
-    var spinner = document.getElementById("askModelSpinner");
-    var responseWrap = document.getElementById("askModelResponseWrap");
-    var responseEl = document.getElementById("askModelResponse");
+    _askModelCaps = await resolveAskModelCapabilities(_askModelName);
+    updateAskCapabilityHint();
     var useAgent = _askModelCaps.has_tools === true;
+    if (!useAgent && /search the web|look up online|current news|latest price|fetch url|browse the web/i.test(question)) {
+      if (window.showNotification) {
+        showNotification(
+          "This model does not support tools, so web search is unavailable. Try a tool-capable model (e.g. qwen3, llama3.2).",
+          "warning",
+        );
+      }
+    }
+    var attachmentsPayload = _askAttachments.length
+      ? _askAttachments.map(function (att) {
+          var out = { type: att.type, name: att.name };
+          if (att.type === "code") {
+            out.content = att.content;
+            out.language = att.language || "text";
+          } else {
+            out.content = att.content;
+          }
+          return out;
+        })
+      : null;
 
+    _askThread.push({ role: "user", content: question || "(attachment only)" });
+    var apiMessages = threadMessagesForApi();
+    _askThread.push({ role: "assistant", content: "", pending: true });
+    renderAskThread();
+    if (input) input.value = "";
+    resetAskAttachments();
+
+    _askIsSending = true;
     if (sendBtn) sendBtn.disabled = true;
-    if (responseWrap) responseWrap.style.display = "";
-    if (responseEl) responseEl.textContent = "";
-    resetAskAgentSteps();
-    setAskCopyEnabled(false);
-    if (spinner) spinner.style.display = "";
+    setAskTyping(true);
+    updateAskActionButtons();
 
     if (_askAbortController) _askAbortController.abort();
     _askAbortController = new AbortController();
 
     var payload = {
       model: _askModelName,
-      prompt: question,
+      messages: apiMessages,
       stream: !useAgent,
     };
-    if (_askAttachments.length) {
-      payload.attachments = _askAttachments.map(function (att) {
-        var out = { type: att.type, name: att.name };
-        if (att.type === "code") {
-          out.content = att.content;
-          out.language = att.language || "text";
-        } else {
-          out.content = att.content;
-        }
-        return out;
-      });
-    }
+    if (attachmentsPayload) payload.attachments = attachmentsPayload;
 
     var endpoint = useAgent ? "/api/chat/agent" : "/api/chat";
 
@@ -660,71 +981,38 @@
           var errJson = await resp.json();
           errMsg = errJson.error || errMsg;
         } catch (_) {}
-        if (responseEl) responseEl.textContent = "Error: " + errMsg;
-        if (spinner) spinner.style.display = "none";
-        if (sendBtn) sendBtn.disabled = false;
+        failPendingAssistant(errMsg);
         return;
       }
 
       if (useAgent) {
-        await consumeAgentStream(resp.body.getReader(), responseEl, spinner);
+        await consumeAgentStream(resp.body.getReader());
       } else {
-        if (spinner) spinner.style.display = "";
-
-        var reader = resp.body.getReader();
-        var decoder = new TextDecoder();
-        var buffer = "";
-        var gotFirstToken = false;
-
-        while (true) {
-          var chunk = await reader.read();
-          if (chunk.done) break;
-          buffer += decoder.decode(chunk.value, { stream: true });
-          var lines = buffer.split("\n");
-          buffer = lines.pop();
-          for (var i = 0; i < lines.length; i++) {
-            var trimmed = lines[i].trim();
-            if (!trimmed) continue;
-            try {
-              var parsed = JSON.parse(trimmed);
-              if (parsed.response != null) {
-                if (!gotFirstToken) {
-                  gotFirstToken = true;
-                  if (spinner) spinner.style.display = "none";
-                }
-                if (responseEl) {
-                  responseEl.textContent += parsed.response;
-                  responseEl.scrollTop = responseEl.scrollHeight;
-                  setAskCopyEnabled(true);
-                }
-              }
-            } catch (_) {}
-          }
-        }
-        if (buffer.trim()) {
-          try {
-            var last = JSON.parse(buffer.trim());
-            if (last.response != null && responseEl) {
-              responseEl.textContent += last.response;
-              responseEl.scrollTop = responseEl.scrollHeight;
-              setAskCopyEnabled(true);
-            }
-          } catch (_) {}
-        }
+        await consumeChatStream(resp.body.getReader());
       }
     } catch (err) {
-      if (err.name !== "AbortError" && responseEl) {
-        responseEl.textContent = "Error: " + err.message;
-        setAskCopyEnabled(true);
+      if (err.name !== "AbortError") {
+        failPendingAssistant(err.message);
+      } else {
+        _askThread.pop();
+        if (_askThread.length && _askThread[_askThread.length - 1].role === "user") {
+          _askThread.pop();
+        }
+        renderAskThread();
       }
     } finally {
-      if (spinner) spinner.style.display = "none";
+      _askIsSending = false;
+      setAskTyping(false);
       if (sendBtn) sendBtn.disabled = false;
       _askAbortController = null;
+      updateAskCapabilityHint();
+      updateAskActionButtons();
+      if (input) input.focus();
     }
   }
 
   window.openAskModal = openAskModal;
   window.sendAskModelQuestion = sendAskModelQuestion;
   window.askModalGetState = getAskExchangeState;
+  window.askModalLoadConversation = loadAskConversation;
 })();

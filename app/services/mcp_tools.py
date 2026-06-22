@@ -7,13 +7,27 @@ from typing import Any, Callable
 
 from flask import current_app, has_app_context
 
+from app.services.warm_start import post_warm_start
+from app.services.web_tools import (
+    fetch_url,
+    web_search,
+)
+from app.services.web_tools import (
+    mcp_allow_web as _web_tools_allow_web,
+)
+
 ToolHandler = Callable[..., Any]
 
 _WRITE_TOOLS = frozenset({'start_model', 'stop_model'})
+_WEB_TOOLS = frozenset({'fetch_url', 'web_search'})
 
 
 def mcp_allow_write() -> bool:
     return os.getenv('MCP_ALLOW_WRITE', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def mcp_allow_web() -> bool:
+    return _web_tools_allow_web()
 
 
 def _svc():
@@ -106,6 +120,14 @@ def _handle_get_proxy_status(_arguments: dict[str, Any]) -> Any:
     return client_proxy_status(data_dir, ollama_base_url=ollama_base)
 
 
+def _handle_fetch_url(arguments: dict[str, Any]) -> Any:
+    return fetch_url(arguments)
+
+
+def _handle_web_search(arguments: dict[str, Any]) -> Any:
+    return web_search(arguments)
+
+
 def _handle_start_model(arguments: dict[str, Any]) -> Any:
     model_name = str(arguments.get('model_name') or arguments.get('model') or '').strip()
     if not model_name:
@@ -118,26 +140,17 @@ def _handle_start_model(arguments: dict[str, Any]) -> Any:
     running = svc.get_running_models(force_refresh=True)
     if any(m.get('name') == model_name for m in running):
         return {'success': True, 'message': f'Model {model_name} is already running'}
-    warm_payload: dict[str, Any] = {
-        'model': model_name,
-        'prompt': 'Hello',
-        'stream': False,
-        'keep_alive': '24h',
-    }
-    options = svc.get_default_settings()
-    entry = svc.get_model_settings_with_fallback(model_name)
-    if entry and isinstance(entry.get('settings'), dict):
-        options.update(entry['settings'])
-    warm_payload['options'] = options
-    response = svc._session.post(_ollama_generate_url(), json=warm_payload, timeout=120)
+    response = post_warm_start(svc, _ollama_generate_url(), model_name, timeout=120)
     if response.status_code == 200:
         svc.clear_cache('running_models')
         return {'success': True, 'message': f'Model {model_name} started'}
-    try:
-        detail = response.json()
-    except ValueError:
-        detail = response.text
-    return {'success': False, 'error': detail}
+    if has_app_context():
+        current_app.logger.warning(
+            'MCP warm start failed for %s: HTTP %s',
+            model_name,
+            response.status_code,
+        )
+    return {'success': False, 'error': 'Failed to start model. Check server logs for details.'}
 
 
 def _handle_stop_model(arguments: dict[str, Any]) -> Any:
@@ -217,6 +230,38 @@ _TOOL_SPECS: list[dict[str, Any]] = [
         'handler': _handle_get_proxy_status,
     },
     {
+        'name': 'fetch_url',
+        'description': 'Fetch a public web page and return readable text (requires MCP_ALLOW_WEB=true).',
+        'write': False,
+        'web': True,
+        'schema': _tool(
+            'fetch_url',
+            'Fetch a public HTTP(S) page and return extracted text content.',
+            {'url': {'type': 'string', 'description': 'Public http(s) URL to fetch'}},
+            ['url'],
+        ),
+        'handler': _handle_fetch_url,
+    },
+    {
+        'name': 'web_search',
+        'description': 'Search the public web and return result titles and URLs (requires MCP_ALLOW_WEB=true).',
+        'write': False,
+        'web': True,
+        'schema': _tool(
+            'web_search',
+            'Search the public web via DuckDuckGo and return titles and URLs.',
+            {
+                'query': {'type': 'string', 'description': 'Search query'},
+                'max_results': {
+                    'type': 'integer',
+                    'description': 'Maximum number of results (default 5)',
+                },
+            },
+            ['query'],
+        ),
+        'handler': _handle_web_search,
+    },
+    {
         'name': 'start_model',
         'description': 'Load a model into Ollama memory (requires MCP_ALLOW_WRITE=true).',
         'write': True,
@@ -245,33 +290,54 @@ _TOOL_SPECS: list[dict[str, Any]] = [
 _HANDLERS: dict[str, ToolHandler] = {spec['name']: spec['handler'] for spec in _TOOL_SPECS}
 
 
-def list_tools_metadata(*, include_write: bool | None = None) -> list[dict[str, Any]]:
+def list_tools_metadata(
+    *,
+    include_write: bool | None = None,
+    include_web: bool | None = None,
+) -> list[dict[str, Any]]:
     """Return tool catalog for Connect panel and status API."""
     allow_write = mcp_allow_write() if include_write is None else include_write
+    allow_web = mcp_allow_web() if include_web is None else include_web
     out: list[dict[str, Any]] = []
     for spec in _TOOL_SPECS:
         if spec['write'] and not allow_write:
+            continue
+        if spec.get('web') and not allow_web:
             continue
         out.append({
             'name': spec['name'],
             'description': spec['description'],
             'write': bool(spec['write']),
+            'web': bool(spec.get('web')),
         })
     return out
 
 
-def get_tool_definitions(*, include_write: bool | None = None) -> list[dict[str, Any]]:
+def get_tool_definitions(
+    *,
+    include_write: bool | None = None,
+    include_web: bool | None = None,
+) -> list[dict[str, Any]]:
     """Ollama-native tool definitions for /api/chat."""
     allow_write = mcp_allow_write() if include_write is None else include_write
+    allow_web = mcp_allow_web() if include_web is None else include_web
     tools: list[dict[str, Any]] = []
     for spec in _TOOL_SPECS:
         if spec['write'] and not allow_write:
+            continue
+        if spec.get('web') and not allow_web:
             continue
         tools.append(spec['schema'])
     return tools
 
 
-def execute_tool(name: str, arguments: dict[str, Any] | None = None, *, allow_write: bool | None = None) -> str:
+def execute_tool(
+    name: str,
+    arguments: dict[str, Any] | None = None,
+    *,
+    allow_write: bool | None = None,
+    allow_web: bool | None = None,
+) -> str:
     """Dispatch a tool call and return JSON string for role=tool messages."""
     tool_name = str(name or '').strip()
     handler = _HANDLERS.get(tool_name)
@@ -281,9 +347,15 @@ def execute_tool(name: str, arguments: dict[str, Any] | None = None, *, allow_wr
         write_ok = mcp_allow_write() if allow_write is None else allow_write
         if not write_ok:
             return _json_result({'error': 'Write tools disabled (set MCP_ALLOW_WRITE=true)'})
+    if tool_name in _WEB_TOOLS:
+        web_ok = mcp_allow_web() if allow_web is None else allow_web
+        if not web_ok:
+            return _json_result({'error': 'Web tools disabled (set MCP_ALLOW_WEB=true)'})
     args = arguments if isinstance(arguments, dict) else {}
     try:
         result = handler(args)
         return _json_result(result)
     except Exception as err:  # pylint: disable=broad-except
-        return _json_result({'error': str(err)})
+        if has_app_context():
+            current_app.logger.warning('MCP tool %s failed: %s', tool_name, err)
+        return _json_result({'error': 'Tool execution failed. Check server logs for details.'})

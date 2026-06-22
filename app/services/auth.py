@@ -85,6 +85,14 @@ class AuthService:
         """
         return f"sk-{role}-{secrets.token_hex(16)}"
 
+    @staticmethod
+    def _keys_equal(stored: str, provided: str) -> bool:
+        if not isinstance(stored, str) or not isinstance(provided, str):
+            return False
+        if len(stored) != len(provided):
+            return False
+        return secrets.compare_digest(stored, provided)
+
     def get_role_from_key(self, api_key: str) -> Optional[str]:
         """Determine role from API key.
 
@@ -95,7 +103,7 @@ class AuthService:
             Role name ('viewer', 'operator', 'admin') or None if invalid
         """
         for role, key in self.api_keys.items():
-            if key == api_key:
+            if self._keys_equal(key, api_key):
                 return role
         return None
 

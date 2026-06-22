@@ -31,7 +31,7 @@ function Get-ProcessCommandLine {
 function Get-ProcessMode {
     param([string]$CommandLine)
     if (-not $CommandLine) { return 'unknown' }
-    if ($CommandLine -match 'waitress-serve') { return 'release' }
+    if ($CommandLine -match 'waitress-serve|-m waitress') { return 'release' }
     if ($CommandLine -match 'flask run') { return 'dev' }
     if ($CommandLine -match 'ollama_dashboard_cli|OllamaDashboard\.py') { return 'cli' }
     if ($CommandLine -match 'wsgi:app') { return 'release' }
@@ -45,7 +45,7 @@ function Test-DashboardCommandLine {
 
     $inRepo = $CommandLine -like "*$RepoRootNorm*"
     $mentionsPort = $CommandLine -match ":$Port\b|--port=$Port\b|--port $Port\b"
-    $signature = $CommandLine -match 'waitress-serve|flask run|ollama_dashboard_cli|OllamaDashboard\.py|wsgi:app|create_app'
+    $signature = $CommandLine -match 'waitress-serve|-m waitress|flask run|ollama_dashboard_cli|OllamaDashboard\.py|wsgi:app|create_app'
 
     if (-not $signature) { return $false }
     return ($inRepo -or $mentionsPort)

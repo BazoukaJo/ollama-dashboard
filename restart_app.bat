@@ -53,10 +53,10 @@ if /i "!RUNMODE!"=="dev" (
 	)
 ) ELSE (
 	echo [2/2] Starting release dashboard...
-	IF EXIST .venv\Scripts\waitress-serve.exe (
-		powershell -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "%~dp0scripts\launch-release.ps1"
+	IF EXIST .venv\Scripts\python.exe (
+		call "%~dp0scripts\start-release.bat"
 		if errorlevel 1 (
-			echo Release start failed. Check data\dashboard-release.log
+			echo Release start failed. Check data\dashboard-release-launch.log
 			pause
 			exit /b 1
 		)

@@ -4,7 +4,7 @@ Thanks for helping improve Ollama Dashboard.
 
 ## Before you open a PR
 
-1. **Tests** — From the repo root:
+1. **Python tests** — from the repo root:
 
    ```bash
    pip install -r requirements.txt
@@ -13,16 +13,22 @@ Thanks for helping improve Ollama Dashboard.
 
    This includes the in-process smoke checks (`tests/test_smoke_script.py`).
 
-2. **Lint** — Install dev tools and run Ruff (same command CI uses):
+2. **JavaScript tests** — same command CI uses:
+
+   ```bash
+   node tests/test_ask_message_format.js
+   ```
+
+3. **Lint** — install dev tools and run Ruff (same command CI uses):
 
    ```bash
    pip install ruff
-   ruff check app tests scripts
+   ruff check app tests scripts ollama_dashboard_cli.py
    ```
 
-   Or: `pip install -r requirements-dev.txt` then `ruff check app tests scripts`.
+   Or: `pip install -r requirements-dev.txt` then `ruff check app tests scripts ollama_dashboard_cli.py`.
 
-3. **Manual smoke** (optional):
+4. **Manual smoke** (optional):
 
    ```bash
    python scripts/smoke_check.py
@@ -36,6 +42,7 @@ Some files under `tests/` are marked skipped by default (e.g. helpers that expec
 
 - Match existing patterns in the file you edit.
 - Prefer small, focused commits and clear PR descriptions.
+- Keep code comments for non-obvious behavior only; put user-facing and architectural detail in `docs/` or module docstrings.
 
 ## Questions
 

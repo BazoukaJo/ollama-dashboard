@@ -38,6 +38,8 @@ _OPENAI_OPTION_KEYS = frozenset({
 # the "Sorry, no response was returned" empty reply when a cold 20GB+ model takes 30-90s to
 # produce its first token.
 STREAM_HEARTBEAT = object()
+# NDJSON line bytes, or ``STREAM_HEARTBEAT`` while waiting for the upstream model.
+StreamRawLine = bytes | object
 _SSE_HEARTBEAT_COMMENT = ': ollama-dashboard keep-alive\n\n'
 
 
@@ -483,7 +485,7 @@ def _fit_delta_to_stream_budget(delta: dict[str, Any], remaining: int) -> dict[s
 
 
 def stream_native_chat_lines_to_openai_sse(
-    line_iter: Iterator[bytes],
+    line_iter: Iterator[StreamRawLine],
     *,
     model: str,
     completion_id: str | None = None,
@@ -684,7 +686,7 @@ def stream_native_chat_lines_to_openai_sse(
 
 
 def stream_native_generate_lines_to_openai_sse(
-    line_iter: Iterator[bytes],
+    line_iter: Iterator[StreamRawLine],
     *,
     model: str,
     completion_id: str | None = None,

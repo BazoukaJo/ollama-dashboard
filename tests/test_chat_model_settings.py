@@ -35,11 +35,12 @@ def test_chat_uses_per_model_settings(tmp_path):
         with patch('app.routes.main.ollama_service.get_model_info_cached', return_value={'name':'ml-model'}):
             resp = client.post('/api/chat', json={'model': 'ml-model', 'prompt': 'Hello'})
         assert resp.status_code == 200
-        # The generate call used should include options with per-model overrides
         posted = called.get('json')
-        assert 'options' in posted
+        assert 'messages' in posted
+        assert posted['messages'][0]['role'] == 'user'
         assert posted['options']['temperature'] == 0.33
         assert posted['options']['top_k'] == 77
+        assert called['url'].endswith('/api/chat')
 
 
 def test_chat_forwards_image_attachments(tmp_path):
@@ -77,8 +78,9 @@ def test_chat_forwards_image_attachments(tmp_path):
                 },
             )
     assert resp.status_code == 200
-    assert 'images' in called['json']
-    assert len(called['json']['images']) == 1
+    user_msg = called['json']['messages'][0]
+    assert 'images' in user_msg
+    assert len(user_msg['images']) == 1
 
 
 def test_chat_stream_returns_generator_response(tmp_path):
@@ -90,9 +92,9 @@ def test_chat_stream_returns_generator_response(tmp_path):
     app.config['MODEL_SETTINGS_FILE'] = str(tmp_path / "model_settings.json")
 
     chunks = [
-        json.dumps({"response": "Hello"}).encode() + b"\n",
-        json.dumps({"response": " world"}).encode() + b"\n",
-        json.dumps({"response": "", "done": True}).encode() + b"\n",
+        json.dumps({"message": {"role": "assistant", "content": "Hello"}, "done": False}).encode() + b"\n",
+        json.dumps({"message": {"role": "assistant", "content": " world"}, "done": False}).encode() + b"\n",
+        json.dumps({"message": {"role": "assistant", "content": ""}, "done": True}).encode() + b"\n",
     ]
 
     class FakeStreamResponse:
@@ -111,5 +113,92 @@ def test_chat_stream_returns_generator_response(tmp_path):
     body = resp.data
     lines = [ln for ln in body.split(b"\n") if ln.strip()]
     assert len(lines) == 3
-    assert json.loads(lines[0])["response"] == "Hello"
-    assert json.loads(lines[1])["response"] == " world"
+    assert json.loads(lines[0])["message"]["content"] == "Hello"
+    assert json.loads(lines[1])["message"]["content"] == " world"
+
+
+def test_chat_accepts_multi_turn_messages(tmp_path):
+    app = create_app()
+    client = app.test_client()
+    from app.routes.main import ollama_service as route_ollama_service
+    route_ollama_service.init_app(app)
+    app.config['MODEL_SETTINGS_FILE'] = str(tmp_path / 'model_settings.json')
+
+    called = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {'message': {'role': 'assistant', 'content': 'Follow-up answer'}}
+
+    def fake_post(url, json=None, **kwargs):
+        called['json'] = json
+        return FakeResponse()
+
+    messages = [
+        {'role': 'user', 'content': 'First question'},
+        {'role': 'assistant', 'content': 'First answer'},
+        {'role': 'user', 'content': 'Follow up'},
+    ]
+    with patch('app.routes.main.ollama_service._session') as mock_session:
+        mock_session.post.side_effect = fake_post
+        with patch('app.routes.main.ollama_service.get_model_info_cached', return_value={'name': 'ml-model'}):
+            resp = client.post('/api/chat', json={'model': 'ml-model', 'messages': messages})
+    assert resp.status_code == 200
+    assert called['json']['messages'] == messages
+
+
+def test_chat_enables_thinking_for_reasoning_models(tmp_path):
+    app = create_app()
+    client = app.test_client()
+    from app.routes.main import ollama_service as route_ollama_service
+    route_ollama_service.init_app(app)
+    app.config['MODEL_SETTINGS_FILE'] = str(tmp_path / 'model_settings.json')
+
+    called = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {'message': {'role': 'assistant', 'content': 'ok'}}
+
+    def fake_post(url, json=None, **kwargs):
+        called['json'] = json
+        return FakeResponse()
+
+    model = {'name': 'deepseek-r1', 'has_reasoning': True}
+    with patch('app.routes.main.ollama_service._session') as mock_session:
+        mock_session.post.side_effect = fake_post
+        with patch('app.routes.main.ollama_service.get_model_info_cached', return_value=model):
+            resp = client.post('/api/chat', json={'model': 'deepseek-r1', 'prompt': 'Think'})
+    assert resp.status_code == 200
+    assert called['json'].get('think') is True
+
+
+def test_chat_omits_thinking_for_non_reasoning_models(tmp_path):
+    app = create_app()
+    client = app.test_client()
+    from app.routes.main import ollama_service as route_ollama_service
+    route_ollama_service.init_app(app)
+    app.config['MODEL_SETTINGS_FILE'] = str(tmp_path / 'model_settings.json')
+
+    called = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {'message': {'role': 'assistant', 'content': 'ok'}}
+
+    def fake_post(url, json=None, **kwargs):
+        called['json'] = json
+        return FakeResponse()
+
+    with patch('app.routes.main.ollama_service._session') as mock_session:
+        mock_session.post.side_effect = fake_post
+        with patch('app.routes.main.ollama_service.get_model_info_cached', return_value={'name': 'llama3'}):
+            resp = client.post('/api/chat', json={'model': 'llama3', 'prompt': 'Hi'})
+    assert resp.status_code == 200
+    assert 'think' not in called['json']

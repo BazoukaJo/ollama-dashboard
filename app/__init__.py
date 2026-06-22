@@ -128,10 +128,8 @@ def create_app(config_name='development'):
         quant = resolve_quantization_level(model)
         return quant if quant else '—'
 
-    # Record exact startup time so get_component_health() can report accurate uptime
     app.config['START_TIME'] = datetime.now(timezone.utc)
 
-    # ===== CONFIGURATION =====
     app.config['DEBUG'] = config_name == 'development'
     app.config['JSON_SORT_KEYS'] = False
     app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
@@ -143,14 +141,10 @@ def create_app(config_name='development'):
     _migrate_legacy_root_data_files(base_dir, data_dir)
     app.config['DATA_DIR'] = str(data_dir)
 
-    # Ollama connection
     app.config['OLLAMA_HOST'] = os.getenv('OLLAMA_HOST', 'localhost')
     app.config['OLLAMA_PORT'] = int(os.getenv('OLLAMA_PORT', '11434'))
-    # Controls the AutoStartOllama background thread in OllamaServiceCore.init_app —
-    # on dashboard startup, start Ollama automatically if it isn't already running.
     app.config['AUTO_START_OLLAMA'] = os.getenv('AUTO_START_OLLAMA', 'true').lower() in ('true', '1', 'yes', 'on')
 
-    # Persistence (defaults live under data/ to keep the repo root clean)
     app.config['HISTORY_FILE'] = os.getenv('HISTORY_FILE', str(data_dir / 'history.json'))
     app.config['MODEL_SETTINGS_FILE'] = os.getenv(
         'MODEL_SETTINGS_FILE', str(data_dir / 'model_settings.json')
@@ -160,25 +154,16 @@ def create_app(config_name='development'):
     logger.info("🔧 Configuring Ollama Dashboard in %s mode", config_name)
     logger.info("📁 Data directory: %s", app.config['DATA_DIR'])
 
-    # ===== SERVICE INITIALIZATION =====
     from app.services.ollama import OllamaService  # pylint: disable=import-outside-toplevel
 
-    # Create single service instance
     ollama_service = OllamaService()
     app.config['OLLAMA_SERVICE'] = ollama_service
 
-    # Initialize service with Flask app context
     with app.app_context():
         ollama_service.init_app(app)
 
     logger.info("✅ OllamaService initialized")
-    logger.info("   • Error handling (20+ pattern detection)")
-    logger.info("   • Smart caching (2s-300s TTLs)")
-    logger.info("   • Rate limiting (3 operation types)")
-    logger.info("   • Performance monitoring")
-    logger.info("   • Health tracking")
 
-    # ===== AUTHENTICATION (optional) =====
     enable_auth = os.getenv('ENABLE_AUTH', 'false').lower() in ('true', '1', 'yes')
     if enable_auth:
         from app.services.auth import AuthService  # pylint: disable=import-outside-toplevel
@@ -207,14 +192,13 @@ def create_app(config_name='development'):
 
         logger.info("🔐 Auth enabled (admin/operator routes protected)")
 
-    # ===== ERROR HANDLERS =====
     @app.errorhandler(404)
     def not_found(e):
         from flask import request as _req  # pylint: disable=import-outside-toplevel
         # /ollama/* includes the OpenAI-compatible /ollama/v1/* paths VS Code Copilot calls —
         # they must get JSON (not HTML) so OpenAI SDK error parsing works.
         if _req.path.startswith('/api/') or _req.path.startswith('/ollama/'):
-            return jsonify({"success": False, "error": "Not found", "message": str(e)}), 404
+            return jsonify({"success": False, "error": "Not found", "message": "Not found"}), 404
         desc = getattr(e, 'description', None) or str(e) or 'Not Found'
         body = (
             '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Not Found</title></head>'
@@ -227,7 +211,6 @@ def create_app(config_name='development'):
         from flask import request as _req  # pylint: disable=import-outside-toplevel
         logger.exception("Unhandled 500 error on %s", _req.path)
         if _req.path.startswith('/api/') or _req.path.startswith('/ollama/'):
-            # Generic message only — do not leak internal exception text/paths to IDE clients.
             return jsonify({"success": False, "error": "Internal server error",
                             "message": "An internal error occurred."}), 500
         msg = getattr(e, 'description', None) or str(e) or 'Internal Server Error'
@@ -237,9 +220,7 @@ def create_app(config_name='development'):
         )
         return body, 500, {'Content-Type': 'text/html; charset=utf-8'}
 
-    # ===== MIDDLEWARE & SECURITY =====
     cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5000,http://127.0.0.1:5000')
-    # Updated CORS rule to grant full API clearance to the dashboard and external IDE connections
     CORS(app, resources={
         r"/api/*": {"origins": cors_origins.split(',')},
         r"/ollama/*": {"origins": "*"},
@@ -257,8 +238,6 @@ def create_app(config_name='development'):
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
         return strip_hop_by_hop_headers(response)
 
-    # ===== BLUEPRINT REGISTRATION =====
-    # Settings-injecting /ollama/... proxy (native + /v1 for Copilot): app/routes/proxy.py
     from app.routes import init_app  # pylint: disable=import-outside-toplevel
 
     init_app(app)
@@ -267,7 +246,6 @@ def create_app(config_name='development'):
     from app.services.mcp_server import mount_mcp_on_flask_app  # pylint: disable=import-outside-toplevel
     mount_mcp_on_flask_app(app)
 
-    # Optional: warm the default IDE model in the background so the first Copilot turn is fast.
     _schedule_startup_prewarm(app, ollama_service)
 
     logger.info("✅ Application initialized successfully")

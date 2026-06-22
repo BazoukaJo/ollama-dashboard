@@ -166,7 +166,7 @@ service: check if already running → POST /api/generate (keep_alive=24h)
 GET /api/system/stats
     ↓
 service: ollama_service.get_system_stats()
-    ├─ Check cache (ttl_seconds=5)
+    ├─ Check cache (ttl_seconds=1)
     ├─ If cached & fresh: return cached data
     ├─ If stale or missing:
     │  ├─ Collect system stats (CPU, RAM, disk)
@@ -244,14 +244,25 @@ Write tools (`start_model`, `stop_model`) require `MCP_ALLOW_WRITE=true`. Read t
 
 ---
 
+## Shared request helpers
+
+Small modules reused across routes, MCP, and Ask? to avoid duplicated logic:
+
+| Module | Role |
+|--------|------|
+| `warm_start.py` | Warm-load `generate` payloads with merged settings (used by `/api/models/start` and MCP `start_model`) |
+| `chat_prep.py` | Normalize Ask? messages, attachments, vision/tool capability checks |
+| `error_messages.py` | Generic client error strings; `log_upstream_error()` for server logs |
+
+---
+
 ## Caching Strategy
 
 | Data | TTL | Refresh | Purpose |
 |------|-----|---------|---------|
-| System stats | 1s | Background thread every 1s | CPU, RAM, VRAM for `/api/system/stats` |
+| System stats | 1s | Server background thread + browser poll (`data-stats-poll-interval`, default 1s) | CPU, RAM, VRAM for `/api/system/stats` |
 | Health ping | — | Background thread every ~15s | Lightweight Ollama version check for recovery |
-| Running models | On demand | Page load / Refresh button | Not polled in background |
-| Available models | On demand | Page load / Refresh button | Not polled in background |
+| Running / available models | 2s (server cache) | Browser poll every ~10s (`data-model-poll-interval`) + manual Refresh | Model cards on the dashboard |
 | Model info | 300s | On demand | Reduce repeated `/api/show` calls |
 | Model settings | ∞ | On write | Persistent storage in JSON |
 | Version | 300s | On demand | Ollama version rarely changes |
@@ -268,7 +279,7 @@ CPython's GIL makes a *single* dict/deque operation atomic, but **compound** seq
 ### Background Thread
 - **Runs in daemon mode** (exits when main thread exits)
 - **Updates cycle**: System stats every 1s; Ollama health ping every ~15s
-- **Model lists**: Fetched on page load or manual refresh only
+- **Model lists**: Browser polls `/api/models/*` every ~10s; manual Refresh also available
 
 ### Locks & guards
 | Primitive | Protects | Why |
@@ -417,13 +428,13 @@ curl http://localhost:5000/api/health
 ## Troubleshooting
 
 **Q: Models show as "running" but Ollama API returns 0 models**
-A: Background thread cache is stale. Wait 10-15 seconds or restart the app.
+A: The running-models list is fetched on demand from Ollama `/api/ps`. Click **Refresh** in the header or call `GET /api/models/running?force_refresh=true`. If the mismatch persists, restart the dashboard.
 
 **Q: Settings changes not persisting**
 A: Check `model_settings.json` file permissions. Ensure app has write access.
 
 **Q: High memory usage with many models**
-A: Background thread caches full model info. Reduce cache size or increase TTL in `app/services/ollama_core.py`.
+A: Model info is cached in memory with short TTLs. Restart the app to clear caches, or reduce how often you force-refresh large model lists.
 
 ---
 

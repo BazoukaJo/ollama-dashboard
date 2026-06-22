@@ -21,9 +21,13 @@ The dashboard works in **dark and light** themes and adapts to phone, tablet, an
 
 ### Modals & overlays
 
-**Ask?** — chat with a loaded model (streaming), attach PDF/Word/code, agent mode with MCP tools, and history.
+**Ask?** — chat with a loaded model (streaming), attach PDF/Word/code, agent mode with MCP tools, history, and **side dock** (drag the header to snap left/right while you keep using the dashboard).
 
 ![Ask? modal — agent mode, attachments, and streaming chat](docs/images/overlay-ask.png)
+
+**Ask? side dock** — half-panel chat snapped to the screen edge alongside the dashboard; drag the **center gutter** to resize both sides (saved for next open).
+
+![Ask? side dock — chat panel on the right with the dashboard still visible](docs/images/overlay-ask-side.png)
 
 **Settings** — per-model defaults (temperature, context, prompts, Copilot reasoning) saved for this dashboard and applied on load/start.
 
@@ -143,6 +147,7 @@ More help: **[Troubleshooting](docs/TROUBLESHOOTING.md)**
 | Guide | Contents |
 |-------|----------|
 | **[Complete Guide](docs/GUIDE.md)** | Proxy setup, MCP tools, Windows start/stop/restart, per-model settings, configuration, development |
+| **[UI customization](docs/UI.md)** | Poll intervals, Ask side dock, downloadable list size, theme, filters |
 | **[Architecture](docs/ARCHITECTURE.md)** | How the app is built internally |
 | **[Deployment](docs/DEPLOYMENT.md)** | Docker, Gunicorn, Nginx, production tips |
 | **[Security](docs/SECURITY.md)** | CORS, validation, TLS |

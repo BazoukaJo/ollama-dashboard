@@ -230,7 +230,9 @@
         const text =
           data.response != null
             ? String(data.response)
-            : JSON.stringify(data, null, 2);
+            : data.message && data.message.content != null
+              ? String(data.message.content)
+              : JSON.stringify(data, null, 2);
         out.textContent = text;
         if (typeof updateModelData === "function") {
           void updateModelData();

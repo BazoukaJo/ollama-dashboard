@@ -33,10 +33,34 @@
     return s.slice(0, max).trim() + "…";
   }
 
+  function messageCount(item) {
+    if (Array.isArray(item.messages) && item.messages.length) {
+      return item.messages.length;
+    }
+    if (item.prompt || item.response) return 2;
+    return 0;
+  }
+
+  function conversationMessages(item) {
+    if (Array.isArray(item.messages) && item.messages.length) {
+      return item.messages
+        .filter(function (m) {
+          return m && (m.role === "user" || m.role === "assistant") && m.content != null;
+        })
+        .map(function (m) {
+          var out = { role: m.role, content: String(m.content) };
+          if (m.thinking) out.thinking = String(m.thinking);
+          return out;
+        });
+    }
+    var out = [];
+    if (item.prompt) out.push({ role: "user", content: String(item.prompt) });
+    if (item.response) out.push({ role: "assistant", content: String(item.response) });
+    return out;
+  }
+
   function buildMarkdown(entry) {
     var model = entry.model || "unknown";
-    var prompt = entry.prompt || "";
-    var response = entry.response || "";
     var ts = entry.timestamp || "";
     var lines = ["# Ask: " + model];
     if (ts) lines.push("", "_Saved: " + ts + "_");
@@ -44,12 +68,25 @@
       lines.push(
         "",
         "**Attachments:** " +
-          entry.attachments.map(function (a) {
-            return (a.type || "file") + ": " + (a.name || "");
-          }).join(", "),
+          entry.attachments
+            .map(function (a) {
+              return (a.type || "file") + ": " + (a.name || "");
+            })
+            .join(", "),
       );
     }
-    lines.push("", "**Question:**", prompt, "", "**Answer:**", response);
+    var msgs = conversationMessages(entry);
+    if (msgs.length) {
+      msgs.forEach(function (m, idx) {
+        lines.push("", "## Turn " + (idx + 1), "**" + (m.role === "user" ? "You" : "Assistant") + ":**");
+        if (m.thinking) {
+          lines.push("", "_Reasoning:_", m.thinking);
+        }
+        lines.push(m.content);
+      });
+    } else {
+      lines.push("", "**Question:**", entry.prompt || "", "", "**Answer:**", entry.response || "");
+    }
     return lines.join("\n");
   }
 
@@ -137,6 +174,7 @@
         var id = item.id || "";
         var expanded = _expandedId === id;
         var preview = truncate(item.prompt || item.response || "(empty)", 120);
+        var turns = Math.max(1, Math.ceil(messageCount(item) / 2));
         return (
           '<article class="ask-history-item' +
           (expanded ? " ask-history-item--expanded" : "") +
@@ -148,6 +186,10 @@
           '<span class="badge bg-success ask-history-model">' +
           esc(item.model || "unknown") +
           "</span>" +
+          '<span class="badge bg-secondary ask-history-turns">' +
+          turns +
+          (turns === 1 ? " turn" : " turns") +
+          "</span>" +
           '<span class="small text-muted ask-history-time">' +
           esc(formatRelativeTime(item.timestamp)) +
           "</span>" +
@@ -158,28 +200,30 @@
           "</button>" +
           (expanded
             ? '<div class="ask-history-detail mt-2">' +
-              '<div class="ask-history-block mb-2">' +
-              '<div class="small text-muted mb-1">Question</div>' +
-              '<div class="ask-history-text">' +
-              esc(item.prompt || "") +
-              "</div>" +
-              "</div>" +
-              '<div class="ask-history-block mb-2">' +
-              '<div class="small text-muted mb-1">Answer</div>' +
-              '<div class="ask-history-text">' +
-              esc(item.response || "") +
-              "</div>" +
-              "</div>" +
+              conversationMessages(item)
+                .map(function (m) {
+                  return (
+                    '<div class="ask-history-block mb-2">' +
+                    '<div class="small text-muted mb-1">' +
+                    (m.role === "user" ? "You" : "Assistant") +
+                    "</div>" +
+                    '<div class="ask-history-text">' +
+                    esc(m.content || "") +
+                    "</div>" +
+                    "</div>"
+                  );
+                })
+                .join("") +
               '<div class="d-flex flex-wrap gap-1 ask-history-actions">' +
+              '<button type="button" class="btn btn-sm btn-primary ask-history-continue" data-id="' +
+              esc(id) +
+              '"><i class="fas fa-comment-dots me-1"></i>Continue chat</button>' +
               '<button type="button" class="btn btn-sm btn-outline-secondary ask-history-copy" data-id="' +
               esc(id) +
               '"><i class="fas fa-copy me-1"></i>Copy</button>' +
               '<button type="button" class="btn btn-sm btn-outline-secondary ask-history-download" data-id="' +
               esc(id) +
               '"><i class="fas fa-download me-1"></i>Download</button>' +
-              '<button type="button" class="btn btn-sm btn-outline-info ask-history-ask-again" data-id="' +
-              esc(id) +
-              '"><i class="fas fa-redo me-1"></i>Ask again</button>' +
               '<button type="button" class="btn btn-sm btn-outline-danger ask-history-delete ms-auto" data-id="' +
               esc(id) +
               '"><i class="fas fa-trash-alt me-1"></i>Delete</button>' +
@@ -213,10 +257,10 @@
         downloadHistoryItem(btn.getAttribute("data-id"));
       });
     });
-    listEl.querySelectorAll(".ask-history-ask-again").forEach(function (btn) {
+    listEl.querySelectorAll(".ask-history-continue").forEach(function (btn) {
       btn.addEventListener("click", function (e) {
         e.stopPropagation();
-        askAgainFromHistory(btn.getAttribute("data-id"));
+        continueFromHistory(btn.getAttribute("data-id"));
       });
     });
     listEl.querySelectorAll(".ask-history-delete").forEach(function (btn) {
@@ -251,7 +295,7 @@
       if (window.showNotification) showNotification("No model selected", "warning");
       return;
     }
-    if (!state.prompt && !state.response) {
+    if (!state.prompt && !state.response && !(state.messages && state.messages.length)) {
       if (window.showNotification) showNotification("Nothing to save yet", "warning");
       return;
     }
@@ -265,6 +309,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: state.model,
+          messages: state.messages || [],
           prompt: state.prompt,
           response: state.response,
           attachments: state.attachments || [],
@@ -280,7 +325,7 @@
     } catch (err) {
       if (window.showNotification) showNotification("Save failed: " + err.message, "error");
     } finally {
-      if (saveBtn && state && state.response) saveBtn.disabled = false;
+      if (saveBtn) saveBtn.disabled = false;
     }
   }
 
@@ -341,19 +386,22 @@
     if (window.showNotification) showNotification("Download started", "success");
   }
 
-  function askAgainFromHistory(id) {
+  function continueFromHistory(id) {
     var item = findItem(id);
     if (!item || !item.model) return;
-    if (typeof window.openAskModal === "function") {
+    var messages = conversationMessages(item);
+    if (typeof window.askModalLoadConversation === "function") {
+      window.askModalLoadConversation(item.model, messages);
+    } else if (typeof window.openAskModal === "function") {
       window.openAskModal(item.model);
     }
-    var input = document.getElementById("askModelInput");
-    if (input) input.value = item.prompt || "";
-    var askTabBtn = document.getElementById("askTabBtn");
-    if (askTabBtn && typeof bootstrap !== "undefined") {
-      bootstrap.Tab.getOrCreateInstance(askTabBtn).show();
+    var modalEl = document.getElementById("askModelModal");
+    if (modalEl && typeof bootstrap !== "undefined") {
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
     }
-    if (input) input.focus();
+    if (window.showNotification) {
+      showNotification("Conversation loaded — add a follow-up below", "success");
+    }
   }
 
   function bindHistoryControls() {

@@ -13,9 +13,8 @@ when OLLAMA_HOST itself carries a port.
 import threading
 from unittest.mock import patch
 
-import requests
-
 import app.routes.proxy as proxy
+import requests
 from app import create_app
 
 

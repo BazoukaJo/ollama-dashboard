@@ -33,6 +33,16 @@ jobs:
       - name: Install wheel and smoke-import app
         run: pip install dist/ollama_dashboard-*.whl && python -c "from app import create_app; create_app('production')"
 
+  js-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run Ask message format smoke tests
+        run: node tests/test_ask_message_format.js
+
   pytest:
     runs-on: ${{ matrix.os }}
     strategy:

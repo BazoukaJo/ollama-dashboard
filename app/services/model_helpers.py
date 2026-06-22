@@ -5,7 +5,6 @@ from app.services.capabilities import ensure_capability_flags
 from app.services.model_settings_helpers import get_existing_model_settings_entry
 from app.services.service_errors import SERVICE_ERRORS
 
-
 _FORMATTED_CTX_RE = re.compile(r'^(\d+)([KMB])$', re.IGNORECASE)
 
 

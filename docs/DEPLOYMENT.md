@@ -175,7 +175,8 @@ server {
 | Issue | Solution |
 |-------|----------|
 | Dashboard can't connect to Ollama | Check `OLLAMA_HOST` env var; ensure Ollama API is accessible |
-| `start.bat` window closes immediately | **Expected** in release mode — Waitress runs hidden in the background. Check http://localhost:5000 or `scripts\dashboard-process.ps1 -Action status`. Logs: `data\dashboard-release-launch.log`, `data\dashboard-release-error.log`. For a visible launcher: `start.bat console` |
+| `start.bat` window closes immediately | **Expected** in release mode — Waitress runs in a minimized background window. Check http://localhost:5000 or `scripts\dashboard-process.ps1 -Action status`. Logs: `data\dashboard-release-launch.log`, `data\dashboard-release-error.log`. For a visible foreground server: `start.bat console` |
+| `Release start failed` / Application Control Policy blocked | Release mode uses `python -m waitress` instead of `waitress-serve.exe`. If policy still blocks startup, use `start.bat console`, `start_dev.bat`, or `python ollama_dashboard_cli.py` from an allowed terminal |
 | Settings changes not saving | Check file permissions; ensure disk space available |
 | Port 5000 already in use | Run `stop_app.bat`. If stop refuses, another app owns the port — see [Troubleshooting](TROUBLESHOOTING.md#dashboard-wont-start-or-stop-windows-port-5000) |
 | Started dev but wanted release (or vice versa) | `stop_app.bat` then `start.bat` or `start_dev.bat`; or `restart_app.bat release` / `dev` |
