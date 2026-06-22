@@ -1,6 +1,6 @@
 # Shared dashboard process detection and lifecycle for Windows batch launchers.
 param(
-    [ValidateSet('status', 'stop', 'wait-clear', 'ensure-port', 'resolve-mode')]
+    [ValidateSet('status', 'stop', 'wait-clear', 'wait-ready', 'preflight', 'ensure-port', 'resolve-mode')]
     [string]$Action = 'status',
     [ValidateSet('release', 'dev', 'any')]
     [string]$Mode = 'any',
@@ -232,6 +232,32 @@ function Wait-PortClear {
     return 1
 }
 
+function Wait-DashboardReady {
+    for ($i = 0; $i -lt $WaitSeconds; $i++) {
+        $status = Get-DashboardStatus
+        if ($status.ForeignOnPort) { return 2 }
+        if ($status.DashboardRunning) { return 0 }
+        Start-Sleep -Seconds 1
+    }
+    return 1
+}
+
+function Test-DashboardPreflight {
+    $py = Join-Path $RepoRootNorm '.venv\Scripts\python.exe'
+    if (-not (Test-Path $py)) {
+        Write-Host "Virtual environment not found: $py"
+        return 1
+    }
+    $oldEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $output = & $py -c "from wsgi import app" 2>&1
+    $exitCode = $LASTEXITCODE
+    $ErrorActionPreference = $oldEap
+    $output | ForEach-Object { Write-Host $_ }
+    if ($exitCode -ne 0) { return 1 }
+    return 0
+}
+
 function Initialize-PortForMode {
     param([string]$TargetMode)
     $status = Get-DashboardStatus
@@ -295,5 +321,7 @@ switch ($Action) {
         exit $code
     }
     'wait-clear' { exit (Wait-PortClear) }
+    'wait-ready' { exit (Wait-DashboardReady) }
+    'preflight' { exit (Test-DashboardPreflight) }
     'ensure-port' { exit (Initialize-PortForMode -TargetMode $Mode) }
 }

@@ -6,12 +6,16 @@ echo Restarting Ollama Dashboard...
 echo.
 
 set "RUNMODE="
+set "NOPAUSE=0"
+if /i "%OLLAMA_DASHBOARD_NO_PAUSE%"=="1" set "NOPAUSE=1"
 
-if /i "%~1"=="dev" (
-	set "RUNMODE=dev"
-) else if /i "%~1"=="release" (
-	set "RUNMODE=release"
-) else (
+for %%A in (%*) do (
+	if /i "%%A"=="nopause" set "NOPAUSE=1"
+	if /i "%%A"=="dev" set "RUNMODE=dev"
+	if /i "%%A"=="release" set "RUNMODE=release"
+)
+
+if not defined RUNMODE (
 	for /f "usebackq delims=" %%M in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\dashboard-process.ps1" -Action resolve-mode`) do set "RUNMODE=%%M"
 )
 
@@ -29,7 +33,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\dashboard-proc
 set "STOP=!ERRORLEVEL!"
 if "!STOP!"=="2" (
 	echo Restart aborted: port 5000 is blocked by another application.
-	pause
+	if "!NOPAUSE!"=="0" pause
 	exit /b 2
 )
 if "!STOP!"=="1" (
@@ -48,7 +52,7 @@ if /i "!RUNMODE!"=="dev" (
 		start "Ollama Dashboard (dev)" cmd /k pushd "%~dp0" ^&^& call start_dev.bat
 	) ELSE (
 		echo Virtual environment not found! Please set up .venv first.
-		pause
+		if "!NOPAUSE!"=="0" pause
 		exit /b 1
 	)
 ) ELSE (
@@ -56,13 +60,13 @@ if /i "!RUNMODE!"=="dev" (
 	IF EXIST .venv\Scripts\python.exe (
 		call "%~dp0scripts\start-release.bat"
 		if errorlevel 1 (
-			echo Release start failed. Check data\dashboard-release-launch.log
-			pause
+			echo Release start failed. Check data\dashboard-release-launch.log and data\dashboard-release-error.log
+			if "!NOPAUSE!"=="0" pause
 			exit /b 1
 		)
 	) ELSE (
 		echo Virtual environment not found! Please set up .venv first.
-		pause
+		if "!NOPAUSE!"=="0" pause
 		exit /b 1
 	)
 )

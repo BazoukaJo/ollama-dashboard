@@ -22,12 +22,31 @@ echo release> data\dashboard.run-mode
 set "PY=%REPO%\.venv\Scripts\python.exe"
 set "RUNNER=%REPO%\scripts\run-release-server.bat"
 
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\scripts\dashboard-process.ps1" -Action preflight -RepoRoot "%REPO%"
+if errorlevel 1 (
+	echo App preflight failed. Install dependencies: .venv\Scripts\pip install -r requirements.txt
+	echo Details: data\dashboard-release-error.log
+	exit /b 1
+)
+
 if /i "%~1"=="console" goto :foreground
 
 echo %date% %time% Release dashboard starting (minimized, python -m waitress)...>> "%REPO%\data\dashboard-release-launch.log"
 
 REM Empty title ("") required — otherwise START treats the next token as the window title/path.
 start "" /min cmd /c call "%RUNNER%"
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO%\scripts\dashboard-process.ps1" -Action wait-ready -RepoRoot "%REPO%"
+set "READY=!ERRORLEVEL!"
+if "!READY!"=="2" (
+	echo Cannot start: port 5000 is used by another application.
+	exit /b 2
+)
+if not "!READY!"=="0" (
+	echo Release dashboard did not become ready on port 5000.
+	echo Check data\dashboard-release-error.log
+	exit /b 1
+)
 exit /b 0
 
 :foreground

@@ -24,7 +24,9 @@ When you change code that affects the running server, **restart the app yourself
    - Release: `start.bat` (Waitress, production config)
    - Development: `start_dev.bat` (Flask debug reloader)
    - Or: `python ollama_dashboard_cli.py`
+   - Automated restart (no pause): `restart_app.bat nopause` or set `OLLAMA_DASHBOARD_NO_PAUSE=1`
 3. Run in background when continuing other work.
+4. If restart fails with preflight/import errors, run `.venv\Scripts\pip install -r requirements.txt` then retry.
 
 Default URL: http://127.0.0.1:5000
 
