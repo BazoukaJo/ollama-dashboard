@@ -129,7 +129,26 @@ def client_proxy_status(data_dir: str | Path, *, ollama_base_url: str | None = N
         'saved_ctx': saved_ctx,
         'ctx_mismatch': ctx_mismatch,
         'loaded_model': loaded_model,
+        **_residency_summary(ollama_base_url),
     }
+
+
+def _residency_summary(ollama_base_url: str | None) -> dict[str, Any]:
+    if not ollama_base_url:
+        return {}
+    try:
+        from app.services.model_residency import get_residency_status
+
+        status = get_residency_status(ollama_base_url)
+        return {
+            'resident_fast_model': status.get('resident_fast_model'),
+            'resident_fast_loaded': status.get('resident_fast_loaded'),
+            'resident_heavy_model': status.get('resident_heavy_model'),
+            'resident_heavy_loaded': status.get('resident_heavy_loaded'),
+            'pinned_models': [p.get('model') for p in status.get('pinned') or []],
+        }
+    except Exception:  # noqa: BLE001 - status panel must stay up
+        return {}
 
 
 def client_proxy_analytics(data_dir: str | Path) -> dict[str, Any]:

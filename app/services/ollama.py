@@ -46,7 +46,7 @@ class OllamaService(
     - Background caching (2s-300s intervals based on data volatility)
     - Chat/conversation management
     - Advanced error handling with 20+ pattern detection
-    - Smart rate limiting (5 ops/min, 2 pulls/5min, 6 updates/min)
+    - Smart rate limiting (5 ops/min, 6 background updates/min)
     - Performance monitoring with anomaly detection
     - Health component tracking
     """
@@ -67,7 +67,6 @@ class OllamaService(
         # Rate limiting: Prevent overwhelming Ollama with too many requests
         self.rate_limiters = {
             'model_operations': RateLimiter(max_requests=5, window_seconds=60),
-            'model_pull': RateLimiter(max_requests=2, window_seconds=300),
             'background_updates': RateLimiter(max_requests=6, window_seconds=60),
         }
 

@@ -1,0 +1,74 @@
+{
+  "_comment": "Active 7-model fleet — exact Ollama tags from `ollama list`. Roles for 64 GB DDR5.",
+  "updated": "2026-06-22",
+  "default_ide_model": "gemma4:latest",
+  "proxy_url": "http://127.0.0.1:5000/ollama",
+  "residency": {
+    "fast_pinned": "gemma4:latest",
+    "heavy_warm": "qwen3.6:27B",
+    "on_demand_only": [
+      "Qwen3-Coder-Next:latest",
+      "llama4:latest",
+      "qwen3-vl:8b",
+      "lfm2.5:latest",
+      "llama3.1:8b-instruct-q4_K_M"
+    ]
+  },
+  "routing": {
+    "enabled_on": "gemma4:latest",
+    "fast": "gemma4:latest",
+    "reasoning": "qwen3.6:27B",
+    "coding": "Qwen3-Coder-Next:latest"
+  },
+  "models": [
+    {
+      "tag": "gemma4:latest",
+      "role": "daily_driver",
+      "size_gb": 9.6,
+      "pin": true,
+      "notes": "Default IDE model; three-tier routing hub"
+    },
+    {
+      "tag": "lfm2.5:latest",
+      "role": "speed_alt",
+      "size_gb": 5.2,
+      "pin": false,
+      "notes": "~300 tok/s; use when raw speed matters"
+    },
+    {
+      "tag": "llama3.1:8b-instruct-q4_K_M",
+      "role": "llama_chat",
+      "size_gb": 4.9,
+      "pin": false,
+      "notes": "Same as llama3.1:8b alias; tools, lightweight Llama"
+    },
+    {
+      "tag": "qwen3.6:27B",
+      "role": "reasoning_heavy",
+      "size_gb": 17,
+      "pin": "warm",
+      "notes": "RESIDENCY_HEAVY_MODEL; tools + thinking + vision"
+    },
+    {
+      "tag": "qwen3-vl:8b",
+      "role": "vision",
+      "size_gb": 6.1,
+      "pin": false,
+      "notes": "Screenshots / multimodal; proxy critical"
+    },
+    {
+      "tag": "Qwen3-Coder-Next:latest",
+      "role": "coding_agent",
+      "size_gb": 51,
+      "pin": false,
+      "notes": "Agent/MCP/coding sessions; unload heavy before loading"
+    },
+    {
+      "tag": "llama4:latest",
+      "role": "frontier",
+      "size_gb": 67,
+      "pin": false,
+      "notes": "On demand only on 64 GB — will not fit with coder or 27B pinned"
+    }
+  ]
+}

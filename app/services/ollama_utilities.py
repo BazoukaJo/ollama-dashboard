@@ -397,30 +397,177 @@ class OllamaServiceUtilities:
             }
 
     def run_model_benchmark(self, model_name, cases=None):
-        """Run the objective benchmark suite for one installed model."""
+        """Run benchmark with dashboard-backed per-model settings (proxy path)."""
         host, port = self._get_ollama_host_port()
+        from app.services.benchmark_settings import (
+            resolve_benchmark_timeout,
+            resolve_dashboard_benchmark_options,
+        )
         from app.services.model_benchmark import BENCHMARK_CASES, run_benchmark_for_model
 
         suite = cases or BENCHMARK_CASES
-        entry = self.get_model_settings_with_fallback(model_name)
-        options = dict(self.get_default_settings())
-        if entry and isinstance(entry.get('settings'), dict):
-            options.update(entry['settings'])
+        options = resolve_dashboard_benchmark_options(self, model_name)
+        result = run_benchmark_for_model(
+            self._session, host, port, model_name,
+            cases=suite,
+            timeout=resolve_benchmark_timeout(model_name),
+            options=options,
+            path='dashboard',
+        )
+        result['improvements'] = self._benchmark_improvements_for(model_name, result)
+        return result
+
+    def _benchmark_improvements_for(self, model_name, benchmark, baseline=None):
+        from app.services.benchmark_improvements import analyze_model_from_service
+        return analyze_model_from_service(self, model_name, benchmark, baseline)
+
+    def _fleet_improvements_for(self, dashboard_results, baseline_results=None):
+        from app.services.benchmark_improvements import build_fleet_improvements_report
+        baseline_by = {r['model']: r for r in (baseline_results or []) if r.get('model')}
+        analyses = [
+            self._benchmark_improvements_for(
+                row['model'], row, baseline_by.get(row['model']),
+            )
+            for row in dashboard_results
+            if row.get('model')
+        ]
+        return build_fleet_improvements_report(analyses)
+
+    def run_baseline_model_benchmark(self, model_name, cases=None):
+        """Run benchmark with raw Ollama defaults (no dashboard settings)."""
+        host, port = self._get_ollama_host_port()
+        from app.services.benchmark_settings import (
+            resolve_baseline_benchmark_options,
+            resolve_benchmark_timeout,
+        )
+        from app.services.model_benchmark import BENCHMARK_CASES, run_benchmark_for_model
+
+        suite = cases or BENCHMARK_CASES
         return run_benchmark_for_model(
             self._session, host, port, model_name,
-            cases=suite, options=options,
+            cases=suite,
+            timeout=resolve_benchmark_timeout(model_name),
+            options=resolve_baseline_benchmark_options(model_name),
+            path='baseline',
         )
 
-    def run_all_model_benchmarks(self, model_names=None):
+    def run_model_benchmark_comparison(self, model_name, cases=None):
+        """Benchmark dashboard settings vs raw Ollama baseline for one model."""
+        from app.services.benchmark_settings import (
+            benchmark_options_summary,
+            resolve_baseline_benchmark_options,
+            resolve_benchmark_timeout,
+            resolve_dashboard_benchmark_options,
+        )
+        from app.services.model_benchmark import (
+            BENCHMARK_CASES,
+            build_proxy_advantage_report,
+            run_benchmark_for_model,
+        )
+
+        host, port = self._get_ollama_host_port()
+        suite = cases or BENCHMARK_CASES
+        timeout = resolve_benchmark_timeout(model_name)
+        dash_opts = resolve_dashboard_benchmark_options(self, model_name)
+        base_opts = resolve_baseline_benchmark_options(model_name)
+
+        dashboard = run_benchmark_for_model(
+            self._session, host, port, model_name,
+            cases=suite, timeout=timeout, options=dash_opts, path='dashboard',
+        )
+        baseline = run_benchmark_for_model(
+            self._session, host, port, model_name,
+            cases=suite, timeout=timeout, options=base_opts, path='baseline',
+        )
+        proxy_advice = build_proxy_advantage_report([dashboard], [baseline])
+        improvements = self._benchmark_improvements_for(model_name, dashboard, baseline)
+        return {
+            'model': model_name,
+            'dashboard': dashboard,
+            'baseline': baseline,
+            'advantage': proxy_advice['comparisons'][0] if proxy_advice['comparisons'] else {},
+            'proxy_advice': proxy_advice,
+            'improvements': improvements,
+            'settings_applied': benchmark_options_summary(dash_opts),
+            'baseline_settings': benchmark_options_summary(base_opts),
+        }
+
+    def run_all_model_benchmarks(self, model_names=None, compare_baseline=False):
         """Benchmark all installed models (or a provided subset) and return fleet advice."""
         host, port = self._get_ollama_host_port()
-        from app.services.model_benchmark import BENCHMARK_CASES, run_benchmark_all_models
+        from app.services.benchmark_settings import (
+            resolve_baseline_benchmark_options,
+            resolve_benchmark_timeout,
+            resolve_dashboard_benchmark_options,
+        )
+        from app.services.model_benchmark import (
+            BENCHMARK_CASES,
+            build_fleet_advice,
+            build_proxy_advantage_report,
+            run_benchmark_for_model,
+        )
 
         if model_names is None:
             available = self.get_available_models()
             model_names = [m.get('name') for m in available if m.get('name')]
         names = [str(n).strip() for n in model_names if str(n).strip()]
-        return run_benchmark_all_models(self._session, host, port, names, cases=BENCHMARK_CASES)
+
+        if not compare_baseline:
+            dashboard_results = []
+            for name in names:
+                dashboard_results.append(run_benchmark_for_model(
+                    self._session, host, port, name,
+                    cases=BENCHMARK_CASES,
+                    timeout=resolve_benchmark_timeout(name),
+                    options=resolve_dashboard_benchmark_options(self, name),
+                    path='dashboard',
+                ))
+            improvements = self._fleet_improvements_for(dashboard_results)
+            for row, analysis in zip(dashboard_results, improvements.get('models') or []):
+                if analysis.get('model') == row.get('model'):
+                    row['improvements'] = analysis
+            return {
+                'models': dashboard_results,
+                'advice': build_fleet_advice(dashboard_results),
+                'improvements': improvements,
+                'benchmark_count': len(BENCHMARK_CASES),
+            }
+
+        dashboard_results = []
+        baseline_results = []
+        for name in names:
+            timeout = resolve_benchmark_timeout(name)
+            dashboard_results.append(run_benchmark_for_model(
+                self._session, host, port, name,
+                cases=BENCHMARK_CASES,
+                timeout=timeout,
+                options=resolve_dashboard_benchmark_options(self, name),
+                path='dashboard',
+            ))
+            baseline_results.append(run_benchmark_for_model(
+                self._session, host, port, name,
+                cases=BENCHMARK_CASES,
+                timeout=timeout,
+                options=resolve_baseline_benchmark_options(name),
+                path='baseline',
+            ))
+
+        improvements = self._fleet_improvements_for(dashboard_results, baseline_results)
+        for row, analysis in zip(dashboard_results, improvements.get('models') or []):
+            if analysis.get('model') == row.get('model'):
+                row['improvements'] = analysis
+
+        return {
+            'models': dashboard_results,
+            'advice': build_fleet_advice(dashboard_results),
+            'baseline': {
+                'models': baseline_results,
+                'advice': build_fleet_advice(baseline_results),
+            },
+            'proxy_advantage': build_proxy_advantage_report(dashboard_results, baseline_results),
+            'improvements': improvements,
+            'benchmark_count': len(BENCHMARK_CASES),
+        }
 
     def get_system_stats_history(self):
         """Return persisted system stats samples (read-only)."""

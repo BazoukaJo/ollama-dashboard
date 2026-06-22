@@ -15,6 +15,10 @@ from typing import Any, Callable
 
 import requests
 
+from app.services.benchmark_settings import (
+    BASELINE_BENCHMARK_OPTIONS,
+    model_uses_thinking,
+)
 from app.services.service_errors import HTTP_SERVICE_ERRORS
 
 # European capitals (subset — enough to validate list exercises)
@@ -33,20 +37,31 @@ def _strip_model_artifacts(text: str) -> str:
     """Remove thinking blocks and markdown fences before scoring."""
     if not text:
         return ''
-    cleaned = re.sub(
+    cleaned = text
+    for pattern in (
         r'<\s*think\s*>.*?<\s*/\s*think\s*>',
-        '',
-        text,
-        flags=re.DOTALL | re.IGNORECASE,
-    )
-    cleaned = re.sub(r'<\s*/\s*think\s*>\s*', '', cleaned, flags=re.IGNORECASE)
+        r'<\s*redacted_thinking\s*>.*?<\s*/\s*redacted_thinking\s*>',
+        r'<\s*redacted_thinking\s*>.*',
+        r'<\s*think\s*>.*',
+    ):
+        cleaned = re.sub(pattern, '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+    cleaned = re.sub(r'<\s*/\s*(?:think|redacted_thinking)\s*>\s*', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\\boxed\{([^}]*)\}', r'\1', cleaned)
     cleaned = re.sub(r'```[\w]*\s*', '', cleaned)
     cleaned = cleaned.replace('```', '')
     return cleaned.strip()
 
 
-def _first_integer(text: str) -> int | None:
-    match = re.search(r'-?\d+', text or '')
+def _extract_answer_integer(text: str) -> int | None:
+    """Parse integers from model answers, preferring \\boxed{} and the last line."""
+    raw = text or ''
+    boxed = re.search(r'\\boxed\{(-?\d+)\}', raw)
+    if boxed:
+        return int(boxed.group(1))
+    cleaned = _strip_model_artifacts(raw)
+    lines = [ln.strip() for ln in cleaned.splitlines() if ln.strip()]
+    search_in = lines[-1] if lines else cleaned
+    match = re.search(r'-?\d+', search_in)
     if not match:
         return None
     try:
@@ -61,8 +76,7 @@ def _split_sentences(text: str) -> list[str]:
 
 
 def score_sheep_riddle(response: str) -> dict[str, Any]:
-    text = _strip_model_artifacts(response)
-    value = _first_integer(text)
+    value = _extract_answer_integer(response)
     passed = value == 9
     return {
         'score': 100 if passed else (35 if value is not None else 0),
@@ -73,8 +87,7 @@ def score_sheep_riddle(response: str) -> dict[str, Any]:
 
 
 def score_quick_math(response: str) -> dict[str, Any]:
-    text = _strip_model_artifacts(response)
-    value = _first_integer(text)
+    value = _extract_answer_integer(response)
     passed = value == 437
     return {
         'score': 100 if passed else (40 if value is not None else 0),
@@ -185,6 +198,67 @@ def score_speed_ready(response: str) -> dict[str, Any]:
     }
 
 
+def score_bugfix_sum(response: str) -> dict[str, Any]:
+    """Score fix for sum 1..n (off-by-one bug)."""
+    text = _strip_model_artifacts(response)
+    notes: list[str] = []
+    score = 0
+    if re.search(r'def\s+sum_to_n\s*\(', text):
+        score += 25
+    else:
+        notes.append('missing def sum_to_n(...)')
+    compact = re.sub(r'\s+', '', text)
+    if '//2' in compact or '// 2' in text:
+        score += 35
+    elif 'returnn*(n+1)' in compact.replace('*', ''):
+        score += 20
+    else:
+        notes.append('expected closed-form n*(n+1)//2')
+    if re.search(r'range\s*\(\s*1\s*,', text) or 'range(n+1)' in compact or 'range(1,n+1)' in compact:
+        score += 40
+    elif '//2' in compact or '// 2' in text:
+        score += 40
+    else:
+        notes.append('expected closed-form n*(n+1)//2 or range(1, n+1)')
+    passed = score >= 85
+    return {'score': min(score, 100), 'passed': passed, 'notes': notes}
+
+
+def score_json_version(response: str) -> dict[str, Any]:
+    """Extract version field from JSON snippet."""
+    text = _strip_model_artifacts(response).strip()
+    first = text.splitlines()[0].strip() if text else ''
+    first = re.sub(r'^["\']|["\']$', '', first)
+    passed = first == '2.1'
+    return {
+        'score': 100 if passed else (50 if '2.1' in first else 0),
+        'passed': passed,
+        'notes': [] if passed else [f'expected 2.1, got {first!r}'],
+        'expected': '2.1',
+    }
+
+
+def score_unit_test_assert(response: str) -> dict[str, Any]:
+    """Minimal pytest-style test for is_palindrome."""
+    text = _strip_model_artifacts(response)
+    notes: list[str] = []
+    score = 0
+    if re.search(r'def\s+test_', text):
+        score += 30
+    else:
+        notes.append('missing def test_...')
+    if 'assert' in text:
+        score += 35
+    else:
+        notes.append('missing assert')
+    if 'is_palindrome' in text:
+        score += 35
+    else:
+        notes.append('should call is_palindrome')
+    passed = score >= 85
+    return {'score': min(score, 100), 'passed': passed, 'notes': notes}
+
+
 @dataclass(frozen=True)
 class BenchmarkCase:
     id: str
@@ -277,6 +351,45 @@ BENCHMARK_CASES: tuple[BenchmarkCase, ...] = (
         prompt='Reply with exactly the word ready and nothing else.',
         scorer=score_speed_ready,
     ),
+    BenchmarkCase(
+        id='bugfix_sum',
+        category='coding',
+        weight=1.2,
+        description='Fix off-by-one in sum function',
+        prompt=(
+            'Fix this Python bug. The function should return the sum of integers from 1 to n inclusive.\n'
+            'def sum_to_n(n):\n'
+            '    total = 0\n'
+            '    for i in range(1, n):  # bug here\n'
+            '        total += i\n'
+            '    return total\n'
+            'Output ONLY the corrected function, no markdown or explanation.'
+        ),
+        scorer=score_bugfix_sum,
+    ),
+    BenchmarkCase(
+        id='json_version',
+        category='instruction',
+        weight=1.0,
+        description='Extract JSON field exactly',
+        prompt=(
+            'Given this JSON: {"name":"app","version":"2.1","ok":true}\n'
+            'Reply with ONLY the version value (2.1), nothing else.'
+        ),
+        scorer=score_json_version,
+    ),
+    BenchmarkCase(
+        id='unit_test_assert',
+        category='coding',
+        weight=1.1,
+        description='Write a minimal unit test',
+        prompt=(
+            'Write one pytest test function named test_palindrome_basic that asserts '
+            'is_palindrome("aba") is True. Assume is_palindrome exists. '
+            'Output only the test function, no imports or markdown.'
+        ),
+        scorer=score_unit_test_assert,
+    ),
 )
 
 
@@ -292,16 +405,21 @@ def _run_single_case(
     *,
     timeout: int = 120,
     options: dict[str, Any] | None = None,
+    think: bool | None = None,
 ) -> dict[str, Any]:
+    opts = dict(options or {})
+    opts.setdefault('num_predict', BASELINE_BENCHMARK_OPTIONS['num_predict'])
+    opts.setdefault('temperature', BASELINE_BENCHMARK_OPTIONS['temperature'])
+    num_predict = int(opts.get('num_predict') or BASELINE_BENCHMARK_OPTIONS['num_predict'])
+
     payload: dict[str, Any] = {
         'model': model_name,
         'prompt': case.prompt,
         'stream': False,
-        'options': dict(options or {}),
+        'options': opts,
     }
-    # Keep generations short for benchmark consistency
-    payload['options'].setdefault('num_predict', 256)
-    payload['options'].setdefault('temperature', 0.2)
+    if think is False or (think is None and model_uses_thinking(model_name)):
+        payload['think'] = False
 
     started = time.time()
     try:
@@ -316,6 +434,7 @@ def _run_single_case(
             'status': 'error',
             'error': str(exc),
             'response_time': round(elapsed, 2),
+            'score': 0,
         }
 
     if response.status_code != 200:
@@ -328,6 +447,7 @@ def _run_single_case(
             'status': 'error',
             'error': f'HTTP {response.status_code}: {response.text[:200]}',
             'response_time': round(elapsed, 2),
+            'score': 0,
         }
 
     data = response.json()
@@ -337,6 +457,10 @@ def _run_single_case(
     tokens_per_second = eval_count / (eval_duration / 1e9) if eval_duration > 0 else 0.0
 
     scored = case.scorer(raw_response)
+    notes = list(scored.get('notes') or [])
+    if eval_count >= max(num_predict - 2, 1):
+        notes.append(f'likely truncated at num_predict={num_predict}')
+
     elapsed = time.time() - started
     return {
         'id': case.id,
@@ -346,7 +470,7 @@ def _run_single_case(
         'status': 'success',
         'score': scored['score'],
         'passed': scored.get('passed', False),
-        'notes': scored.get('notes', []),
+        'notes': notes,
         'expected': scored.get('expected'),
         'response_preview': _strip_model_artifacts(raw_response)[:240],
         'response_time': round(elapsed, 2),
@@ -356,13 +480,14 @@ def _run_single_case(
 
 
 def _aggregate_case_results(cases: list[dict[str, Any]]) -> dict[str, Any]:
-    ok = [c for c in cases if c.get('status') == 'success']
-    if not ok:
+    if not cases:
         return {
             'overall_score': 0.0,
             'category_scores': {},
             'passed_count': 0,
-            'total_count': len(cases),
+            'total_count': 0,
+            'error_count': 0,
+            'completion_rate': 0.0,
             'avg_tokens_per_second': 0.0,
             'avg_response_time': 0.0,
         }
@@ -370,11 +495,17 @@ def _aggregate_case_results(cases: list[dict[str, Any]]) -> dict[str, Any]:
     weighted_sum = 0.0
     weight_total = 0.0
     by_category: dict[str, list[float]] = {}
-    for item in ok:
+    ok_for_timing: list[dict[str, Any]] = []
+
+    for item in cases:
         w = float(item.get('weight') or 1.0)
-        score = float(item.get('score') or 0)
-        weighted_sum += score * w
         weight_total += w
+        if item.get('status') == 'success':
+            score = float(item.get('score') or 0)
+            ok_for_timing.append(item)
+        else:
+            score = 0.0
+        weighted_sum += score * w
         cat = str(item.get('category') or 'general')
         by_category.setdefault(cat, []).append(score)
 
@@ -382,14 +513,19 @@ def _aggregate_case_results(cases: list[dict[str, Any]]) -> dict[str, Any]:
         cat: round(sum(vals) / len(vals), 1)
         for cat, vals in by_category.items()
     }
-    tps = [float(c.get('tokens_per_second') or 0) for c in ok]
-    rts = [float(c.get('response_time') or 0) for c in ok]
+    tps = [float(c.get('tokens_per_second') or 0) for c in ok_for_timing]
+    rts = [float(c.get('response_time') or 0) for c in ok_for_timing]
+    passed_count = sum(1 for c in cases if c.get('status') == 'success' and c.get('passed'))
+    error_count = sum(1 for c in cases if c.get('status') == 'error')
+    success_count = sum(1 for c in cases if c.get('status') == 'success')
 
     return {
         'overall_score': round(weighted_sum / weight_total if weight_total else 0.0, 1),
         'category_scores': category_scores,
-        'passed_count': sum(1 for c in ok if c.get('passed')),
+        'passed_count': passed_count,
         'total_count': len(cases),
+        'error_count': error_count,
+        'completion_rate': round(success_count / len(cases), 2) if cases else 0.0,
         'avg_tokens_per_second': round(sum(tps) / len(tps), 2) if tps else 0.0,
         'avg_response_time': round(sum(rts) / len(rts), 2) if rts else 0.0,
     }
@@ -402,22 +538,37 @@ def run_benchmark_for_model(
     model_name: str,
     *,
     cases: tuple[BenchmarkCase, ...] | None = None,
-    timeout: int = 120,
+    timeout: int | None = None,
     options: dict[str, Any] | None = None,
+    path: str = 'dashboard',
 ) -> dict[str, Any]:
     """Run the full (or custom) benchmark suite against one model."""
+    from app.services.benchmark_settings import resolve_benchmark_timeout
+
     suite = cases or BENCHMARK_CASES
     generate_url = _generate_url(host, port)
+    case_timeout = timeout if timeout is not None else resolve_benchmark_timeout(model_name)
     case_results = [
-        _run_single_case(session, generate_url, model_name, case, timeout=timeout, options=options)
+        _run_single_case(
+            session, generate_url, model_name, case,
+            timeout=case_timeout, options=options,
+        )
         for case in suite
     ]
     agg = _aggregate_case_results(case_results)
     errors = [c for c in case_results if c.get('status') == 'error']
-    status = 'success' if not errors else ('partial' if agg['passed_count'] else 'error')
+    if errors and agg['passed_count']:
+        status = 'partial'
+    elif errors:
+        status = 'error'
+    elif agg['passed_count'] < agg['total_count']:
+        status = 'partial'
+    else:
+        status = 'success'
 
     return {
         'model': model_name,
+        'path': path,
         'status': status,
         'cases': case_results,
         **agg,
@@ -434,7 +585,15 @@ def build_fleet_advice(results: list[dict[str, Any]]) -> dict[str, Any]:
             'rankings': {},
         }
 
-    by_overall = sorted(successful, key=lambda r: r.get('overall_score', 0), reverse=True)
+    by_overall = sorted(
+        successful,
+        key=lambda r: (
+            float(r.get('overall_score', 0)),
+            float(r.get('completion_rate', 0)),
+            int(r.get('passed_count', 0)),
+        ),
+        reverse=True,
+    )
     by_speed = sorted(successful, key=lambda r: r.get('avg_tokens_per_second', 0), reverse=True)
 
     categories = ('reasoning', 'coding', 'knowledge', 'instruction', 'creativity', 'speed')
@@ -454,7 +613,8 @@ def build_fleet_advice(results: list[dict[str, Any]]) -> dict[str, Any]:
     if by_overall:
         top = by_overall[0]
         recommendations.append(
-            f'Best all-round: {top["model"]} ({top.get("overall_score", 0):.0f}/100)'
+            f'Best all-round: {top["model"]} ({top.get("overall_score", 0):.0f}/100, '
+            f'{top.get("passed_count", 0)}/{top.get("total_count", 0)} passed)'
         )
     if by_speed:
         fast = by_speed[0]
@@ -507,6 +667,64 @@ def build_fleet_advice(results: list[dict[str, Any]]) -> dict[str, Any]:
             ],
             'by_category': best_per_category,
         },
+    }
+
+
+def build_proxy_advantage_report(
+    dashboard_results: list[dict[str, Any]],
+    baseline_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compare dashboard-backed settings vs raw Ollama baseline per model."""
+    by_dashboard = {r['model']: r for r in dashboard_results if r.get('model')}
+    by_baseline = {r['model']: r for r in baseline_results if r.get('model')}
+    comparisons: list[dict[str, Any]] = []
+
+    for model_name, dash in by_dashboard.items():
+        base = by_baseline.get(model_name, {})
+        dash_score = float(dash.get('overall_score', 0))
+        base_score = float(base.get('overall_score', 0))
+        lift = round(dash_score - base_score, 1)
+        comparisons.append({
+            'model': model_name,
+            'dashboard_score': dash_score,
+            'baseline_score': base_score,
+            'lift': lift,
+            'dashboard_passed': dash.get('passed_count', 0),
+            'baseline_passed': base.get('passed_count', 0),
+            'settings_critical': lift >= 25,
+            'proxy_optional': abs(lift) < 10 and dash.get('error_count', 0) == 0,
+        })
+
+    comparisons.sort(key=lambda row: row['lift'], reverse=True)
+    lifts = [row['lift'] for row in comparisons]
+    recommendations: list[str] = []
+
+    critical = [row for row in comparisons if row['settings_critical']]
+    if critical:
+        names = ', '.join(row['model'] for row in critical)
+        recommendations.append(
+            f'Route {names} through the dashboard /ollama proxy — '
+            f'benchmark lift up to +{max(row["lift"] for row in critical):.0f} pts vs raw :11434'
+        )
+
+    optional = [row for row in comparisons if row['proxy_optional']]
+    if optional:
+        recommendations.append(
+            f'Raw Ollama is fine for: {", ".join(row["model"] for row in optional)}'
+        )
+
+    if lifts:
+        recommendations.append(
+            f'Average dashboard settings lift across fleet: {sum(lifts) / len(lifts):+.1f} pts'
+        )
+
+    return {
+        'summary': (
+            f'Compared {len(comparisons)} model(s): dashboard-backed settings vs raw Ollama defaults.'
+        ),
+        'comparisons': comparisons,
+        'recommendations': recommendations,
+        'average_lift': round(sum(lifts) / len(lifts), 1) if lifts else 0.0,
     }
 
 

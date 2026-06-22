@@ -137,13 +137,19 @@ def _normalize_tool_calls(calls: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _agent_turn_timeout() -> int:
+    return _env_int('ASK_AGENT_TURN_TIMEOUT', 180, minimum=30, maximum=900)
+
+
 def _iter_chat_turn_events(
     session,
     chat_url: str,
     payload: dict[str, Any],
 ) -> Iterator[dict[str, Any]]:
     """Stream one /api/chat turn; yield content/thinking chunks then a turn_end summary."""
-    response = session.post(chat_url, json=payload, timeout=120, stream=True)
+    response = session.post(
+        chat_url, json=payload, timeout=_agent_turn_timeout(), stream=True,
+    )
     if response.status_code != 200:
         try:
             detail = response.json()
@@ -226,7 +232,17 @@ def stream_ask_agent(
     repeat_count = 0
 
     try:
-        for _ in range(_max_iterations()):
+        for iteration in range(1, _max_iterations() + 1):
+            yield json.dumps(
+                {
+                    'type': 'status',
+                    'phase': 'model_turn',
+                    'iteration': iteration,
+                    'max_iterations': _max_iterations(),
+                    'message': f'Agent turn {iteration}/{_max_iterations()}…',
+                },
+                ensure_ascii=False,
+            ) + '\n'
             payload = _build_native_payload(
                 model_name,
                 working_messages,

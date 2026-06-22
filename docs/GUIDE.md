@@ -4,6 +4,20 @@ Detailed setup, configuration, proxy and MCP integration, and development refere
 
 ---
 
+## Corporate / air-gapped deployment
+
+For organizations that cannot send prompts to cloud LLMs:
+
+- **All inference stays on localhost** — the dashboard proxy (`/ollama`) injects tuned settings without routing data to the internet.
+- **Three-tier routing** uses fast models for chat and escalates to reasoning/coding tiers only when needed.
+- **MCP + Ask agent** run tool loops server-side against local Ollama — no external agent API.
+- **Benchmark + tune loop** proves dashboard settings beat raw `:11434` on your hardware (`proxy_advantage`).
+- **Optional auth** — `ENABLE_AUTH` with operator/admin keys; proxy activity in `data/copilot_proxy.log`.
+
+Bind to `127.0.0.1` unless LAN access is required; enable auth before exposing beyond localhost.
+
+---
+
 ## Architecture
 
 ```text
@@ -138,6 +152,13 @@ forwards those tools to native `/api/chat` and streams `tool_calls` back in Open
 Use a model Ollama lists with tool support (for example Qwen3, gemma4, or Llama 3.1+). Agent /
 tool turns always run with thinking **off** so reasoning tokens never corrupt the tool exchange.
 
+**Llama 3.1 8B Instruct — correct Ollama tag:** use `llama3.1:8b`, not `llama3.1:8b-instruct`
+(that tag does not exist in the Ollama library; `pull` returns *file does not exist*). On Ollama,
+size-only tags like `:8b` and `:70b` are **already instruction-tuned** aliases (e.g. to
+`llama3.1:8b-instruct-q4_K_M`). For the base (pretrained) model use a `-text-` tag such as
+`llama3.1:8b-text-q4_0`. **Llama 4:** `ollama pull llama4` or `llama4:latest` (you already
+have this — ~67 GB; do not pin alongside other large models on 64 GB RAM).
+
 **Reasoning / thinking models (gemma4, qwen3):** Copilot BYOK renders `delta.content` only and
 ignores `delta.reasoning`, so by default plain chat runs with `think: false` (you would otherwise
 see a lone `I` and "Sorry, no response was returned"). To actually use a model's reasoning in
@@ -267,6 +288,30 @@ Implementation: `app/services/mcp_tools.py` (shared registry),
 `app/services/mcp_server.py` (Streamable HTTP at `/mcp`),
 `app/services/ask_agent.py` (Ask? tool loop). See [Architecture](ARCHITECTURE.md#mcp-tools-server).
 
+### Model benchmarking
+
+The dashboard can score installed models with an 8-prompt objective suite and suggest settings
+for better quality vs raw `localhost:11434`.
+
+| Command | Output |
+| ------- | ------ |
+| `python scripts/run_dual_benchmark.py` | `data/dual_benchmark_results.json` — dashboard vs baseline lift + `improvements` |
+| `python scripts/apply_benchmark_improvements.py` | Applies `suggested_settings` from the report, re-tests those models → `data/dual_benchmark_results_round2.json` |
+| `POST /api/models/benchmark` with `{"compare":true}` | Same comparison via API (slow; rate-limited) |
+
+**When to use the proxy (not raw Ollama):** benchmark `proxy_advantage` flags models with
+**+25 pts or more** lift when dashboard settings are injected. Thinking models (Qwen 3.6, VL,
+LFM) typically require `http://127.0.0.1:5000/ollama` so `num_predict`, `num_ctx`, and
+profile sampling apply.
+
+**Agentic / long sessions:** each model's `improvements.agentic` block recommends
+`num_ctx`, `context_trim_enabled`, keep-alive, and chat (not one-shot generate) for
+multi-turn tool work. See [API — benchmark](API.md#models--benchmark).
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `BENCHMARK_MAX_WORKERS` | `1` | Parallel model benchmarks (keep `1` on a single GPU) |
+
 **Proxy environment variables (optional):**
 
 | Variable                                       | Default   | Purpose                                                                                                                                                      |
@@ -282,6 +327,75 @@ Implementation: `app/services/mcp_tools.py` (shared registry),
 | `COPILOT_PREWARM_MODEL`                        | *(unset)* | Model tag to preload on dashboard startup (e.g. `qwen3:8b`)                                                                                                  |
 | `COPILOT_PREWARM_ON_START`                     | `true`    | When `COPILOT_PREWARM_MODEL` is set, warm-load that model on startup                                                                                         |
 | *(API)*                                        | —         | `POST /api/proxy/prewarm` — manually trigger a prewarm for a model                                                                                           |
+
+### Multi-model RAM residency (64 GB+ systems)
+
+Keep **two models in Ollama memory** so a small fast model is always ready while a larger
+model stays warm for deep work — no cold-start penalty when switching tiers.
+
+**Ollama server** (set as Windows system environment variables, then restart Ollama — not
+only dashboard `.env`):
+
+| Variable | Suggested | Purpose |
+| -------- | --------- | ------- |
+| `OLLAMA_MAX_LOADED_MODELS` | `2` | Allow fast + heavy simultaneously |
+| `OLLAMA_KEEP_ALIVE` | `-1` | Default pin until explicit unload |
+| `OLLAMA_NUM_PARALLEL` | `1` | Avoid KV-cache RAM multiplication with two loaded models |
+
+**Dashboard** (`.env`):
+
+| Variable | Default | Purpose |
+| -------- | ------- | ------- |
+| `RESIDENCY_ON_START` | `true` | Pin configured models on dashboard startup |
+| `RESIDENCY_FAST_MODEL` | *(falls back to `COPILOT_PREWARM_MODEL`)* | Always-loaded fast tier (e.g. `gemma4:latest`, `lfm2.5:latest`) |
+| `RESIDENCY_HEAVY_MODEL` | *(unset)* | Warm heavy tier (e.g. `qwen3.6:27B`) |
+| `RESIDENCY_KEEP_ALIVE` | `-1` | Pin duration for fast tier |
+| `RESIDENCY_HEAVY_KEEP_ALIVE` | `30m` | Keep-alive for heavy tier (lower RAM pressure) |
+
+Pinned models receive `keep_alive: -1` (or configured value) on proxy requests and keep-alive
+pings. Stopping a pinned model requires `POST /api/models/stop/<model>` with
+`{"unpin": true}` or `{"force": true}`.
+
+**API:** `GET /api/residency/status`, `POST /api/residency/pin` — see [API — residency](API.md#models--residency).
+
+**Suggested pairing for 64 GB DDR5** (from fleet benchmarks): fast=`gemma4:latest`, heavy=`qwen3.6:27B`, coding=`Qwen3-Coder-Next:latest` (on demand — do not pin with heavy).
+
+### Three-tier model routing (quality + speed)
+
+Configure on your **default IDE model** (`gemma4:latest` recommended) under Settings → **client**:
+
+| Field | Example | Purpose |
+| ----- | ------- | ------- |
+| `routing_enabled` | `true` | Auto-pick model per prompt |
+| `routing_fast_model` | `gemma4:latest` | Short chat, low latency |
+| `routing_reasoning_model` | `qwen3.6:27B` | Long prompts, architecture, root-cause |
+| `routing_coding_model` | `Qwen3-Coder-Next:latest` | Code, tests, bugs, refactors |
+
+The proxy rewrites `model` before forwarding to Ollama. After a fleet benchmark, run
+`POST /api/models/benchmark/tune` to auto-apply routing from rankings.
+
+### Benchmark suite (11 prompts)
+
+Reasoning, coding (palindrome, bugfix, unit test), instruction (JSON extract), knowledge,
+creativity, and speed — scored deterministically. Dashboard settings vs raw `:11434` compare
+shows proxy lift (`proxy_advantage`). Multi-round tuning: `python scripts/benchmark_tune_loop.py`.
+
+### Active fleet (7 models)
+
+Reference: `data/fleet_roles.json` (exact tags from `ollama list`).
+
+| Ollama tag | Role | 64 GB RAM |
+| ---------- | ---- | --------- |
+| `gemma4:latest` | Daily driver + routing hub | **Pin** (fast) |
+| `lfm2.5:latest` | Speed alternative | On demand |
+| `llama3.1:8b-instruct-q4_K_M` | Llama chat (alias: `llama3.1:8b`) | On demand |
+| `qwen3.6:27B` | Reasoning / tools / vision | **Warm pin** (heavy) |
+| `qwen3-vl:8b` | Screenshots / multimodal | On demand |
+| `Qwen3-Coder-Next:latest` | Coding / agent / MCP | On demand only |
+| `llama4:latest` | Frontier quality | On demand only (67 GB) |
+
+**Never pin** `llama4:latest` or `Qwen3-Coder-Next:latest` together with `qwen3.6:27B` on 64 GB.
+Unload heavy before starting a coding or llama4 session.
 
 Original model names are kept. **Every** saved option in `options` is applied — including
 `presence_penalty`, `frequency_penalty`, `typical_p`, and `penalize_newline` (not valid in a

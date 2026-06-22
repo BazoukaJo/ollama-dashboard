@@ -70,7 +70,7 @@ Consolidated HTTP surface for the dashboard web UI, REST API, Ollama proxy, and 
 | POST | `/api/models/pull/<model_name>` | — | Pull model from registry. |
 | POST | `/api/models/pull` | `?model=` & `?stream=true` | Pull with optional SSE progress stream. |
 
-Rate-limited: start, stop, restart, delete, pull, bulk start, benchmark.
+Rate-limited: start, stop, restart, delete, bulk start, benchmark (not pull).
 
 ---
 
@@ -100,12 +100,53 @@ Rate-limited: start, stop, restart, delete, pull, bulk start, benchmark.
 
 ## Models — benchmark
 
+Objective 8-prompt suite (reasoning, coding, knowledge, instruction, creativity, speed) with scored results and tuning advice.
+
 | Method | Path | Body | Description |
 | ------ | ---- | ---- | ----------- |
-| POST | `/api/models/benchmark` | Optional `{"models":["name1"]}` | Run benchmark suite on all or selected models. |
-| POST | `/api/models/benchmark/<model_name>` | — | Benchmark one model. |
+| POST | `/api/models/benchmark` | Optional `{"models":["name1"],"compare":true,"async":true}` | Benchmark all or selected models. With `"compare":true`, also includes `baseline` and `proxy_advantage`. With `"async":true`, returns `task_id` — poll `GET /api/tasks/<id>`. |
+| POST | `/api/models/benchmark/tune` | Optional `{"max_rounds":3,"models":[…]}` | Multi-round benchmark → apply tuning → re-test (background). Returns `task_id`. |
+| POST | `/api/models/benchmark/<model_name>` | Optional `{"compare":true}` | Benchmark one model; with compare, returns `dashboard`, `baseline`, `advantage`, and `improvements`. |
 
----
+**Task status (long operations)**
+
+| Method | Path | Description |
+| ------ | ---- | ----------- |
+| GET | `/api/tasks` | Recent background tasks (benchmark, tune loop). |
+| GET | `/api/tasks/<task_id>` | Poll progress: `state`, `percent`, `message`, `result`. |
+
+**CLI**
+
+- Full fleet + proxy lift + improvements: `python scripts/run_dual_benchmark.py` → `data/dual_benchmark_results.json`
+- Multi-round tune loop: `python scripts/benchmark_tune_loop.py` → `data/benchmark_tune_history.json`
+- Apply `suggested_settings` from a report and re-test: `python scripts/apply_benchmark_improvements.py`
+
+**Response fields (`improvements`)**
+
+| Field | Meaning |
+| ----- | ------- |
+| `validation.status` | `ok`, `needs_tuning`, or `critical` |
+| `suggested_settings` | e.g. raise `num_ctx` / `num_predict` |
+| `suggested_client` | e.g. `context_trim_enabled`, `copilot_think` |
+| `agentic` | Roles, proxy URL, keep-alive, long-session communication tips |
+
+Rate-limited with other model operations.
+
+
+## Models — residency
+
+Pin a **fast** model (always in RAM) plus optional **heavy** model for dual-tier inference on
+64 GB+ systems. Requires Ollama server env `OLLAMA_MAX_LOADED_MODELS=2` (see [GUIDE](GUIDE.md)).
+
+| Method | Path | Body | Description |
+| ------ | ---- | ---- | ----------- |
+| GET | `/api/residency/status` | — | Pin registry merged with Ollama `/api/ps`; includes `resident_fast_loaded`, `resident_heavy_loaded`, and suggested Ollama server env. |
+| POST | `/api/residency/pin` | `{"model":"gemma4:latest","role":"fast","keep_alive":-1}` | Load and pin a model. `{"model":"…","unpin":true}` removes from pin registry. |
+
+Stopping a pinned model: `POST /api/models/stop/<model>` with `{"unpin": true}` or `{"force": true}`.
+
+Proxy status (`GET /api/proxy/status`) includes `resident_fast_model`, `pinned_models`, etc.
+
 
 ## Chat
 

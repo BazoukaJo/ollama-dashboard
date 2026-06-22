@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run fleet benchmark via OllamaService (with saved settings) and bare origin API."""
+"""Compare dashboard-backed benchmarks vs raw Ollama baseline for every installed model."""
 from __future__ import annotations
 
 import json
@@ -13,16 +13,59 @@ if str(_ROOT) not in sys.path:
 OUT_PATH = _ROOT / 'data' / 'dual_benchmark_results.json'
 
 
-def _save(payload: dict) -> None:
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUT_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding='utf-8')
-    print(f'Progress saved -> {OUT_PATH}', flush=True)
+def _print_proxy_advantage(report: dict) -> None:
+    print()
+    print('=' * 72)
+    print('PROXY / SETTINGS ADVANTAGE (dashboard vs raw Ollama)')
+    print('=' * 72)
+    print(report.get('summary', ''))
+    print()
+    print(f'{"Model":<28} {"Dashboard":>9} {"Baseline":>9} {"Lift":>7}  Note')
+    print('-' * 72)
+    for row in report.get('comparisons') or []:
+        note = 'proxy critical' if row.get('settings_critical') else (
+            'proxy optional' if row.get('proxy_optional') else ''
+        )
+        print(
+            f'{row["model"]:<28} '
+            f'{row.get("dashboard_score", 0):>8.0f} '
+            f'{row.get("baseline_score", 0):>8.0f} '
+            f'{row.get("lift", 0):>+6.0f}  {note}'
+        )
+    print()
+    for line in report.get('recommendations') or []:
+        print(f'  - {line}')
+
+
+def _print_improvements(report: dict) -> None:
+    print()
+    print('=' * 72)
+    print('SETTINGS VALIDATION & AGENTIC TUNING')
+    print('=' * 72)
+    print(report.get('summary', ''))
+    print()
+    for line in report.get('fleet_actions') or []:
+        print(f'  * {line}')
+    print()
+    for row in report.get('models') or []:
+        val = row.get('validation') or {}
+        status = val.get('status', '?')
+        print(f'\n{row.get("model")} [{status}] score {val.get("overall_score")} passed {val.get("passed")}')
+        for change in row.get('changes') or []:
+            print(f'  - {change}')
+        suggested = row.get('suggested_settings') or {}
+        if suggested:
+            print(f'  settings: {json.dumps(suggested, ensure_ascii=False)}')
+        client = row.get('suggested_client') or {}
+        if client:
+            print(f'  client:   {json.dumps(client, ensure_ascii=False)}')
+        agentic = row.get('agentic') or {}
+        for tip in (agentic.get('communication') or [])[:3]:
+            print(f'  comm: {tip}')
 
 
 def main() -> int:
-    import requests
     from app import create_app
-    from app.services.model_benchmark import run_benchmark_for_model
     from app.services.ollama import OllamaService
 
     app = create_app()
@@ -34,44 +77,14 @@ def main() -> int:
         return 2
 
     with app.app_context():
-        available = svc.get_available_models()
-        names = [m.get('name') for m in available if m.get('name')]
-        if not names:
-            print('No installed models.', file=sys.stderr)
-            return 1
+        payload = svc.run_all_model_benchmarks(compare_baseline=True)
 
-        host, port = svc.get_ollama_host_port()
-        session = requests.Session()
-        payload: dict = {
-            'models': names,
-            'origin_url': f'http://{host}:{port}/api/generate',
-            'service_path': {'models': [], 'advice': {}},
-            'origin_path': {'models': [], 'advice': {}},
-        }
-        _save(payload)
+    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    OUT_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding='utf-8')
+    print(f'Wrote {OUT_PATH}', flush=True)
 
-        for idx, name in enumerate(names, 1):
-            print(f'[{idx}/{len(names)}] service path: {name}', flush=True)
-            payload['service_path']['models'].append(svc.run_model_benchmark(name))
-            _save(payload)
-
-        from app.services.model_benchmark import build_fleet_advice
-        payload['service_path']['advice'] = build_fleet_advice(payload['service_path']['models'])
-        payload['service_path']['benchmark_count'] = 8
-        _save(payload)
-
-        for idx, name in enumerate(names, 1):
-            print(f'[{idx}/{len(names)}] origin path: {name}', flush=True)
-            payload['origin_path']['models'].append(
-                run_benchmark_for_model(session, host, port, name)
-            )
-            _save(payload)
-
-        payload['origin_path']['advice'] = build_fleet_advice(payload['origin_path']['models'])
-        payload['origin_path']['benchmark_count'] = 8
-        _save(payload)
-
-    print('Done.', flush=True)
+    _print_proxy_advantage(payload.get('proxy_advantage') or {})
+    _print_improvements(payload.get('improvements') or {})
     return 0
 
 

@@ -23,6 +23,7 @@ DEFAULT_CLIENT_EXTRAS: dict[str, Any] = {
     'routing_enabled': False,
     'routing_fast_model': '',
     'routing_reasoning_model': '',
+    'routing_coding_model': '',
     'rag_enabled': False,
 }
 

@@ -19,8 +19,7 @@ class RateLimiter:
     """Token bucket rate limiter for controlling request frequency.
 
     Prevents overwhelming Ollama service by limiting:
-    - Model operations (start, stop, delete)
-    - Model pull requests
+    - Model operations (start, stop, delete, benchmark, …)
     - Background update frequency
     """
 

@@ -11,6 +11,7 @@ from typing import Any
 import requests
 
 from app.services.copilot_proxy import ensure_model_context
+from app.services.model_residency import pin_keep_alive_for
 
 logger = logging.getLogger(__name__)
 
@@ -85,13 +86,15 @@ def touch_keep_alive(ollama_base_url: str, model_name: str) -> None:
 
     def _ping() -> None:
         try:
+            pinned_keep = pin_keep_alive_for(model_name)
+            keep_alive = pinned_keep if pinned_keep is not None else _keep_alive_duration()
             requests.post(
                 f'{ollama_base_url.rstrip("/")}/api/chat',
                 json={
                     'model': model_name,
                     'messages': [{'role': 'user', 'content': '.'}],
                     'stream': False,
-                    'keep_alive': _keep_alive_duration(),
+                    'keep_alive': keep_alive,
                 },
                 timeout=30,
             )

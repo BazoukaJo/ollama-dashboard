@@ -1,19 +1,2922 @@
 {
   "models": [
-    "gemma4:12b",
-    "qwen3.6:35b-fast",
-    "qwen3-vl:8b",
-    "gemma4:latest",
-    "lfm2.5:latest",
-    "qwen3.6:35b"
+    {
+      "model": "gemma4:12b",
+      "path": "dashboard",
+      "status": "success",
+      "cases": [
+        {
+          "id": "sheep_riddle",
+          "category": "reasoning",
+          "weight": 1.2,
+          "description": "Classic \"all but N\" riddle",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "9",
+          "response_preview": "9",
+          "response_time": 10.06,
+          "tokens_generated": 135,
+          "tokens_per_second": 59.48
+        },
+        {
+          "id": "quick_math",
+          "category": "reasoning",
+          "weight": 1.0,
+          "description": "Mental arithmetic under pressure",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "437",
+          "response_preview": "437",
+          "response_time": 6.53,
+          "tokens_generated": 369,
+          "tokens_per_second": 59.74
+        },
+        {
+          "id": "gold_symbol",
+          "category": "knowledge",
+          "weight": 0.9,
+          "description": "Basic chemistry recall",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "Au",
+          "response_preview": "Au",
+          "response_time": 1.66,
+          "tokens_generated": 78,
+          "tokens_per_second": 59.99
+        },
+        {
+          "id": "reverse_ollama",
+          "category": "instruction",
+          "weight": 1.0,
+          "description": "Exact string transform",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "amallo",
+          "response_preview": "amallo",
+          "response_time": 2.48,
+          "tokens_generated": 129,
+          "tokens_per_second": 60.19
+        },
+        {
+          "id": "pirate_blockchain",
+          "category": "creativity",
+          "weight": 0.8,
+          "description": "Creative writing with strict constraints",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Listen well, ye scurvy dogs, for the digital treasure is hidden within every cryptographic hash on this ledger! We sail the high seas of data to claim our treasure and forge a hash that no pirate can break!",
+          "response_time": 15.85,
+          "tokens_generated": 923,
+          "tokens_per_second": 59.55
+        },
+        {
+          "id": "python_palindrome",
+          "category": "coding",
+          "weight": 1.3,
+          "description": "Small Python function",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+          "response_time": 5.75,
+          "tokens_generated": 316,
+          "tokens_per_second": 59.07
+        },
+        {
+          "id": "capitals_alpha",
+          "category": "knowledge",
+          "weight": 1.0,
+          "description": "Geography + ordering",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Berlin,London,Madrid,Paris",
+          "response_time": 42.32,
+          "tokens_generated": 2445,
+          "tokens_per_second": 58.27
+        },
+        {
+          "id": "speed_ready",
+          "category": "speed",
+          "weight": 0.6,
+          "description": "Minimal latency reply",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "ready",
+          "response_preview": "ready",
+          "response_time": 1.63,
+          "tokens_generated": 74,
+          "tokens_per_second": 60.07
+        }
+      ],
+      "overall_score": 100.0,
+      "category_scores": {
+        "reasoning": 100.0,
+        "knowledge": 100.0,
+        "instruction": 100.0,
+        "creativity": 100.0,
+        "coding": 100.0,
+        "speed": 100.0
+      },
+      "passed_count": 8,
+      "total_count": 8,
+      "error_count": 0,
+      "completion_rate": 1.0,
+      "avg_tokens_per_second": 59.55,
+      "avg_response_time": 10.79,
+      "improvements": {
+        "model": "gemma4:12b",
+        "validation": {
+          "status": "ok",
+          "source": "recommended",
+          "overall_score": 100.0,
+          "passed": "8/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {}
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    },
+    {
+      "model": "qwen3.6:35b-fast",
+      "path": "dashboard",
+      "status": "partial",
+      "cases": [
+        {
+          "id": "sheep_riddle",
+          "category": "reasoning",
+          "weight": 1.2,
+          "description": "Classic \"all but N\" riddle",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "9",
+          "response_preview": "9",
+          "response_time": 10.19,
+          "tokens_generated": 2,
+          "tokens_per_second": 140.0
+        },
+        {
+          "id": "quick_math",
+          "category": "reasoning",
+          "weight": 1.0,
+          "description": "Mental arithmetic under pressure",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "437",
+          "response_preview": "437",
+          "response_time": 0.36,
+          "tokens_generated": 4,
+          "tokens_per_second": 88.21
+        },
+        {
+          "id": "gold_symbol",
+          "category": "knowledge",
+          "weight": 0.9,
+          "description": "Basic chemistry recall",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "Au",
+          "response_preview": "Au",
+          "response_time": 0.33,
+          "tokens_generated": 2,
+          "tokens_per_second": 168.79
+        },
+        {
+          "id": "reverse_ollama",
+          "category": "instruction",
+          "weight": 1.0,
+          "description": "Exact string transform",
+          "status": "success",
+          "score": 0,
+          "passed": false,
+          "notes": [
+            "expected amallo, got 'ammalo'"
+          ],
+          "expected": "amallo",
+          "response_preview": "ammalo",
+          "response_time": 0.31,
+          "tokens_generated": 3,
+          "tokens_per_second": 130.79
+        },
+        {
+          "id": "pirate_blockchain",
+          "category": "creativity",
+          "weight": 0.8,
+          "description": "Creative writing with strict constraints",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Every chest of digital treasure is secured by a unique hash that guards our shared bounty from the tides of deceit. Let us forge our collective hash into an unbreakable chain, ensuring that every piece of the treasure remains safe for all h",
+          "response_time": 0.67,
+          "tokens_generated": 52,
+          "tokens_per_second": 146.15
+        },
+        {
+          "id": "python_palindrome",
+          "category": "coding",
+          "weight": 1.3,
+          "description": "Small Python function",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+          "response_time": 0.41,
+          "tokens_generated": 16,
+          "tokens_per_second": 146.17
+        },
+        {
+          "id": "capitals_alpha",
+          "category": "knowledge",
+          "weight": 1.0,
+          "description": "Geography + ordering",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Amsterdam,Berlin,Brussels,Budapest",
+          "response_time": 0.39,
+          "tokens_generated": 12,
+          "tokens_per_second": 146.19
+        },
+        {
+          "id": "speed_ready",
+          "category": "speed",
+          "weight": 0.6,
+          "description": "Minimal latency reply",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "ready",
+          "response_preview": "ready",
+          "response_time": 0.3,
+          "tokens_generated": 2,
+          "tokens_per_second": 173.16
+        }
+      ],
+      "overall_score": 87.2,
+      "category_scores": {
+        "reasoning": 100.0,
+        "knowledge": 100.0,
+        "instruction": 0.0,
+        "creativity": 100.0,
+        "coding": 100.0,
+        "speed": 100.0
+      },
+      "passed_count": 7,
+      "total_count": 8,
+      "error_count": 0,
+      "completion_rate": 1.0,
+      "avg_tokens_per_second": 142.43,
+      "avg_response_time": 1.62,
+      "improvements": {
+        "model": "qwen3.6:35b-fast",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "user",
+          "overall_score": 87.2,
+          "passed": "7/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16000,
+            "num_predict": 8192,
+            "repeat_penalty": 1
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {
+            "num_ctx": {
+              "current": 16000,
+              "profile": 16384
+            }
+          },
+          "gaps": [],
+          "failed_categories": {
+            "instruction": [
+              "reverse_ollama"
+            ]
+          }
+        },
+        "suggested_settings": {
+          "num_ctx": 16384
+        },
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    },
+    {
+      "model": "qwen3-vl:8b",
+      "path": "dashboard",
+      "status": "partial",
+      "cases": [
+        {
+          "id": "sheep_riddle",
+          "category": "reasoning",
+          "weight": 1.2,
+          "description": "Classic \"all but N\" riddle",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "9",
+          "response_preview": "9",
+          "response_time": 26.02,
+          "tokens_generated": 1686,
+          "tokens_per_second": 96.21
+        },
+        {
+          "id": "quick_math",
+          "category": "reasoning",
+          "weight": 1.0,
+          "description": "Mental arithmetic under pressure",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "437",
+          "response_preview": "437",
+          "response_time": 5.48,
+          "tokens_generated": 519,
+          "tokens_per_second": 98.2
+        },
+        {
+          "id": "gold_symbol",
+          "category": "knowledge",
+          "weight": 0.9,
+          "description": "Basic chemistry recall",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "Au",
+          "response_preview": "Au",
+          "response_time": 0.59,
+          "tokens_generated": 42,
+          "tokens_per_second": 99.01
+        },
+        {
+          "id": "reverse_ollama",
+          "category": "instruction",
+          "weight": 1.0,
+          "description": "Exact string transform",
+          "status": "success",
+          "score": 0,
+          "passed": false,
+          "notes": [
+            "expected amallo, got ''",
+            "likely truncated at num_predict=8192"
+          ],
+          "expected": "amallo",
+          "response_preview": "",
+          "response_time": 90.91,
+          "tokens_generated": 8192,
+          "tokens_per_second": 90.27
+        },
+        {
+          "id": "pirate_blockchain",
+          "category": "creativity",
+          "weight": 0.8,
+          "description": "Creative writing with strict constraints",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Our treasure chests are sealed with a magical wax *hash* to prove no one tampered with the gold inside, just like a secure *treasure* map. The chain of our shared ledger is built on unbreakable *hash* links, so every bit of *treasure* must ",
+          "response_time": 4.25,
+          "tokens_generated": 380,
+          "tokens_per_second": 98.15
+        },
+        {
+          "id": "python_palindrome",
+          "category": "coding",
+          "weight": 1.3,
+          "description": "Small Python function",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "def is_palindrome(s):\n    s_clean = ''.join(filter(str.isalnum, s.lower()))\n    return s_clean == s_clean[::-1]",
+          "response_time": 40.07,
+          "tokens_generated": 3766,
+          "tokens_per_second": 94.38
+        },
+        {
+          "id": "capitals_alpha",
+          "category": "knowledge",
+          "weight": 1.0,
+          "description": "Geography + ordering",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Amsterdam,Berlin,London,Paris",
+          "response_time": 53.27,
+          "tokens_generated": 4958,
+          "tokens_per_second": 93.53
+        },
+        {
+          "id": "speed_ready",
+          "category": "speed",
+          "weight": 0.6,
+          "description": "Minimal latency reply",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "ready",
+          "response_preview": "ready",
+          "response_time": 2.39,
+          "tokens_generated": 207,
+          "tokens_per_second": 98.61
+        }
+      ],
+      "overall_score": 87.2,
+      "category_scores": {
+        "reasoning": 100.0,
+        "knowledge": 100.0,
+        "instruction": 0.0,
+        "creativity": 100.0,
+        "coding": 100.0,
+        "speed": 100.0
+      },
+      "passed_count": 7,
+      "total_count": 8,
+      "error_count": 0,
+      "completion_rate": 1.0,
+      "avg_tokens_per_second": 96.05,
+      "avg_response_time": 27.87,
+      "improvements": {
+        "model": "qwen3-vl:8b",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 87.2,
+          "passed": "7/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [
+            "Dashboard settings lift +64 vs raw Ollama — proxy is required for this model"
+          ],
+          "failed_categories": {
+            "instruction": [
+              "reverse_ollama"
+            ]
+          }
+        },
+        "suggested_settings": {
+          "num_predict": 16384
+        },
+        "suggested_client": {},
+        "changes": [
+          "Benchmark hit num_predict cap — raise to at least 16384"
+        ],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": true
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters.",
+            "Never point clients at raw :11434 for this model (benchmark lift +64 via dashboard)."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    },
+    {
+      "model": "gemma4:latest",
+      "path": "dashboard",
+      "status": "success",
+      "cases": [
+        {
+          "id": "sheep_riddle",
+          "category": "reasoning",
+          "weight": 1.2,
+          "description": "Classic \"all but N\" riddle",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "9",
+          "response_preview": "9",
+          "response_time": 56.48,
+          "tokens_generated": 155,
+          "tokens_per_second": 100.96
+        },
+        {
+          "id": "quick_math",
+          "category": "reasoning",
+          "weight": 1.0,
+          "description": "Mental arithmetic under pressure",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "437",
+          "response_preview": "437",
+          "response_time": 0.35,
+          "tokens_generated": 4,
+          "tokens_per_second": 120.71
+        },
+        {
+          "id": "gold_symbol",
+          "category": "knowledge",
+          "weight": 0.9,
+          "description": "Basic chemistry recall",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "Au",
+          "response_preview": "Au",
+          "response_time": 0.33,
+          "tokens_generated": 2,
+          "tokens_per_second": 150.23
+        },
+        {
+          "id": "reverse_ollama",
+          "category": "instruction",
+          "weight": 1.0,
+          "description": "Exact string transform",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "amallo",
+          "response_preview": "amallo",
+          "response_time": 0.34,
+          "tokens_generated": 3,
+          "tokens_per_second": 124.64
+        },
+        {
+          "id": "pirate_blockchain",
+          "category": "creativity",
+          "weight": 0.8,
+          "description": "Creative writing with strict constraints",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Listen close, ye scallywags, for every piece of digital treasure we claim is secured by a cryptographic hash, ensuring no rogue hand can tamper with the ledger's truth. Ye mark my words: finding the ultimate pirate treasure means mastering ",
+          "response_time": 1.91,
+          "tokens_generated": 176,
+          "tokens_per_second": 110.98
+        },
+        {
+          "id": "python_palindrome",
+          "category": "coding",
+          "weight": 1.3,
+          "description": "Small Python function",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "def is_palindrome(s):\n    cleaned_s = \"\".join(char for char in s if char.isalnum()).lower()\n    return cleaned_s == cleaned_s[::-1]",
+          "response_time": 0.7,
+          "tokens_generated": 43,
+          "tokens_per_second": 111.41
+        },
+        {
+          "id": "capitals_alpha",
+          "category": "knowledge",
+          "weight": 1.0,
+          "description": "Geography + ordering",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Amsterdam,Brussels,Dublin,Madrid",
+          "response_time": 0.39,
+          "tokens_generated": 8,
+          "tokens_per_second": 108.62
+        },
+        {
+          "id": "speed_ready",
+          "category": "speed",
+          "weight": 0.6,
+          "description": "Minimal latency reply",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "ready",
+          "response_preview": "ready",
+          "response_time": 0.33,
+          "tokens_generated": 2,
+          "tokens_per_second": 148.86
+        }
+      ],
+      "overall_score": 100.0,
+      "category_scores": {
+        "reasoning": 100.0,
+        "knowledge": 100.0,
+        "instruction": 100.0,
+        "creativity": 100.0,
+        "coding": 100.0,
+        "speed": 100.0
+      },
+      "passed_count": 8,
+      "total_count": 8,
+      "error_count": 0,
+      "completion_rate": 1.0,
+      "avg_tokens_per_second": 122.05,
+      "avg_response_time": 7.6,
+      "improvements": {
+        "model": "gemma4:latest",
+        "validation": {
+          "status": "ok",
+          "source": "user",
+          "overall_score": 100.0,
+          "passed": "8/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {}
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    },
+    {
+      "model": "lfm2.5:latest",
+      "path": "dashboard",
+      "status": "partial",
+      "cases": [
+        {
+          "id": "sheep_riddle",
+          "category": "reasoning",
+          "weight": 1.2,
+          "description": "Classic \"all but N\" riddle",
+          "status": "success",
+          "score": 35,
+          "passed": false,
+          "notes": [
+            "expected 9, got 8"
+          ],
+          "expected": "9",
+          "response_preview": "8",
+          "response_time": 6.86,
+          "tokens_generated": 214,
+          "tokens_per_second": 337.47
+        },
+        {
+          "id": "quick_math",
+          "category": "reasoning",
+          "weight": 1.0,
+          "description": "Mental arithmetic under pressure",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "437",
+          "response_preview": "437",
+          "response_time": 0.43,
+          "tokens_generated": 87,
+          "tokens_per_second": 342.19
+        },
+        {
+          "id": "gold_symbol",
+          "category": "knowledge",
+          "weight": 0.9,
+          "description": "Basic chemistry recall",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "Au",
+          "response_preview": "Au",
+          "response_time": 0.36,
+          "tokens_generated": 63,
+          "tokens_per_second": 340.91
+        },
+        {
+          "id": "reverse_ollama",
+          "category": "instruction",
+          "weight": 1.0,
+          "description": "Exact string transform",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "amallo",
+          "response_preview": "amallo",
+          "response_time": 0.61,
+          "tokens_generated": 149,
+          "tokens_per_second": 341.56
+        },
+        {
+          "id": "pirate_blockchain",
+          "category": "creativity",
+          "weight": 0.8,
+          "description": "Creative writing with strict constraints",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Our treasure will be secured by a blockchain where each hash links to the next, ensuring that no pirate can alter the treasure's provenance. Every crew member must verify the hash of our treasure's digital ledger before we set sail, for a s",
+          "response_time": 1.27,
+          "tokens_generated": 369,
+          "tokens_per_second": 338.44
+        },
+        {
+          "id": "python_palindrome",
+          "category": "coding",
+          "weight": 1.3,
+          "description": "Small Python function",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+          "response_time": 0.59,
+          "tokens_generated": 135,
+          "tokens_per_second": 339.45
+        },
+        {
+          "id": "capitals_alpha",
+          "category": "knowledge",
+          "weight": 1.0,
+          "description": "Geography + ordering",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Berlin,London,Madrid,Rome",
+          "response_time": 1.08,
+          "tokens_generated": 308,
+          "tokens_per_second": 337.71
+        },
+        {
+          "id": "speed_ready",
+          "category": "speed",
+          "weight": 0.6,
+          "description": "Minimal latency reply",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "ready",
+          "response_preview": "ready",
+          "response_time": 0.39,
+          "tokens_generated": 70,
+          "tokens_per_second": 341.72
+        }
+      ],
+      "overall_score": 90.0,
+      "category_scores": {
+        "reasoning": 67.5,
+        "knowledge": 100.0,
+        "instruction": 100.0,
+        "creativity": 100.0,
+        "coding": 100.0,
+        "speed": 100.0
+      },
+      "passed_count": 7,
+      "total_count": 8,
+      "error_count": 0,
+      "completion_rate": 1.0,
+      "avg_tokens_per_second": 339.93,
+      "avg_response_time": 1.45,
+      "improvements": {
+        "model": "lfm2.5:latest",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 90.0,
+          "passed": "7/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {},
+          "gaps": [
+            "Dashboard settings lift +37 vs raw Ollama — proxy is required for this model"
+          ],
+          "failed_categories": {
+            "reasoning": [
+              "sheep_riddle"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters.",
+            "Never point clients at raw :11434 for this model (benchmark lift +37 via dashboard)."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    },
+    {
+      "model": "qwen3.6:35b",
+      "path": "dashboard",
+      "status": "success",
+      "cases": [
+        {
+          "id": "sheep_riddle",
+          "category": "reasoning",
+          "weight": 1.2,
+          "description": "Classic \"all but N\" riddle",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "9",
+          "response_preview": "9",
+          "response_time": 28.53,
+          "tokens_generated": 2,
+          "tokens_per_second": 30.64
+        },
+        {
+          "id": "quick_math",
+          "category": "reasoning",
+          "weight": 1.0,
+          "description": "Mental arithmetic under pressure",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "437",
+          "response_preview": "437",
+          "response_time": 1.0,
+          "tokens_generated": 4,
+          "tokens_per_second": 21.6
+        },
+        {
+          "id": "gold_symbol",
+          "category": "knowledge",
+          "weight": 0.9,
+          "description": "Basic chemistry recall",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "Au",
+          "response_preview": "Au",
+          "response_time": 0.85,
+          "tokens_generated": 2,
+          "tokens_per_second": 32.11
+        },
+        {
+          "id": "reverse_ollama",
+          "category": "instruction",
+          "weight": 1.0,
+          "description": "Exact string transform",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "amallo",
+          "response_preview": "amallo",
+          "response_time": 0.96,
+          "tokens_generated": 3,
+          "tokens_per_second": 24.43
+        },
+        {
+          "id": "pirate_blockchain",
+          "category": "creativity",
+          "weight": 0.8,
+          "description": "Creative writing with strict constraints",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Every pirate must secure their digital treasure with a unique hash to prove ownership on the ledger. Without this cryptographic hash, our shared treasure remains vulnerable to thieves in the digital sea.",
+          "response_time": 3.64,
+          "tokens_generated": 36,
+          "tokens_per_second": 18.33
+        },
+        {
+          "id": "python_palindrome",
+          "category": "coding",
+          "weight": 1.3,
+          "description": "Small Python function",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+          "response_time": 2.39,
+          "tokens_generated": 16,
+          "tokens_per_second": 18.84
+        },
+        {
+          "id": "capitals_alpha",
+          "category": "knowledge",
+          "weight": 1.0,
+          "description": "Geography + ordering",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Amsterdam,Berlin,Brussels,Budapest",
+          "response_time": 2.15,
+          "tokens_generated": 12,
+          "tokens_per_second": 19.35
+        },
+        {
+          "id": "speed_ready",
+          "category": "speed",
+          "weight": 0.6,
+          "description": "Minimal latency reply",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "ready",
+          "response_preview": "ready",
+          "response_time": 0.8,
+          "tokens_generated": 2,
+          "tokens_per_second": 32.66
+        }
+      ],
+      "overall_score": 100.0,
+      "category_scores": {
+        "reasoning": 100.0,
+        "knowledge": 100.0,
+        "instruction": 100.0,
+        "creativity": 100.0,
+        "coding": 100.0,
+        "speed": 100.0
+      },
+      "passed_count": 8,
+      "total_count": 8,
+      "error_count": 0,
+      "completion_rate": 1.0,
+      "avg_tokens_per_second": 24.75,
+      "avg_response_time": 5.04,
+      "improvements": {
+        "model": "qwen3.6:35b",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "user",
+          "overall_score": 100.0,
+          "passed": "8/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 8192,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {
+            "num_ctx": {
+              "current": 8192,
+              "profile": 16384
+            }
+          },
+          "gaps": [],
+          "failed_categories": {}
+        },
+        "suggested_settings": {
+          "num_ctx": 16384
+        },
+        "suggested_client": {},
+        "changes": [
+          "num_ctx 8192 is below profile target 16384 — long chats will lose context early"
+        ],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    }
   ],
-  "origin_url": "http://localhost:11434/api/generate",
-  "service_path": {
-    "models": [],
-    "advice": {}
+  "advice": {
+    "summary": "Benchmarked 6 model(s); 6 produced scorable results.",
+    "recommendations": [
+      "Best all-round: gemma4:12b (100/100, 8/8 passed)",
+      "Fastest generation: lfm2.5:latest (339.9 tok/s avg)",
+      "Best reasoning: gemma4:12b (100/100 in reasoning)",
+      "Best coding: gemma4:12b (100/100 in coding)",
+      "Best knowledge: gemma4:12b (100/100 in knowledge)",
+      "Best instruction: gemma4:12b (100/100 in instruction)",
+      "Best creativity: gemma4:12b (100/100 in creativity)"
+    ],
+    "specialist_hints": [
+      "gemma4:12b is a strong coding pick",
+      "qwen3.6:35b-fast is a strong coding pick",
+      "qwen3-vl:8b is a strong coding pick",
+      "gemma4:latest is a strong coding pick",
+      "lfm2.5:latest is a strong coding pick",
+      "qwen3.6:35b is a strong coding pick"
+    ],
+    "rankings": {
+      "overall": [
+        {
+          "model": "gemma4:12b",
+          "score": 100.0
+        },
+        {
+          "model": "gemma4:latest",
+          "score": 100.0
+        },
+        {
+          "model": "qwen3.6:35b",
+          "score": 100.0
+        },
+        {
+          "model": "lfm2.5:latest",
+          "score": 90.0
+        },
+        {
+          "model": "qwen3.6:35b-fast",
+          "score": 87.2
+        },
+        {
+          "model": "qwen3-vl:8b",
+          "score": 87.2
+        }
+      ],
+      "speed": [
+        {
+          "model": "lfm2.5:latest",
+          "tokens_per_second": 339.93
+        },
+        {
+          "model": "qwen3.6:35b-fast",
+          "tokens_per_second": 142.43
+        },
+        {
+          "model": "gemma4:latest",
+          "tokens_per_second": 122.05
+        },
+        {
+          "model": "qwen3-vl:8b",
+          "tokens_per_second": 96.05
+        },
+        {
+          "model": "gemma4:12b",
+          "tokens_per_second": 59.55
+        },
+        {
+          "model": "qwen3.6:35b",
+          "tokens_per_second": 24.75
+        }
+      ],
+      "by_category": {
+        "reasoning": {
+          "model": "gemma4:12b",
+          "score": 100.0
+        },
+        "coding": {
+          "model": "gemma4:12b",
+          "score": 100.0
+        },
+        "knowledge": {
+          "model": "gemma4:12b",
+          "score": 100.0
+        },
+        "instruction": {
+          "model": "gemma4:12b",
+          "score": 100.0
+        },
+        "creativity": {
+          "model": "gemma4:12b",
+          "score": 100.0
+        },
+        "speed": {
+          "model": "gemma4:12b",
+          "score": 100.0
+        }
+      }
+    }
   },
-  "origin_path": {
-    "models": [],
-    "advice": {}
-  }
+  "baseline": {
+    "models": [
+      {
+        "model": "gemma4:12b",
+        "path": "baseline",
+        "status": "partial",
+        "cases": [
+          {
+            "id": "sheep_riddle",
+            "category": "reasoning",
+            "weight": 1.2,
+            "description": "Classic \"all but N\" riddle",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "9",
+            "response_preview": "9",
+            "response_time": 8.43,
+            "tokens_generated": 136,
+            "tokens_per_second": 59.47
+          },
+          {
+            "id": "quick_math",
+            "category": "reasoning",
+            "weight": 1.0,
+            "description": "Mental arithmetic under pressure",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "437",
+            "response_preview": "437",
+            "response_time": 3.85,
+            "tokens_generated": 209,
+            "tokens_per_second": 59.65
+          },
+          {
+            "id": "gold_symbol",
+            "category": "knowledge",
+            "weight": 0.9,
+            "description": "Basic chemistry recall",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "Au",
+            "response_preview": "Au",
+            "response_time": 2.02,
+            "tokens_generated": 100,
+            "tokens_per_second": 60.01
+          },
+          {
+            "id": "reverse_ollama",
+            "category": "instruction",
+            "weight": 1.0,
+            "description": "Exact string transform",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "amallo",
+            "response_preview": "amallo",
+            "response_time": 2.27,
+            "tokens_generated": 114,
+            "tokens_per_second": 59.26
+          },
+          {
+            "id": "pirate_blockchain",
+            "category": "creativity",
+            "weight": 0.8,
+            "description": "Creative writing with strict constraints",
+            "status": "success",
+            "score": 0,
+            "passed": false,
+            "notes": [
+              "expected 2 sentences, found 0",
+              "treasure should appear in both sentences",
+              "hash should appear in both sentences",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": null,
+            "response_preview": "",
+            "response_time": 4.65,
+            "tokens_generated": 256,
+            "tokens_per_second": 59.48
+          },
+          {
+            "id": "python_palindrome",
+            "category": "coding",
+            "weight": 1.3,
+            "description": "Small Python function",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+            "response_time": 2.6,
+            "tokens_generated": 135,
+            "tokens_per_second": 60.28
+          },
+          {
+            "id": "capitals_alpha",
+            "category": "knowledge",
+            "weight": 1.0,
+            "description": "Geography + ordering",
+            "status": "success",
+            "score": 30,
+            "passed": false,
+            "notes": [
+              "expected 4 cities, got 0",
+              "invalid or unknown capitals: []",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": null,
+            "response_preview": "",
+            "response_time": 4.64,
+            "tokens_generated": 256,
+            "tokens_per_second": 59.71
+          },
+          {
+            "id": "speed_ready",
+            "category": "speed",
+            "weight": 0.6,
+            "description": "Minimal latency reply",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "ready",
+            "response_preview": "ready",
+            "response_time": 1.35,
+            "tokens_generated": 60,
+            "tokens_per_second": 60.29
+          }
+        ],
+        "overall_score": 80.8,
+        "category_scores": {
+          "reasoning": 100.0,
+          "knowledge": 65.0,
+          "instruction": 100.0,
+          "creativity": 0.0,
+          "coding": 100.0,
+          "speed": 100.0
+        },
+        "passed_count": 6,
+        "total_count": 8,
+        "error_count": 0,
+        "completion_rate": 1.0,
+        "avg_tokens_per_second": 59.77,
+        "avg_response_time": 3.73
+      },
+      {
+        "model": "qwen3.6:35b-fast",
+        "path": "baseline",
+        "status": "partial",
+        "cases": [
+          {
+            "id": "sheep_riddle",
+            "category": "reasoning",
+            "weight": 1.2,
+            "description": "Classic \"all but N\" riddle",
+            "status": "success",
+            "score": 35,
+            "passed": false,
+            "notes": [
+              "expected 9, got 8"
+            ],
+            "expected": "9",
+            "response_preview": "8",
+            "response_time": 12.5,
+            "tokens_generated": 2,
+            "tokens_per_second": 36.95
+          },
+          {
+            "id": "quick_math",
+            "category": "reasoning",
+            "weight": 1.0,
+            "description": "Mental arithmetic under pressure",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "437",
+            "response_preview": "437",
+            "response_time": 1.05,
+            "tokens_generated": 4,
+            "tokens_per_second": 27.08
+          },
+          {
+            "id": "gold_symbol",
+            "category": "knowledge",
+            "weight": 0.9,
+            "description": "Basic chemistry recall",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "Au",
+            "response_preview": "Au",
+            "response_time": 0.92,
+            "tokens_generated": 2,
+            "tokens_per_second": 39.26
+          },
+          {
+            "id": "reverse_ollama",
+            "category": "instruction",
+            "weight": 1.0,
+            "description": "Exact string transform",
+            "status": "success",
+            "score": 0,
+            "passed": false,
+            "notes": [
+              "expected amallo, got 'ammalo'"
+            ],
+            "expected": "amallo",
+            "response_preview": "ammalo",
+            "response_time": 1.02,
+            "tokens_generated": 3,
+            "tokens_per_second": 30.34
+          },
+          {
+            "id": "pirate_blockchain",
+            "category": "creativity",
+            "weight": 0.8,
+            "description": "Creative writing with strict constraints",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "Every treasure we uncover is secured by a unique hash that ensures no other soul can claim it as their own. We must guard this digital hash with our lives, for it is the key to unlocking the greatest treasure ever hidden on the seven seas.",
+            "response_time": 3.24,
+            "tokens_generated": 50,
+            "tokens_per_second": 22.44
+          },
+          {
+            "id": "python_palindrome",
+            "category": "coding",
+            "weight": 1.3,
+            "description": "Small Python function",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+            "response_time": 1.68,
+            "tokens_generated": 16,
+            "tokens_per_second": 23.27
+          },
+          {
+            "id": "capitals_alpha",
+            "category": "knowledge",
+            "weight": 1.0,
+            "description": "Geography + ordering",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "Amsterdam,Berlin,Brussels,Budapest",
+            "response_time": 1.46,
+            "tokens_generated": 12,
+            "tokens_per_second": 23.87
+          },
+          {
+            "id": "speed_ready",
+            "category": "speed",
+            "weight": 0.6,
+            "description": "Minimal latency reply",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "ready",
+            "response_preview": "ready",
+            "response_time": 0.88,
+            "tokens_generated": 2,
+            "tokens_per_second": 38.65
+          }
+        ],
+        "overall_score": 77.2,
+        "category_scores": {
+          "reasoning": 67.5,
+          "knowledge": 100.0,
+          "instruction": 0.0,
+          "creativity": 100.0,
+          "coding": 100.0,
+          "speed": 100.0
+        },
+        "passed_count": 6,
+        "total_count": 8,
+        "error_count": 0,
+        "completion_rate": 1.0,
+        "avg_tokens_per_second": 30.23,
+        "avg_response_time": 2.84
+      },
+      {
+        "model": "qwen3-vl:8b",
+        "path": "baseline",
+        "status": "partial",
+        "cases": [
+          {
+            "id": "sheep_riddle",
+            "category": "reasoning",
+            "weight": 1.2,
+            "description": "Classic \"all but N\" riddle",
+            "status": "success",
+            "score": 0,
+            "passed": false,
+            "notes": [
+              "expected 9, got None",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": "9",
+            "response_preview": "",
+            "response_time": 8.74,
+            "tokens_generated": 256,
+            "tokens_per_second": 98.73
+          },
+          {
+            "id": "quick_math",
+            "category": "reasoning",
+            "weight": 1.0,
+            "description": "Mental arithmetic under pressure",
+            "status": "success",
+            "score": 0,
+            "passed": false,
+            "notes": [
+              "expected 437, got None",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": "437",
+            "response_preview": "",
+            "response_time": 2.74,
+            "tokens_generated": 256,
+            "tokens_per_second": 98.92
+          },
+          {
+            "id": "gold_symbol",
+            "category": "knowledge",
+            "weight": 0.9,
+            "description": "Basic chemistry recall",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "Au",
+            "response_preview": "Au",
+            "response_time": 0.59,
+            "tokens_generated": 41,
+            "tokens_per_second": 98.33
+          },
+          {
+            "id": "reverse_ollama",
+            "category": "instruction",
+            "weight": 1.0,
+            "description": "Exact string transform",
+            "status": "success",
+            "score": 0,
+            "passed": false,
+            "notes": [
+              "expected amallo, got ''",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": "amallo",
+            "response_preview": "",
+            "response_time": 2.73,
+            "tokens_generated": 256,
+            "tokens_per_second": 99.0
+          },
+          {
+            "id": "pirate_blockchain",
+            "category": "creativity",
+            "weight": 0.8,
+            "description": "Creative writing with strict constraints",
+            "status": "success",
+            "score": 0,
+            "passed": false,
+            "notes": [
+              "expected 2 sentences, found 0",
+              "treasure should appear in both sentences",
+              "hash should appear in both sentences",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": null,
+            "response_preview": "",
+            "response_time": 2.76,
+            "tokens_generated": 256,
+            "tokens_per_second": 98.66
+          },
+          {
+            "id": "python_palindrome",
+            "category": "coding",
+            "weight": 1.3,
+            "description": "Small Python function",
+            "status": "success",
+            "score": 0,
+            "passed": false,
+            "notes": [
+              "missing def is_palindrome(...)",
+              "missing return",
+              "no obvious palindrome check",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": null,
+            "response_preview": "",
+            "response_time": 2.75,
+            "tokens_generated": 256,
+            "tokens_per_second": 98.66
+          },
+          {
+            "id": "capitals_alpha",
+            "category": "knowledge",
+            "weight": 1.0,
+            "description": "Geography + ordering",
+            "status": "success",
+            "score": 30,
+            "passed": false,
+            "notes": [
+              "expected 4 cities, got 0",
+              "invalid or unknown capitals: []",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": null,
+            "response_preview": "",
+            "response_time": 2.74,
+            "tokens_generated": 256,
+            "tokens_per_second": 98.85
+          },
+          {
+            "id": "speed_ready",
+            "category": "speed",
+            "weight": 0.6,
+            "description": "Minimal latency reply",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "ready",
+            "response_preview": "ready",
+            "response_time": 2.04,
+            "tokens_generated": 186,
+            "tokens_per_second": 98.76
+          }
+        ],
+        "overall_score": 23.1,
+        "category_scores": {
+          "reasoning": 0.0,
+          "knowledge": 65.0,
+          "instruction": 0.0,
+          "creativity": 0.0,
+          "coding": 0.0,
+          "speed": 100.0
+        },
+        "passed_count": 2,
+        "total_count": 8,
+        "error_count": 0,
+        "completion_rate": 1.0,
+        "avg_tokens_per_second": 98.74,
+        "avg_response_time": 3.14
+      },
+      {
+        "model": "gemma4:latest",
+        "path": "baseline",
+        "status": "success",
+        "cases": [
+          {
+            "id": "sheep_riddle",
+            "category": "reasoning",
+            "weight": 1.2,
+            "description": "Classic \"all but N\" riddle",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "9",
+            "response_preview": "9",
+            "response_time": 8.89,
+            "tokens_generated": 82,
+            "tokens_per_second": 108.56
+          },
+          {
+            "id": "quick_math",
+            "category": "reasoning",
+            "weight": 1.0,
+            "description": "Mental arithmetic under pressure",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "437",
+            "response_preview": "437",
+            "response_time": 0.35,
+            "tokens_generated": 4,
+            "tokens_per_second": 121.46
+          },
+          {
+            "id": "gold_symbol",
+            "category": "knowledge",
+            "weight": 0.9,
+            "description": "Basic chemistry recall",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "Au",
+            "response_preview": "Au",
+            "response_time": 0.34,
+            "tokens_generated": 2,
+            "tokens_per_second": 155.29
+          },
+          {
+            "id": "reverse_ollama",
+            "category": "instruction",
+            "weight": 1.0,
+            "description": "Exact string transform",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "amallo",
+            "response_preview": "amallo",
+            "response_time": 0.33,
+            "tokens_generated": 3,
+            "tokens_per_second": 128.2
+          },
+          {
+            "id": "pirate_blockchain",
+            "category": "creativity",
+            "weight": 0.8,
+            "description": "Creative writing with strict constraints",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "Listen close, ye scallywags, for every piece of digital treasure we seek is secured by a unique cryptographic hash that proves its authenticity to the whole crew. This ledger, etched with hashes, ensures that no rogue hand can ever tamper w",
+            "response_time": 1.91,
+            "tokens_generated": 178,
+            "tokens_per_second": 111.78
+          },
+          {
+            "id": "python_palindrome",
+            "category": "coding",
+            "weight": 1.3,
+            "description": "Small Python function",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+            "response_time": 0.47,
+            "tokens_generated": 17,
+            "tokens_per_second": 111.47
+          },
+          {
+            "id": "capitals_alpha",
+            "category": "knowledge",
+            "weight": 1.0,
+            "description": "Geography + ordering",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "Amsterdam,Berlin,Dublin,Madrid",
+            "response_time": 0.39,
+            "tokens_generated": 8,
+            "tokens_per_second": 107.8
+          },
+          {
+            "id": "speed_ready",
+            "category": "speed",
+            "weight": 0.6,
+            "description": "Minimal latency reply",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "ready",
+            "response_preview": "ready",
+            "response_time": 0.34,
+            "tokens_generated": 2,
+            "tokens_per_second": 147.26
+          }
+        ],
+        "overall_score": 100.0,
+        "category_scores": {
+          "reasoning": 100.0,
+          "knowledge": 100.0,
+          "instruction": 100.0,
+          "creativity": 100.0,
+          "coding": 100.0,
+          "speed": 100.0
+        },
+        "passed_count": 8,
+        "total_count": 8,
+        "error_count": 0,
+        "completion_rate": 1.0,
+        "avg_tokens_per_second": 123.98,
+        "avg_response_time": 1.63
+      },
+      {
+        "model": "lfm2.5:latest",
+        "path": "baseline",
+        "status": "partial",
+        "cases": [
+          {
+            "id": "sheep_riddle",
+            "category": "reasoning",
+            "weight": 1.2,
+            "description": "Classic \"all but N\" riddle",
+            "status": "success",
+            "score": 0,
+            "passed": false,
+            "notes": [
+              "expected 9, got None",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": "9",
+            "response_preview": "",
+            "response_time": 5.48,
+            "tokens_generated": 256,
+            "tokens_per_second": 309.0
+          },
+          {
+            "id": "quick_math",
+            "category": "reasoning",
+            "weight": 1.0,
+            "description": "Mental arithmetic under pressure",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "437",
+            "response_preview": "437",
+            "response_time": 0.55,
+            "tokens_generated": 117,
+            "tokens_per_second": 308.45
+          },
+          {
+            "id": "gold_symbol",
+            "category": "knowledge",
+            "weight": 0.9,
+            "description": "Basic chemistry recall",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "Au",
+            "response_preview": "Au",
+            "response_time": 0.44,
+            "tokens_generated": 82,
+            "tokens_per_second": 308.55
+          },
+          {
+            "id": "reverse_ollama",
+            "category": "instruction",
+            "weight": 1.0,
+            "description": "Exact string transform",
+            "status": "success",
+            "score": 0,
+            "passed": false,
+            "notes": [
+              "expected amallo, got 'amalla'"
+            ],
+            "expected": "amallo",
+            "response_preview": "amalla",
+            "response_time": 0.75,
+            "tokens_generated": 177,
+            "tokens_per_second": 307.9
+          },
+          {
+            "id": "pirate_blockchain",
+            "category": "creativity",
+            "weight": 0.8,
+            "description": "Creative writing with strict constraints",
+            "status": "success",
+            "score": 0,
+            "passed": false,
+            "notes": [
+              "expected 2 sentences, found 0",
+              "treasure should appear in both sentences",
+              "hash should appear in both sentences",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": null,
+            "response_preview": "",
+            "response_time": 1.01,
+            "tokens_generated": 256,
+            "tokens_per_second": 307.93
+          },
+          {
+            "id": "python_palindrome",
+            "category": "coding",
+            "weight": 1.3,
+            "description": "Small Python function",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+            "response_time": 0.63,
+            "tokens_generated": 139,
+            "tokens_per_second": 307.84
+          },
+          {
+            "id": "capitals_alpha",
+            "category": "knowledge",
+            "weight": 1.0,
+            "description": "Geography + ordering",
+            "status": "success",
+            "score": 30,
+            "passed": false,
+            "notes": [
+              "expected 4 cities, got 1",
+              "invalid or unknown capitals: ['athens']",
+              "likely truncated at num_predict=256"
+            ],
+            "expected": null,
+            "response_preview": "Athens",
+            "response_time": 1.01,
+            "tokens_generated": 256,
+            "tokens_per_second": 308.06
+          },
+          {
+            "id": "speed_ready",
+            "category": "speed",
+            "weight": 0.6,
+            "description": "Minimal latency reply",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "ready",
+            "response_preview": "ready",
+            "response_time": 0.46,
+            "tokens_generated": 85,
+            "tokens_per_second": 302.74
+          }
+        ],
+        "overall_score": 52.6,
+        "category_scores": {
+          "reasoning": 50.0,
+          "knowledge": 65.0,
+          "instruction": 0.0,
+          "creativity": 0.0,
+          "coding": 100.0,
+          "speed": 100.0
+        },
+        "passed_count": 4,
+        "total_count": 8,
+        "error_count": 0,
+        "completion_rate": 1.0,
+        "avg_tokens_per_second": 307.56,
+        "avg_response_time": 1.29
+      },
+      {
+        "model": "qwen3.6:35b",
+        "path": "baseline",
+        "status": "success",
+        "cases": [
+          {
+            "id": "sheep_riddle",
+            "category": "reasoning",
+            "weight": 1.2,
+            "description": "Classic \"all but N\" riddle",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "9",
+            "response_preview": "9",
+            "response_time": 28.24,
+            "tokens_generated": 2,
+            "tokens_per_second": 32.14
+          },
+          {
+            "id": "quick_math",
+            "category": "reasoning",
+            "weight": 1.0,
+            "description": "Mental arithmetic under pressure",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "437",
+            "response_preview": "437",
+            "response_time": 1.01,
+            "tokens_generated": 4,
+            "tokens_per_second": 21.82
+          },
+          {
+            "id": "gold_symbol",
+            "category": "knowledge",
+            "weight": 0.9,
+            "description": "Basic chemistry recall",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "Au",
+            "response_preview": "Au",
+            "response_time": 0.86,
+            "tokens_generated": 2,
+            "tokens_per_second": 31.57
+          },
+          {
+            "id": "reverse_ollama",
+            "category": "instruction",
+            "weight": 1.0,
+            "description": "Exact string transform",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "amallo",
+            "response_preview": "amallo",
+            "response_time": 0.96,
+            "tokens_generated": 3,
+            "tokens_per_second": 24.42
+          },
+          {
+            "id": "pirate_blockchain",
+            "category": "creativity",
+            "weight": 0.8,
+            "description": "Creative writing with strict constraints",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "Every piece of digital treasure is secured by a unique hash that guards our chest from plunderers. We shall sail these cryptographic seas until we find the ultimate hash for our legendary treasure.",
+            "response_time": 3.57,
+            "tokens_generated": 37,
+            "tokens_per_second": 18.89
+          },
+          {
+            "id": "python_palindrome",
+            "category": "coding",
+            "weight": 1.3,
+            "description": "Small Python function",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+            "response_time": 2.34,
+            "tokens_generated": 16,
+            "tokens_per_second": 19.56
+          },
+          {
+            "id": "capitals_alpha",
+            "category": "knowledge",
+            "weight": 1.0,
+            "description": "Geography + ordering",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": null,
+            "response_preview": "Amsterdam,Berlin,Brussels,Budapest",
+            "response_time": 2.13,
+            "tokens_generated": 12,
+            "tokens_per_second": 19.71
+          },
+          {
+            "id": "speed_ready",
+            "category": "speed",
+            "weight": 0.6,
+            "description": "Minimal latency reply",
+            "status": "success",
+            "score": 100,
+            "passed": true,
+            "notes": [],
+            "expected": "ready",
+            "response_preview": "ready",
+            "response_time": 0.79,
+            "tokens_generated": 2,
+            "tokens_per_second": 31.66
+          }
+        ],
+        "overall_score": 100.0,
+        "category_scores": {
+          "reasoning": 100.0,
+          "knowledge": 100.0,
+          "instruction": 100.0,
+          "creativity": 100.0,
+          "coding": 100.0,
+          "speed": 100.0
+        },
+        "passed_count": 8,
+        "total_count": 8,
+        "error_count": 0,
+        "completion_rate": 1.0,
+        "avg_tokens_per_second": 24.97,
+        "avg_response_time": 4.99
+      }
+    ],
+    "advice": {
+      "summary": "Benchmarked 6 model(s); 6 produced scorable results.",
+      "recommendations": [
+        "Best all-round: gemma4:latest (100/100, 8/8 passed)",
+        "Fastest generation: lfm2.5:latest (307.6 tok/s avg)",
+        "Best reasoning: gemma4:12b (100/100 in reasoning)",
+        "Best coding: gemma4:12b (100/100 in coding)",
+        "Best knowledge: qwen3.6:35b-fast (100/100 in knowledge)",
+        "Best instruction: gemma4:12b (100/100 in instruction)",
+        "Best creativity: qwen3.6:35b-fast (100/100 in creativity)",
+        "Consider retiring or rarely using: qwen3-vl:8b — scored below 45/100 overall"
+      ],
+      "specialist_hints": [
+        "gemma4:12b is a strong coding pick",
+        "qwen3.6:35b-fast is a strong coding pick",
+        "gemma4:latest is a strong coding pick",
+        "qwen3.6:35b is a strong coding pick"
+      ],
+      "rankings": {
+        "overall": [
+          {
+            "model": "gemma4:latest",
+            "score": 100.0
+          },
+          {
+            "model": "qwen3.6:35b",
+            "score": 100.0
+          },
+          {
+            "model": "gemma4:12b",
+            "score": 80.8
+          },
+          {
+            "model": "qwen3.6:35b-fast",
+            "score": 77.2
+          },
+          {
+            "model": "lfm2.5:latest",
+            "score": 52.6
+          },
+          {
+            "model": "qwen3-vl:8b",
+            "score": 23.1
+          }
+        ],
+        "speed": [
+          {
+            "model": "lfm2.5:latest",
+            "tokens_per_second": 307.56
+          },
+          {
+            "model": "gemma4:latest",
+            "tokens_per_second": 123.98
+          },
+          {
+            "model": "qwen3-vl:8b",
+            "tokens_per_second": 98.74
+          },
+          {
+            "model": "gemma4:12b",
+            "tokens_per_second": 59.77
+          },
+          {
+            "model": "qwen3.6:35b-fast",
+            "tokens_per_second": 30.23
+          },
+          {
+            "model": "qwen3.6:35b",
+            "tokens_per_second": 24.97
+          }
+        ],
+        "by_category": {
+          "reasoning": {
+            "model": "gemma4:12b",
+            "score": 100.0
+          },
+          "coding": {
+            "model": "gemma4:12b",
+            "score": 100.0
+          },
+          "knowledge": {
+            "model": "qwen3.6:35b-fast",
+            "score": 100.0
+          },
+          "instruction": {
+            "model": "gemma4:12b",
+            "score": 100.0
+          },
+          "creativity": {
+            "model": "qwen3.6:35b-fast",
+            "score": 100.0
+          },
+          "speed": {
+            "model": "gemma4:12b",
+            "score": 100.0
+          }
+        }
+      }
+    }
+  },
+  "proxy_advantage": {
+    "summary": "Compared 6 model(s): dashboard-backed settings vs raw Ollama defaults.",
+    "comparisons": [
+      {
+        "model": "qwen3-vl:8b",
+        "dashboard_score": 87.2,
+        "baseline_score": 23.1,
+        "lift": 64.1,
+        "dashboard_passed": 7,
+        "baseline_passed": 2,
+        "settings_critical": true,
+        "proxy_optional": false
+      },
+      {
+        "model": "lfm2.5:latest",
+        "dashboard_score": 90.0,
+        "baseline_score": 52.6,
+        "lift": 37.4,
+        "dashboard_passed": 7,
+        "baseline_passed": 4,
+        "settings_critical": true,
+        "proxy_optional": false
+      },
+      {
+        "model": "gemma4:12b",
+        "dashboard_score": 100.0,
+        "baseline_score": 80.8,
+        "lift": 19.2,
+        "dashboard_passed": 8,
+        "baseline_passed": 6,
+        "settings_critical": false,
+        "proxy_optional": false
+      },
+      {
+        "model": "qwen3.6:35b-fast",
+        "dashboard_score": 87.2,
+        "baseline_score": 77.2,
+        "lift": 10.0,
+        "dashboard_passed": 7,
+        "baseline_passed": 6,
+        "settings_critical": false,
+        "proxy_optional": false
+      },
+      {
+        "model": "gemma4:latest",
+        "dashboard_score": 100.0,
+        "baseline_score": 100.0,
+        "lift": 0.0,
+        "dashboard_passed": 8,
+        "baseline_passed": 8,
+        "settings_critical": false,
+        "proxy_optional": true
+      },
+      {
+        "model": "qwen3.6:35b",
+        "dashboard_score": 100.0,
+        "baseline_score": 100.0,
+        "lift": 0.0,
+        "dashboard_passed": 8,
+        "baseline_passed": 8,
+        "settings_critical": false,
+        "proxy_optional": true
+      }
+    ],
+    "recommendations": [
+      "Route qwen3-vl:8b, lfm2.5:latest through the dashboard /ollama proxy — benchmark lift up to +64 pts vs raw :11434",
+      "Raw Ollama is fine for: gemma4:latest, qwen3.6:35b",
+      "Average dashboard settings lift across fleet: +21.8 pts"
+    ],
+    "average_lift": 21.8
+  },
+  "improvements": {
+    "summary": "Analyzed 6 model(s): 0 critical, 4 need tuning, 2 ok.",
+    "models": [
+      {
+        "model": "gemma4:12b",
+        "validation": {
+          "status": "ok",
+          "source": "recommended",
+          "overall_score": 100.0,
+          "passed": "8/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {}
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "qwen3.6:35b-fast",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "user",
+          "overall_score": 87.2,
+          "passed": "7/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16000,
+            "num_predict": 8192,
+            "repeat_penalty": 1
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {
+            "num_ctx": {
+              "current": 16000,
+              "profile": 16384
+            }
+          },
+          "gaps": [],
+          "failed_categories": {
+            "instruction": [
+              "reverse_ollama"
+            ]
+          }
+        },
+        "suggested_settings": {
+          "num_ctx": 16384
+        },
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "qwen3-vl:8b",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 87.2,
+          "passed": "7/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [
+            "Dashboard settings lift +64 vs raw Ollama — proxy is required for this model"
+          ],
+          "failed_categories": {
+            "instruction": [
+              "reverse_ollama"
+            ]
+          }
+        },
+        "suggested_settings": {
+          "num_predict": 16384
+        },
+        "suggested_client": {},
+        "changes": [
+          "Benchmark hit num_predict cap — raise to at least 16384"
+        ],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": true
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters.",
+            "Never point clients at raw :11434 for this model (benchmark lift +64 via dashboard)."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "gemma4:latest",
+        "validation": {
+          "status": "ok",
+          "source": "user",
+          "overall_score": 100.0,
+          "passed": "8/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {}
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "lfm2.5:latest",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 90.0,
+          "passed": "7/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {},
+          "gaps": [
+            "Dashboard settings lift +37 vs raw Ollama — proxy is required for this model"
+          ],
+          "failed_categories": {
+            "reasoning": [
+              "sheep_riddle"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters.",
+            "Never point clients at raw :11434 for this model (benchmark lift +37 via dashboard)."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "qwen3.6:35b",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "user",
+          "overall_score": 100.0,
+          "passed": "8/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 8192,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {
+            "num_ctx": {
+              "current": 8192,
+              "profile": 16384
+            }
+          },
+          "gaps": [],
+          "failed_categories": {}
+        },
+        "suggested_settings": {
+          "num_ctx": 16384
+        },
+        "suggested_client": {},
+        "changes": [
+          "num_ctx 8192 is below profile target 16384 — long chats will lose context early"
+        ],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    ],
+    "fleet_actions": [
+      "Review settings for: qwen3.6:35b-fast, qwen3-vl:8b, lfm2.5:latest, qwen3.6:35b",
+      "Enforce /ollama proxy URL in all IDE configs for: qwen3-vl:8b, lfm2.5:latest",
+      "Agent-capable (tools): gemma4:12b, qwen3.6:35b-fast, qwen3-vl:8b, gemma4:latest, lfm2.5:latest, qwen3.6:35b — use chat + MCP, context_trim on, num_ctx >= 16k"
+    ]
+  },
+  "benchmark_count": 8
 }

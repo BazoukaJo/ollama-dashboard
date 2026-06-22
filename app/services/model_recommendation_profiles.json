@@ -10,6 +10,51 @@
   ],
   "profiles": [
     {
+      "id": "llama4_general",
+      "patterns": ["llama4", "llama-4"],
+      "exclude_patterns": ["vision", "coder", "code"],
+      "settings": {
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "top_k": 40,
+        "repeat_penalty": 1.05,
+        "num_predict": 4096,
+        "context_target": 16384,
+        "context_min": 8192,
+        "context_fraction": 0.125
+      }
+    },
+    {
+      "id": "llama31_general",
+      "patterns": ["llama3.1:8b", "llama3.1:70b", "llama3.1", "llama-3.1"],
+      "exclude_patterns": ["vision", "coder", "code"],
+      "settings": {
+        "temperature": 0.6,
+        "top_p": 0.9,
+        "top_k": 40,
+        "repeat_penalty": 1.1,
+        "num_predict": 2048,
+        "context_target": 8192,
+        "context_min": 4096,
+        "context_fraction": 0.0625
+      }
+    },
+    {
+      "id": "qwen3_coder_next",
+      "patterns": ["qwen3-coder-next", "coder-next"],
+      "settings": {
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "top_k": 20,
+        "min_p": 0.05,
+        "repeat_penalty": 1.05,
+        "num_predict": 8192,
+        "context_target": 32768,
+        "context_min": 16384,
+        "context_fraction": 0.25
+      }
+    },
+    {
       "id": "coding_specialist",
       "patterns": [
         "qwen3-coder", "qwen2.5-coder", "deepseek-coder", "codellama", "starcoder",

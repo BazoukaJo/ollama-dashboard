@@ -51,6 +51,7 @@ from app.services.model_settings_helpers import (
     merge_options_for_external_proxy,
 )
 from app.services.settings_cache import load_settings_file
+from app.services.model_residency import pin_keep_alive_for
 from app.services.v1_model_resolve import resolve_v1_model_name
 from app.services.v1_native_bridge import (
     STREAM_HEARTBEAT,
@@ -280,9 +281,13 @@ def _apply_ide_residency_hooks(payload: dict, ollama_url: str) -> None:
         return
     record_model_activity(model_name)
     if payload.get('keep_alive') is None:
-        keep_alive = _copilot_keep_alive()
-        if keep_alive is not None:
-            payload['keep_alive'] = keep_alive
+        pinned = pin_keep_alive_for(model_name)
+        if pinned is not None:
+            payload['keep_alive'] = pinned
+        else:
+            keep_alive = _copilot_keep_alive()
+            if keep_alive is not None:
+                payload['keep_alive'] = keep_alive
     entry = _resolve_settings_entry(model_name)
     options = (entry or {}).get('settings') or {}
     if options.get('num_ctx'):

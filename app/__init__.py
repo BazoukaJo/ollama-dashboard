@@ -49,6 +49,19 @@ def _schedule_startup_prewarm(app, ollama_service) -> None:
     if not model_name:
         return
     try:
+        from app.services.model_residency import parse_residency_env, _env_bool as residency_env_bool
+
+        if residency_env_bool('RESIDENCY_ON_START', True):
+            residency_models = {s.model for s in parse_residency_env()}
+            if model_name in residency_models:
+                logger.info(
+                    "Skipping startup prewarm for %s (handled by residency pins)",
+                    model_name,
+                )
+                return
+    except Exception:  # noqa: BLE001 - skip check is best-effort
+        pass
+    try:
         from app.services.copilot_prewarm import schedule_startup_prewarm
         from app.services.model_settings_helpers import (
             compute_fresh_recommended_settings_entry,
@@ -76,6 +89,16 @@ def _schedule_startup_prewarm(app, ollama_service) -> None:
         logger.info("🔥 Scheduled startup prewarm for %s", model_name)
     except Exception as err:  # noqa: BLE001 - prewarm must never break startup
         logger.warning("Startup prewarm skipped: %s", err)
+
+
+def _schedule_startup_residency(app, ollama_service) -> None:
+    """Pin fast + heavy models in Ollama RAM (best-effort, non-blocking)."""
+    try:
+        from app.services.model_residency import startup_residency_from_env
+
+        startup_residency_from_env(app, ollama_service)
+    except Exception as err:  # noqa: BLE001 - residency must never break startup
+        logger.warning("Startup residency skipped: %s", err)
 
 
 def create_app(config_name='development'):
@@ -251,6 +274,7 @@ def create_app(config_name='development'):
     mount_mcp_on_flask_app(app)
 
     _schedule_startup_prewarm(app, ollama_service)
+    _schedule_startup_residency(app, ollama_service)
 
     logger.info("✅ Application initialized successfully")
     return app

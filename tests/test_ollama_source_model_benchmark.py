@@ -189,7 +189,7 @@ def test_benchmark_single_model_via_origin():
 
     host, port = _resolve_ollama_source_host_port()
     session = requests.Session()
-    result = run_benchmark_for_model(session, host, port, model_name)
+    result = run_benchmark_for_model(session, host, port, model_name, path='baseline')
 
     assert result['model'] == model_name
     assert result['total_count'] == len(BENCHMARK_CASES)

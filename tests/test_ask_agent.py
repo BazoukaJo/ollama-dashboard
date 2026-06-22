@@ -42,8 +42,9 @@ def test_agent_stream_final_content(mock_session):
         allow_write=False,
     ))
     events = [json.loads(line) for line in lines if line.strip()]
-    assert events[0]['type'] == 'content'
-    assert events[0]['text'] == 'Hello from agent'
+    assert events[0]['type'] == 'status'
+    content_events = [e for e in events if e['type'] == 'content']
+    assert content_events[0]['text'] == 'Hello from agent'
     assert events[-1]['type'] == 'done'
 
 

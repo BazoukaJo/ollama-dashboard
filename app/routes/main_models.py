@@ -203,14 +203,29 @@ def stop_model(model_name=None):
     try:
         payload = request.get_json(silent=True) or {}
         force = bool(payload.get('force'))
+        unpin = bool(payload.get('unpin'))
+
+        from app.services.model_residency import is_pinned, unpin_model
+
+        if unpin:
+            unpin_model(model_name)
 
         if force:
             if not main_routes._get_ollama_service().get_service_status():
                 return {"success": False, "message": "Ollama service is not running"}, 503
             running_models = main_routes._get_ollama_service().get_running_models(force_refresh=True)
             if not any(m.get('name') == model_name for m in running_models):
+                if is_pinned(model_name):
+                    unpin_model(model_name)
+                    return {
+                        "success": True,
+                        "message": f"Model {model_name} was not loaded; removed from pin registry",
+                    }
                 return {"success": False, "message": f"Model {model_name} is not currently running"}, 400
-            return _force_unload_via_ollama_restart(model_name)
+            result, code = _force_unload_via_ollama_restart(model_name)
+            if result.get('success'):
+                unpin_model(model_name)
+            return result, code
 
         # Verify Ollama service is running
         if not main_routes._get_ollama_service().get_service_status():
@@ -219,7 +234,22 @@ def stop_model(model_name=None):
         # Check if model is currently running
         running_models = main_routes._get_ollama_service().get_running_models(force_refresh=True)
         if not any(m.get('name') == model_name for m in running_models):
+            if is_pinned(model_name):
+                unpin_model(model_name)
+                return {
+                    "success": True,
+                    "message": f"Model {model_name} was not loaded; removed from pin registry",
+                }
             return {"success": False, "message": f"Model {model_name} is not currently running"}, 400
+
+        if is_pinned(model_name) and not unpin:
+            return {
+                "success": False,
+                "message": (
+                    f"Model {model_name} is pinned for RAM residency. "
+                    "POST with {\"unpin\": true} to allow unload, or {\"force\": true} to restart Ollama."
+                ),
+            }, 409
 
         # Gracefully unload the model using Ollama API
         # Per Ollama docs: empty prompt + keep_alive=0 (numeric) unloads immediately
@@ -900,8 +930,106 @@ def benchmark_all_models():
         names = None
         if isinstance(raw_names, list):
             names = [str(n).strip() for n in raw_names if str(n).strip()]
-        result = main_routes._get_ollama_service().run_all_model_benchmarks(model_names=names)
+        compare_baseline = bool(body.get('compare_baseline') or body.get('compare'))
+        async_mode = bool(body.get('async') or body.get('background'))
+        if async_mode:
+            import concurrent.futures
+            from app.services.task_tracker import complete_task, create_task, fail_task, update_task
+
+            models = names
+            if not models:
+                models = [
+                    m.get('name') for m in main_routes._get_ollama_service().get_available_models()
+                    if m.get('name')
+                ]
+            task_id = create_task(
+                'benchmark',
+                label='Fleet benchmark',
+                total_steps=len(models or [1]),
+                meta={'compare': compare_baseline, 'models': models},
+            )
+
+            def _run() -> None:
+                try:
+                    update_task(task_id, message='Benchmark running…', step=0)
+                    result = main_routes._get_ollama_service().run_all_model_benchmarks(
+                        model_names=names,
+                        compare_baseline=compare_baseline,
+                    )
+                    complete_task(task_id, result)
+                except _ROUTE_ERRORS as exc:
+                    fail_task(task_id, str(exc))
+
+            concurrent.futures.ThreadPoolExecutor(max_workers=1).submit(_run)
+            return {'task_id': task_id, 'status': 'running', 'poll': f'/api/tasks/{task_id}'}, 202
+
+        result = main_routes._get_ollama_service().run_all_model_benchmarks(
+            model_names=names,
+            compare_baseline=compare_baseline,
+        )
         return result
+    except _ROUTE_ERRORS as e:
+        return {"error": str(e)}, 500
+
+
+@bp.route('/api/tasks')
+def list_tasks():
+    """Recent long-running task status entries."""
+    from app.services.task_tracker import list_tasks as _list_tasks
+
+    return {'tasks': _list_tasks(limit=20)}
+
+
+@bp.route('/api/tasks/<task_id>')
+def get_task_status(task_id):
+    """Poll status for async benchmark / tune operations."""
+    from app.services.task_tracker import get_task
+
+    task = get_task(task_id)
+    if not task:
+        return {'error': 'task not found'}, 404
+    return task
+
+
+@bp.route('/api/models/benchmark/tune', methods=['POST'])
+def benchmark_tune_loop_route():
+    """Start multi-round benchmark → apply → re-test loop (background)."""
+    limited = _rate_limit_response('model_operations')
+    if limited:
+        return limited
+    try:
+        import concurrent.futures
+
+        from app.services.task_tracker import create_task, fail_task
+        from scripts.benchmark_tune_loop import run_tune_loop
+
+        body = request.get_json(silent=True) or {}
+        max_rounds = max(1, min(int(body.get('max_rounds') or 3), 5))
+        raw_names = body.get('models')
+        names = None
+        if isinstance(raw_names, list):
+            names = [str(n).strip() for n in raw_names if str(n).strip()] or None
+
+        task_id = create_task(
+            'benchmark_tune_loop',
+            label='Benchmark tune loop',
+            total_steps=max_rounds,
+            meta={'max_rounds': max_rounds, 'models': names},
+        )
+
+        def _run() -> None:
+            try:
+                run_tune_loop(max_rounds=max_rounds, compare=True, model_names=names, task_id=task_id)
+            except Exception as exc:  # noqa: BLE001
+                fail_task(task_id, str(exc))
+
+        concurrent.futures.ThreadPoolExecutor(max_workers=1).submit(_run)
+        return {
+            'status': 'running',
+            'task_id': task_id,
+            'poll': f'/api/tasks/{task_id}',
+            'message': 'Tune loop started — poll task for progress',
+        }, 202
     except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
 
@@ -916,10 +1044,65 @@ def benchmark_model(model_name):
     if limited:
         return limited
     try:
-        result = main_routes._get_ollama_service().run_model_benchmark(model_name)
+        body = request.get_json(silent=True) or {}
+        if body.get('compare_baseline') or body.get('compare'):
+            result = main_routes._get_ollama_service().run_model_benchmark_comparison(model_name)
+        else:
+            result = main_routes._get_ollama_service().run_model_benchmark(model_name)
         return result
     except _ROUTE_ERRORS as e:
         return {"error": str(e)}, 500
+
+
+@bp.route('/api/residency/status')
+def residency_status():
+    """Live pin registry + Ollama /api/ps for multi-model RAM residency."""
+    try:
+        from app.services.model_residency import get_residency_status
+
+        host, port = main_routes._get_ollama_service()._get_ollama_host_port()
+        base = f'http://{host}:{int(port)}'
+        return get_residency_status(base)
+    except _ROUTE_ERRORS as e:
+        return {"error": str(e)}, 500
+
+
+@bp.route('/api/residency/pin', methods=['POST'])
+def residency_pin():
+    """Pin a model in Ollama memory (keep_alive). Body: model, role?, keep_alive?, unpin?."""
+    limited = _rate_limit_response('model_operations')
+    if limited:
+        return limited
+    try:
+        from app.services.model_residency import pin_model_sync, unpin_model
+
+        body = request.get_json(silent=True) or {}
+        model_name = str(body.get('model') or '').strip()
+        if not model_name:
+            return {"success": False, "error": "model required"}, 400
+        err, status = _validate_model_name(model_name)
+        if err is not None:
+            return err, status or 400
+        if body.get('unpin'):
+            unpin_model(model_name)
+            return {"success": True, "unpinned": model_name}
+        role = str(body.get('role') or 'custom').strip() or 'custom'
+        keep_alive = body.get('keep_alive', -1)
+        host, port = main_routes._get_ollama_service()._get_ollama_host_port()
+        base = f'http://{host}:{int(port)}'
+        result = pin_model_sync(
+            main_routes._get_ollama_service(),
+            base,
+            model_name,
+            role=role,
+            keep_alive=keep_alive,
+        )
+        if not result.get('success'):
+            return result, 502
+        return result
+    except _ROUTE_ERRORS as e:
+        return {"success": False, "error": str(e)}, 500
+
 
 @bp.route('/api/models/memory/usage')
 def get_models_memory_usage():
@@ -947,9 +1130,6 @@ def api_pull_model(model_name=None):
     model_name, err_resp = _resolve_model_name(model_name)
     if err_resp:
         return err_resp
-    limited = _rate_limit_response('model_pull')
-    if limited:
-        return limited
     stream = request.args.get('stream', 'false').lower() == 'true'
     try:
         if stream:

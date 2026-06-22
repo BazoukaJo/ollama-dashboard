@@ -1,0 +1,293 @@
+{
+  "history": [
+    {
+      "round": 1,
+      "avg_score": 86.7,
+      "proxy_lift": 15.6,
+      "timestamp": 1782112766.8057199
+    },
+    {
+      "round": 2,
+      "avg_score": 89.9,
+      "proxy_lift": 18.4,
+      "timestamp": 1782121953.4373567
+    }
+  ],
+  "best_avg_score": 89.93333333333334,
+  "task_id": "ab6172087446",
+  "models": [
+    {
+      "model": "llama4:latest",
+      "score": 64.8,
+      "passed": "6/11"
+    },
+    {
+      "model": "Qwen3-Coder-Next:latest",
+      "score": 96.2,
+      "passed": "10/11"
+    },
+    {
+      "model": "qwen3.6:27B",
+      "score": 96.2,
+      "passed": "10/11"
+    },
+    {
+      "model": "gemma4:12b",
+      "score": 96.2,
+      "passed": "10/11"
+    },
+    {
+      "model": "qwen3.6:35b-fast",
+      "score": 87.2,
+      "passed": "9/11"
+    },
+    {
+      "model": "qwen3-vl:8b",
+      "score": 87.2,
+      "passed": "9/11"
+    },
+    {
+      "model": "gemma4:latest",
+      "score": 96.2,
+      "passed": "10/11"
+    },
+    {
+      "model": "lfm2.5:latest",
+      "score": 89.2,
+      "passed": "9/11"
+    },
+    {
+      "model": "qwen3.6:35b",
+      "score": 96.2,
+      "passed": "10/11"
+    }
+  ],
+  "proxy_advantage": {
+    "summary": "Compared 9 model(s): dashboard-backed settings vs raw Ollama defaults.",
+    "comparisons": [
+      {
+        "model": "qwen3-vl:8b",
+        "dashboard_score": 87.2,
+        "baseline_score": 15.1,
+        "lift": 72.1,
+        "dashboard_passed": 9,
+        "baseline_passed": 1,
+        "settings_critical": true,
+        "proxy_optional": false
+      },
+      {
+        "model": "gemma4:12b",
+        "dashboard_score": 96.2,
+        "baseline_score": 61.1,
+        "lift": 35.1,
+        "dashboard_passed": 10,
+        "baseline_passed": 6,
+        "settings_critical": true,
+        "proxy_optional": false
+      },
+      {
+        "model": "lfm2.5:latest",
+        "dashboard_score": 89.2,
+        "baseline_score": 62.9,
+        "lift": 26.3,
+        "dashboard_passed": 9,
+        "baseline_passed": 6,
+        "settings_critical": true,
+        "proxy_optional": false
+      },
+      {
+        "model": "llama4:latest",
+        "dashboard_score": 64.8,
+        "baseline_score": 55.8,
+        "lift": 9.0,
+        "dashboard_passed": 6,
+        "baseline_passed": 5,
+        "settings_critical": false,
+        "proxy_optional": false
+      },
+      {
+        "model": "qwen3.6:35b",
+        "dashboard_score": 96.2,
+        "baseline_score": 87.2,
+        "lift": 9.0,
+        "dashboard_passed": 10,
+        "baseline_passed": 9,
+        "settings_critical": false,
+        "proxy_optional": true
+      },
+      {
+        "model": "qwen3.6:35b-fast",
+        "dashboard_score": 87.2,
+        "baseline_score": 80.2,
+        "lift": 7.0,
+        "dashboard_passed": 9,
+        "baseline_passed": 8,
+        "settings_critical": false,
+        "proxy_optional": true
+      },
+      {
+        "model": "gemma4:latest",
+        "dashboard_score": 96.2,
+        "baseline_score": 89.2,
+        "lift": 7.0,
+        "dashboard_passed": 10,
+        "baseline_passed": 10,
+        "settings_critical": false,
+        "proxy_optional": true
+      },
+      {
+        "model": "Qwen3-Coder-Next:latest",
+        "dashboard_score": 96.2,
+        "baseline_score": 96.2,
+        "lift": 0.0,
+        "dashboard_passed": 10,
+        "baseline_passed": 10,
+        "settings_critical": false,
+        "proxy_optional": true
+      },
+      {
+        "model": "qwen3.6:27B",
+        "dashboard_score": 96.2,
+        "baseline_score": 96.2,
+        "lift": 0.0,
+        "dashboard_passed": 10,
+        "baseline_passed": 10,
+        "settings_critical": false,
+        "proxy_optional": true
+      }
+    ],
+    "recommendations": [
+      "Route qwen3-vl:8b, gemma4:12b, lfm2.5:latest through the dashboard /ollama proxy — benchmark lift up to +72 pts vs raw :11434",
+      "Raw Ollama is fine for: qwen3.6:35b, qwen3.6:35b-fast, gemma4:latest, Qwen3-Coder-Next:latest, qwen3.6:27B",
+      "Average dashboard settings lift across fleet: +18.4 pts"
+    ],
+    "average_lift": 18.4
+  },
+  "advice": {
+    "summary": "Benchmarked 9 model(s); 9 produced scorable results.",
+    "recommendations": [
+      "Best all-round: Qwen3-Coder-Next:latest (96/100, 10/11 passed)",
+      "Fastest generation: lfm2.5:latest (334.4 tok/s avg)",
+      "Best reasoning: llama4:latest (100/100 in reasoning)",
+      "Best coding: Qwen3-Coder-Next:latest (88/100 in coding)",
+      "Best knowledge: llama4:latest (100/100 in knowledge)",
+      "Best instruction: Qwen3-Coder-Next:latest (100/100 in instruction)",
+      "Best creativity: Qwen3-Coder-Next:latest (100/100 in creativity)"
+    ],
+    "specialist_hints": [
+      "llama4:latest reasons well but struggles on code tasks",
+      "Qwen3-Coder-Next:latest is a strong coding pick",
+      "qwen3.6:27B is a strong coding pick",
+      "gemma4:12b is a strong coding pick",
+      "qwen3.6:35b-fast is a strong coding pick",
+      "qwen3-vl:8b is a strong coding pick",
+      "gemma4:latest is a strong coding pick",
+      "lfm2.5:latest is a strong coding pick",
+      "qwen3.6:35b is a strong coding pick"
+    ],
+    "rankings": {
+      "overall": [
+        {
+          "model": "Qwen3-Coder-Next:latest",
+          "score": 96.2
+        },
+        {
+          "model": "qwen3.6:27B",
+          "score": 96.2
+        },
+        {
+          "model": "gemma4:12b",
+          "score": 96.2
+        },
+        {
+          "model": "gemma4:latest",
+          "score": 96.2
+        },
+        {
+          "model": "qwen3.6:35b",
+          "score": 96.2
+        },
+        {
+          "model": "lfm2.5:latest",
+          "score": 89.2
+        },
+        {
+          "model": "qwen3.6:35b-fast",
+          "score": 87.2
+        },
+        {
+          "model": "qwen3-vl:8b",
+          "score": 87.2
+        },
+        {
+          "model": "llama4:latest",
+          "score": 64.8
+        }
+      ],
+      "speed": [
+        {
+          "model": "lfm2.5:latest",
+          "tokens_per_second": 334.4
+        },
+        {
+          "model": "qwen3.6:35b-fast",
+          "tokens_per_second": 136.64
+        },
+        {
+          "model": "gemma4:latest",
+          "tokens_per_second": 116.61
+        },
+        {
+          "model": "qwen3-vl:8b",
+          "tokens_per_second": 95.99
+        },
+        {
+          "model": "gemma4:12b",
+          "tokens_per_second": 58.99
+        },
+        {
+          "model": "Qwen3-Coder-Next:latest",
+          "tokens_per_second": 39.99
+        },
+        {
+          "model": "qwen3.6:35b",
+          "tokens_per_second": 26.41
+        },
+        {
+          "model": "llama4:latest",
+          "tokens_per_second": 17.42
+        },
+        {
+          "model": "qwen3.6:27B",
+          "tokens_per_second": 10.23
+        }
+      ],
+      "by_category": {
+        "reasoning": {
+          "model": "llama4:latest",
+          "score": 100.0
+        },
+        "coding": {
+          "model": "Qwen3-Coder-Next:latest",
+          "score": 88.3
+        },
+        "knowledge": {
+          "model": "llama4:latest",
+          "score": 100.0
+        },
+        "instruction": {
+          "model": "Qwen3-Coder-Next:latest",
+          "score": 100.0
+        },
+        "creativity": {
+          "model": "Qwen3-Coder-Next:latest",
+          "score": 100.0
+        },
+        "speed": {
+          "model": "llama4:latest",
+          "score": 100.0
+        }
+      }
+    }
+  }
+}

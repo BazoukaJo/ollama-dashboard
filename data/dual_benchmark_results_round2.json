@@ -1,0 +1,936 @@
+{
+  "models": [
+    {
+      "model": "qwen3.6:35b-fast",
+      "path": "dashboard",
+      "status": "partial",
+      "cases": [
+        {
+          "id": "sheep_riddle",
+          "category": "reasoning",
+          "weight": 1.2,
+          "description": "Classic \"all but N\" riddle",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "9",
+          "response_preview": "9",
+          "response_time": 13.11,
+          "tokens_generated": 2,
+          "tokens_per_second": 141.66
+        },
+        {
+          "id": "quick_math",
+          "category": "reasoning",
+          "weight": 1.0,
+          "description": "Mental arithmetic under pressure",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "437",
+          "response_preview": "437",
+          "response_time": 0.36,
+          "tokens_generated": 4,
+          "tokens_per_second": 91.73
+        },
+        {
+          "id": "gold_symbol",
+          "category": "knowledge",
+          "weight": 0.9,
+          "description": "Basic chemistry recall",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "Au",
+          "response_preview": "Au",
+          "response_time": 0.34,
+          "tokens_generated": 2,
+          "tokens_per_second": 126.51
+        },
+        {
+          "id": "reverse_ollama",
+          "category": "instruction",
+          "weight": 1.0,
+          "description": "Exact string transform",
+          "status": "success",
+          "score": 0,
+          "passed": false,
+          "notes": [
+            "expected amallo, got 'ammalo'"
+          ],
+          "expected": "amallo",
+          "response_preview": "ammalo",
+          "response_time": 0.35,
+          "tokens_generated": 3,
+          "tokens_per_second": 104.24
+        },
+        {
+          "id": "pirate_blockchain",
+          "category": "creativity",
+          "weight": 0.8,
+          "description": "Creative writing with strict constraints",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Every chest of digital treasure is secured by a unique hash that guards our shared bounty from the tides of deceit. Let us forge our collective hash into an unbreakable chain, ensuring that every piece of the treasure remains safe for all h",
+          "response_time": 0.72,
+          "tokens_generated": 52,
+          "tokens_per_second": 132.95
+        },
+        {
+          "id": "python_palindrome",
+          "category": "coding",
+          "weight": 1.3,
+          "description": "Small Python function",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+          "response_time": 0.41,
+          "tokens_generated": 16,
+          "tokens_per_second": 144.67
+        },
+        {
+          "id": "capitals_alpha",
+          "category": "knowledge",
+          "weight": 1.0,
+          "description": "Geography + ordering",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Amsterdam,Berlin,Brussels,Budapest",
+          "response_time": 0.37,
+          "tokens_generated": 12,
+          "tokens_per_second": 146.87
+        },
+        {
+          "id": "speed_ready",
+          "category": "speed",
+          "weight": 0.6,
+          "description": "Minimal latency reply",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "ready",
+          "response_preview": "ready",
+          "response_time": 0.31,
+          "tokens_generated": 2,
+          "tokens_per_second": 166.75
+        }
+      ],
+      "overall_score": 87.2,
+      "category_scores": {
+        "reasoning": 100.0,
+        "knowledge": 100.0,
+        "instruction": 0.0,
+        "creativity": 100.0,
+        "coding": 100.0,
+        "speed": 100.0
+      },
+      "passed_count": 7,
+      "total_count": 8,
+      "error_count": 0,
+      "completion_rate": 1.0,
+      "avg_tokens_per_second": 131.92,
+      "avg_response_time": 2.0,
+      "improvements": {
+        "model": "qwen3.6:35b-fast",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "benchmark_tuned",
+          "overall_score": 87.2,
+          "passed": "7/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "instruction": [
+              "reverse_ollama"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    },
+    {
+      "model": "qwen3-vl:8b",
+      "path": "dashboard",
+      "status": "partial",
+      "cases": [
+        {
+          "id": "sheep_riddle",
+          "category": "reasoning",
+          "weight": 1.2,
+          "description": "Classic \"all but N\" riddle",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "9",
+          "response_preview": "9",
+          "response_time": 25.62,
+          "tokens_generated": 1686,
+          "tokens_per_second": 96.55
+        },
+        {
+          "id": "quick_math",
+          "category": "reasoning",
+          "weight": 1.0,
+          "description": "Mental arithmetic under pressure",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "437",
+          "response_preview": "437",
+          "response_time": 5.49,
+          "tokens_generated": 519,
+          "tokens_per_second": 98.14
+        },
+        {
+          "id": "gold_symbol",
+          "category": "knowledge",
+          "weight": 0.9,
+          "description": "Basic chemistry recall",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "Au",
+          "response_preview": "Au",
+          "response_time": 0.6,
+          "tokens_generated": 42,
+          "tokens_per_second": 99.64
+        },
+        {
+          "id": "reverse_ollama",
+          "category": "instruction",
+          "weight": 1.0,
+          "description": "Exact string transform",
+          "status": "success",
+          "score": 0,
+          "passed": false,
+          "notes": [
+            "expected amallo, got ''",
+            "likely truncated at num_predict=8192"
+          ],
+          "expected": "amallo",
+          "response_preview": "",
+          "response_time": 90.79,
+          "tokens_generated": 8192,
+          "tokens_per_second": 90.39
+        },
+        {
+          "id": "pirate_blockchain",
+          "category": "creativity",
+          "weight": 0.8,
+          "description": "Creative writing with strict constraints",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Our treasure chests are sealed with a magical wax *hash* to prove no one tampered with the gold inside, just like a secure *treasure* map. The chain of our shared ledger is built on unbreakable *hash* links, so every bit of *treasure* must ",
+          "response_time": 4.25,
+          "tokens_generated": 380,
+          "tokens_per_second": 97.23
+        },
+        {
+          "id": "python_palindrome",
+          "category": "coding",
+          "weight": 1.3,
+          "description": "Small Python function",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "def is_palindrome(s):\n    s_clean = ''.join(filter(str.isalnum, s.lower()))\n    return s_clean == s_clean[::-1]",
+          "response_time": 40.3,
+          "tokens_generated": 3766,
+          "tokens_per_second": 93.84
+        },
+        {
+          "id": "capitals_alpha",
+          "category": "knowledge",
+          "weight": 1.0,
+          "description": "Geography + ordering",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Amsterdam,Berlin,London,Paris",
+          "response_time": 53.57,
+          "tokens_generated": 4958,
+          "tokens_per_second": 92.98
+        },
+        {
+          "id": "speed_ready",
+          "category": "speed",
+          "weight": 0.6,
+          "description": "Minimal latency reply",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "ready",
+          "response_preview": "ready",
+          "response_time": 2.4,
+          "tokens_generated": 207,
+          "tokens_per_second": 97.91
+        }
+      ],
+      "overall_score": 87.2,
+      "category_scores": {
+        "reasoning": 100.0,
+        "knowledge": 100.0,
+        "instruction": 0.0,
+        "creativity": 100.0,
+        "coding": 100.0,
+        "speed": 100.0
+      },
+      "passed_count": 7,
+      "total_count": 8,
+      "error_count": 0,
+      "completion_rate": 1.0,
+      "avg_tokens_per_second": 95.84,
+      "avg_response_time": 27.88,
+      "improvements": {
+        "model": "qwen3-vl:8b",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "benchmark_tuned",
+          "overall_score": 87.2,
+          "passed": "7/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "instruction": [
+              "reverse_ollama"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": true
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    },
+    {
+      "model": "qwen3.6:35b",
+      "path": "dashboard",
+      "status": "success",
+      "cases": [
+        {
+          "id": "sheep_riddle",
+          "category": "reasoning",
+          "weight": 1.2,
+          "description": "Classic \"all but N\" riddle",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "9",
+          "response_preview": "9",
+          "response_time": 27.25,
+          "tokens_generated": 2,
+          "tokens_per_second": 32.66
+        },
+        {
+          "id": "quick_math",
+          "category": "reasoning",
+          "weight": 1.0,
+          "description": "Mental arithmetic under pressure",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "437",
+          "response_preview": "437",
+          "response_time": 0.99,
+          "tokens_generated": 4,
+          "tokens_per_second": 22.09
+        },
+        {
+          "id": "gold_symbol",
+          "category": "knowledge",
+          "weight": 0.9,
+          "description": "Basic chemistry recall",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "Au",
+          "response_preview": "Au",
+          "response_time": 0.83,
+          "tokens_generated": 2,
+          "tokens_per_second": 32.99
+        },
+        {
+          "id": "reverse_ollama",
+          "category": "instruction",
+          "weight": 1.0,
+          "description": "Exact string transform",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "amallo",
+          "response_preview": "amallo",
+          "response_time": 0.94,
+          "tokens_generated": 3,
+          "tokens_per_second": 24.79
+        },
+        {
+          "id": "pirate_blockchain",
+          "category": "creativity",
+          "weight": 0.8,
+          "description": "Creative writing with strict constraints",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Every pirate must secure their digital treasure with a unique hash to prove ownership on the ledger. Without this cryptographic hash, our shared treasure remains vulnerable to thieves in the digital sea.",
+          "response_time": 3.53,
+          "tokens_generated": 36,
+          "tokens_per_second": 19.24
+        },
+        {
+          "id": "python_palindrome",
+          "category": "coding",
+          "weight": 1.3,
+          "description": "Small Python function",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "def is_palindrome(s):\n    return s == s[::-1]",
+          "response_time": 2.34,
+          "tokens_generated": 16,
+          "tokens_per_second": 19.61
+        },
+        {
+          "id": "capitals_alpha",
+          "category": "knowledge",
+          "weight": 1.0,
+          "description": "Geography + ordering",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": null,
+          "response_preview": "Amsterdam,Berlin,Brussels,Budapest",
+          "response_time": 2.13,
+          "tokens_generated": 12,
+          "tokens_per_second": 20.09
+        },
+        {
+          "id": "speed_ready",
+          "category": "speed",
+          "weight": 0.6,
+          "description": "Minimal latency reply",
+          "status": "success",
+          "score": 100,
+          "passed": true,
+          "notes": [],
+          "expected": "ready",
+          "response_preview": "ready",
+          "response_time": 0.79,
+          "tokens_generated": 2,
+          "tokens_per_second": 33.2
+        }
+      ],
+      "overall_score": 100.0,
+      "category_scores": {
+        "reasoning": 100.0,
+        "knowledge": 100.0,
+        "instruction": 100.0,
+        "creativity": 100.0,
+        "coding": 100.0,
+        "speed": 100.0
+      },
+      "passed_count": 8,
+      "total_count": 8,
+      "error_count": 0,
+      "completion_rate": 1.0,
+      "avg_tokens_per_second": 25.58,
+      "avg_response_time": 4.85,
+      "improvements": {
+        "model": "qwen3.6:35b",
+        "validation": {
+          "status": "ok",
+          "source": "benchmark_tuned",
+          "overall_score": 100.0,
+          "passed": "8/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {}
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    }
+  ],
+  "advice": {
+    "summary": "Benchmarked 3 model(s); 3 produced scorable results.",
+    "recommendations": [
+      "Best all-round: qwen3.6:35b (100/100, 8/8 passed)",
+      "Fastest generation: qwen3.6:35b-fast (131.9 tok/s avg)",
+      "Best reasoning: qwen3.6:35b-fast (100/100 in reasoning)",
+      "Best coding: qwen3.6:35b-fast (100/100 in coding)",
+      "Best knowledge: qwen3.6:35b-fast (100/100 in knowledge)",
+      "Best instruction: qwen3.6:35b (100/100 in instruction)",
+      "Best creativity: qwen3.6:35b-fast (100/100 in creativity)"
+    ],
+    "specialist_hints": [
+      "qwen3.6:35b-fast is a strong coding pick",
+      "qwen3-vl:8b is a strong coding pick",
+      "qwen3.6:35b is a strong coding pick"
+    ],
+    "rankings": {
+      "overall": [
+        {
+          "model": "qwen3.6:35b",
+          "score": 100.0
+        },
+        {
+          "model": "qwen3.6:35b-fast",
+          "score": 87.2
+        },
+        {
+          "model": "qwen3-vl:8b",
+          "score": 87.2
+        }
+      ],
+      "speed": [
+        {
+          "model": "qwen3.6:35b-fast",
+          "tokens_per_second": 131.92
+        },
+        {
+          "model": "qwen3-vl:8b",
+          "tokens_per_second": 95.84
+        },
+        {
+          "model": "qwen3.6:35b",
+          "tokens_per_second": 25.58
+        }
+      ],
+      "by_category": {
+        "reasoning": {
+          "model": "qwen3.6:35b-fast",
+          "score": 100.0
+        },
+        "coding": {
+          "model": "qwen3.6:35b-fast",
+          "score": 100.0
+        },
+        "knowledge": {
+          "model": "qwen3.6:35b-fast",
+          "score": 100.0
+        },
+        "instruction": {
+          "model": "qwen3.6:35b",
+          "score": 100.0
+        },
+        "creativity": {
+          "model": "qwen3.6:35b-fast",
+          "score": 100.0
+        },
+        "speed": {
+          "model": "qwen3.6:35b-fast",
+          "score": 100.0
+        }
+      }
+    }
+  },
+  "improvements": {
+    "summary": "Analyzed 3 model(s): 0 critical, 2 need tuning, 1 ok.",
+    "models": [
+      {
+        "model": "qwen3.6:35b-fast",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "benchmark_tuned",
+          "overall_score": 87.2,
+          "passed": "7/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "instruction": [
+              "reverse_ollama"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "qwen3-vl:8b",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "benchmark_tuned",
+          "overall_score": 87.2,
+          "passed": "7/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "instruction": [
+              "reverse_ollama"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": true
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "qwen3.6:35b",
+        "validation": {
+          "status": "ok",
+          "source": "benchmark_tuned",
+          "overall_score": 100.0,
+          "passed": "8/8",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {}
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    ],
+    "fleet_actions": [
+      "Review settings for: qwen3.6:35b-fast, qwen3-vl:8b",
+      "Agent-capable (tools): qwen3.6:35b-fast, qwen3-vl:8b, qwen3.6:35b — use chat + MCP, context_trim on, num_ctx >= 16k"
+    ]
+  },
+  "benchmark_count": 8
+}

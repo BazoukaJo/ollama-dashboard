@@ -53,6 +53,9 @@ class AuthService:
         '/api/models/restart',
         '/api/models/pull',
         '/api/models/settings',
+        '/api/models/benchmark',
+        '/api/models/benchmark/tune',
+        '/api/residency/pin',
         '/api/chat',
         '/api/chat/agent',
     ]
