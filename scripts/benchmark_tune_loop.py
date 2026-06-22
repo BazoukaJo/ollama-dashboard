@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -105,6 +106,7 @@ def run_tune_loop(
     model_names: list[str] | None = None,
     task_id: str | None = None,
 ) -> dict:
+    os.environ.setdefault('RESIDENCY_ON_START', 'false')
     from app import create_app
     from app.services.ollama import OllamaService
     from app.services.task_tracker import complete_task, create_task, fail_task, update_task
@@ -152,7 +154,10 @@ def run_tune_loop(
                 }
                 history.append(round_record)
 
-                if avg > best_score:
+                if avg > best_score and len(report.get('models') or []) >= len(model_names or []):
+                    best_score = avg
+                    best_report = report
+                elif best_report is None:
                     best_score = avg
                     best_report = report
 
@@ -166,15 +171,6 @@ def run_tune_loop(
                     print('  Satisfied — stopping early.', flush=True)
                     round_record['stopped'] = 'satisfied'
                     break
-
-                if round_num < max_rounds:
-                    print('  Re-running tuned models only…', flush=True)
-                    tuned = [
-                        r['model'] for r in (report.get('improvements') or {}).get('models') or []
-                        if r.get('suggested_settings') or r.get('suggested_client')
-                    ]
-                    if tuned:
-                        svc.run_all_model_benchmarks(model_names=tuned, compare_baseline=False)
 
         payload = {
             'history': history,
@@ -221,10 +217,12 @@ def main(argv: list[str] | None = None) -> int:
                 'model': m.get('model'),
                 'score': m.get('overall_score'),
                 'passed': f'{m.get("passed_count")}/{m.get("total_count")}',
+                'improvements': m.get('improvements'),
             }
             for m in report.get('models') or []
         ],
         'proxy_advantage': report.get('proxy_advantage'),
+        'improvements': report.get('improvements'),
         'advice': report.get('advice'),
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)

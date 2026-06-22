@@ -15,6 +15,10 @@ BASELINE_BENCHMARK_OPTIONS: dict[str, Any] = {
     'temperature': 0.2,
 }
 
+# Dashboard settings may use 8k num_predict for agents; cap during benchmark so
+# short-answer cases finish in reasonable time while still beating the 256 baseline.
+_BENCHMARK_DASHBOARD_NUM_PREDICT_CAP = 1024
+
 _THINKING_PROFILE_IDS = frozenset({
     'qwen3_thinking',
     'reasoning_thinking',
@@ -51,6 +55,9 @@ def resolve_dashboard_benchmark_options(service, model_name: str) -> dict[str, A
     entry = service.get_model_settings_with_fallback(model_name)
     if entry and isinstance(entry.get('settings'), dict):
         options.update(entry['settings'])
+    np = int(options.get('num_predict') or BASELINE_BENCHMARK_OPTIONS['num_predict'])
+    if np > _BENCHMARK_DASHBOARD_NUM_PREDICT_CAP:
+        options['num_predict'] = _BENCHMARK_DASHBOARD_NUM_PREDICT_CAP
     return options
 
 

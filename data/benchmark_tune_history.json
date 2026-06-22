@@ -2,89 +2,588 @@
   "history": [
     {
       "round": 1,
-      "avg_score": 86.7,
-      "proxy_lift": 15.6,
-      "timestamp": 1782112766.8057199
+      "avg_score": 78.3,
+      "proxy_lift": -2.2,
+      "timestamp": 1782144305.1340487
     },
     {
       "round": 2,
-      "avg_score": 89.9,
-      "proxy_lift": 18.4,
-      "timestamp": 1782121953.4373567
+      "avg_score": 84.1,
+      "proxy_lift": 4.9,
+      "timestamp": 1782145381.371003,
+      "stopped": "satisfied"
     }
   ],
-  "best_avg_score": 89.93333333333334,
-  "task_id": "ab6172087446",
+  "best_avg_score": 84.10000000000001,
+  "task_id": "40d3865309ce",
   "models": [
     {
-      "model": "llama4:latest",
-      "score": 64.8,
-      "passed": "6/11"
-    },
-    {
-      "model": "Qwen3-Coder-Next:latest",
+      "model": "gemma4:latest",
       "score": 96.2,
-      "passed": "10/11"
+      "passed": "10/11",
+      "improvements": {
+        "model": "gemma4:latest",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "fleet_orchestration",
+          "overall_score": 96.2,
+          "passed": "10/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "coding": [
+              "bugfix_sum"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
     },
     {
       "model": "qwen3.6:27B",
       "score": 96.2,
-      "passed": "10/11"
+      "passed": "10/11",
+      "improvements": {
+        "model": "qwen3.6:27B",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 96.2,
+          "passed": "10/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "coding": [
+              "bugfix_sum"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
     },
     {
-      "model": "gemma4:12b",
+      "model": "Qwen3-Coder-Next:latest",
       "score": 96.2,
-      "passed": "10/11"
+      "passed": "10/11",
+      "improvements": {
+        "model": "Qwen3-Coder-Next:latest",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 96.2,
+          "passed": "10/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "coding": [
+              "bugfix_sum"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
     },
     {
-      "model": "qwen3.6:35b-fast",
-      "score": 87.2,
-      "passed": "9/11"
+      "model": "llama3.1:8b-instruct-q4_K_M",
+      "score": 75.9,
+      "passed": "7/11",
+      "improvements": {
+        "model": "llama3.1:8b-instruct-q4_K_M",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "benchmark_tuned",
+          "overall_score": 75.9,
+          "passed": "7/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 4096,
+            "repeat_penalty": 1.1
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 2048,
+            "repeat_penalty": 1.1
+          },
+          "drift": {
+            "num_predict": {
+              "current": 4096,
+              "profile": 2048
+            }
+          },
+          "gaps": [],
+          "failed_categories": {
+            "reasoning": [
+              "sheep_riddle"
+            ],
+            "instruction": [
+              "reverse_ollama"
+            ],
+            "creativity": [
+              "pirate_blockchain"
+            ],
+            "coding": [
+              "bugfix_sum"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 4096
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "off"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    },
+    {
+      "model": "llama4:latest",
+      "score": 92.7,
+      "passed": "9/11",
+      "improvements": {
+        "model": "llama4:latest",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "benchmark_tuned",
+          "overall_score": 92.7,
+          "passed": "9/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 4096,
+            "repeat_penalty": 1.05
+          },
+          "drift": {
+            "num_predict": {
+              "current": 8192,
+              "profile": 4096
+            }
+          },
+          "gaps": [],
+          "failed_categories": {
+            "coding": [
+              "bugfix_sum",
+              "unit_test_assert"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "off"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": true
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
     },
     {
       "model": "qwen3-vl:8b",
-      "score": 87.2,
-      "passed": "9/11"
-    },
-    {
-      "model": "gemma4:latest",
-      "score": 96.2,
-      "passed": "10/11"
+      "score": 42.3,
+      "passed": "5/11",
+      "improvements": {
+        "model": "qwen3-vl:8b",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 42.3,
+          "passed": "5/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "reasoning": [
+              "sheep_riddle"
+            ],
+            "instruction": [
+              "reverse_ollama",
+              "json_version"
+            ],
+            "coding": [
+              "python_palindrome",
+              "bugfix_sum"
+            ],
+            "knowledge": [
+              "capitals_alpha"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
     },
     {
       "model": "lfm2.5:latest",
       "score": 89.2,
-      "passed": "9/11"
-    },
-    {
-      "model": "qwen3.6:35b",
-      "score": 96.2,
-      "passed": "10/11"
+      "passed": "9/11",
+      "improvements": {
+        "model": "lfm2.5:latest",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 89.2,
+          "passed": "9/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {},
+          "gaps": [
+            "Dashboard settings lift +26 vs raw Ollama — proxy is required for this model"
+          ],
+          "failed_categories": {
+            "reasoning": [
+              "sheep_riddle"
+            ],
+            "coding": [
+              "bugfix_sum"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters.",
+            "Never point clients at raw :11434 for this model (benchmark lift +26 via dashboard)."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
     }
   ],
   "proxy_advantage": {
-    "summary": "Compared 9 model(s): dashboard-backed settings vs raw Ollama defaults.",
+    "summary": "Compared 7 model(s): dashboard-backed settings vs raw Ollama defaults.",
     "comparisons": [
-      {
-        "model": "qwen3-vl:8b",
-        "dashboard_score": 87.2,
-        "baseline_score": 15.1,
-        "lift": 72.1,
-        "dashboard_passed": 9,
-        "baseline_passed": 1,
-        "settings_critical": true,
-        "proxy_optional": false
-      },
-      {
-        "model": "gemma4:12b",
-        "dashboard_score": 96.2,
-        "baseline_score": 61.1,
-        "lift": 35.1,
-        "dashboard_passed": 10,
-        "baseline_passed": 6,
-        "settings_critical": true,
-        "proxy_optional": false
-      },
       {
         "model": "lfm2.5:latest",
         "dashboard_score": 89.2,
@@ -96,47 +595,17 @@
         "proxy_optional": false
       },
       {
-        "model": "llama4:latest",
-        "dashboard_score": 64.8,
-        "baseline_score": 55.8,
-        "lift": 9.0,
-        "dashboard_passed": 6,
-        "baseline_passed": 5,
+        "model": "qwen3-vl:8b",
+        "dashboard_score": 42.3,
+        "baseline_score": 25.2,
+        "lift": 17.1,
+        "dashboard_passed": 5,
+        "baseline_passed": 3,
         "settings_critical": false,
         "proxy_optional": false
       },
       {
-        "model": "qwen3.6:35b",
-        "dashboard_score": 96.2,
-        "baseline_score": 87.2,
-        "lift": 9.0,
-        "dashboard_passed": 10,
-        "baseline_passed": 9,
-        "settings_critical": false,
-        "proxy_optional": true
-      },
-      {
-        "model": "qwen3.6:35b-fast",
-        "dashboard_score": 87.2,
-        "baseline_score": 80.2,
-        "lift": 7.0,
-        "dashboard_passed": 9,
-        "baseline_passed": 8,
-        "settings_critical": false,
-        "proxy_optional": true
-      },
-      {
         "model": "gemma4:latest",
-        "dashboard_score": 96.2,
-        "baseline_score": 89.2,
-        "lift": 7.0,
-        "dashboard_passed": 10,
-        "baseline_passed": 10,
-        "settings_critical": false,
-        "proxy_optional": true
-      },
-      {
-        "model": "Qwen3-Coder-Next:latest",
         "dashboard_score": 96.2,
         "baseline_score": 96.2,
         "lift": 0.0,
@@ -154,41 +623,614 @@
         "baseline_passed": 10,
         "settings_critical": false,
         "proxy_optional": true
+      },
+      {
+        "model": "Qwen3-Coder-Next:latest",
+        "dashboard_score": 96.2,
+        "baseline_score": 96.2,
+        "lift": 0.0,
+        "dashboard_passed": 10,
+        "baseline_passed": 10,
+        "settings_critical": false,
+        "proxy_optional": true
+      },
+      {
+        "model": "llama4:latest",
+        "dashboard_score": 92.7,
+        "baseline_score": 92.7,
+        "lift": 0.0,
+        "dashboard_passed": 9,
+        "baseline_passed": 9,
+        "settings_critical": false,
+        "proxy_optional": true
+      },
+      {
+        "model": "llama3.1:8b-instruct-q4_K_M",
+        "dashboard_score": 75.9,
+        "baseline_score": 84.9,
+        "lift": -9.0,
+        "dashboard_passed": 7,
+        "baseline_passed": 8,
+        "settings_critical": false,
+        "proxy_optional": true
       }
     ],
     "recommendations": [
-      "Route qwen3-vl:8b, gemma4:12b, lfm2.5:latest through the dashboard /ollama proxy — benchmark lift up to +72 pts vs raw :11434",
-      "Raw Ollama is fine for: qwen3.6:35b, qwen3.6:35b-fast, gemma4:latest, Qwen3-Coder-Next:latest, qwen3.6:27B",
-      "Average dashboard settings lift across fleet: +18.4 pts"
+      "Route lfm2.5:latest through the dashboard /ollama proxy — benchmark lift up to +26 pts vs raw :11434",
+      "Raw Ollama is fine for: gemma4:latest, qwen3.6:27B, Qwen3-Coder-Next:latest, llama4:latest, llama3.1:8b-instruct-q4_K_M",
+      "Average dashboard settings lift across fleet: +4.9 pts"
     ],
-    "average_lift": 18.4
+    "average_lift": 4.9
+  },
+  "improvements": {
+    "summary": "Analyzed 7 model(s): 0 critical, 7 need tuning, 0 ok.",
+    "models": [
+      {
+        "model": "gemma4:latest",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "fleet_orchestration",
+          "overall_score": 96.2,
+          "passed": "10/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "coding": [
+              "bugfix_sum"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "qwen3.6:27B",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 96.2,
+          "passed": "10/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "coding": [
+              "bugfix_sum"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "Qwen3-Coder-Next:latest",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 96.2,
+          "passed": "10/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.2,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "coding": [
+              "bugfix_sum"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "llama3.1:8b-instruct-q4_K_M",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "benchmark_tuned",
+          "overall_score": 75.9,
+          "passed": "7/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 4096,
+            "repeat_penalty": 1.1
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 2048,
+            "repeat_penalty": 1.1
+          },
+          "drift": {
+            "num_predict": {
+              "current": 4096,
+              "profile": 2048
+            }
+          },
+          "gaps": [],
+          "failed_categories": {
+            "reasoning": [
+              "sheep_riddle"
+            ],
+            "instruction": [
+              "reverse_ollama"
+            ],
+            "creativity": [
+              "pirate_blockchain"
+            ],
+            "coding": [
+              "bugfix_sum"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 4096
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "off"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "llama4:latest",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "benchmark_tuned",
+          "overall_score": 92.7,
+          "passed": "9/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 4096,
+            "repeat_penalty": 1.05
+          },
+          "drift": {
+            "num_predict": {
+              "current": 8192,
+              "profile": 4096
+            }
+          },
+          "gaps": [],
+          "failed_categories": {
+            "coding": [
+              "bugfix_sum",
+              "unit_test_assert"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "off"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": true
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "qwen3-vl:8b",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 42.3,
+          "passed": "5/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.92,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.05
+          },
+          "drift": {},
+          "gaps": [],
+          "failed_categories": {
+            "reasoning": [
+              "sheep_riddle"
+            ],
+            "instruction": [
+              "reverse_ollama",
+              "json_version"
+            ],
+            "coding": [
+              "python_palindrome",
+              "bugfix_sum"
+            ],
+            "knowledge": [
+              "capitals_alpha"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      },
+      {
+        "model": "lfm2.5:latest",
+        "validation": {
+          "status": "needs_tuning",
+          "source": "recommended",
+          "overall_score": 89.2,
+          "passed": "9/11",
+          "completion_rate": 1.0,
+          "error_count": 0,
+          "current": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "profile": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "num_ctx": 16384,
+            "num_predict": 8192,
+            "repeat_penalty": 1.0
+          },
+          "drift": {},
+          "gaps": [
+            "Dashboard settings lift +26 vs raw Ollama — proxy is required for this model"
+          ],
+          "failed_categories": {
+            "reasoning": [
+              "sheep_riddle"
+            ],
+            "coding": [
+              "bugfix_sum"
+            ]
+          }
+        },
+        "suggested_settings": {},
+        "suggested_client": {},
+        "changes": [],
+        "agentic": {
+          "recommended_roles": [
+            "ask_agent",
+            "mcp_tools",
+            "copilot_tool_calls"
+          ],
+          "settings": {
+            "num_ctx": 16384,
+            "num_predict": 8192
+          },
+          "client": {
+            "context_trim_enabled": true,
+            "copilot_think": "on"
+          },
+          "proxy": {
+            "url": "http://127.0.0.1:5000/ollama",
+            "keep_alive_minutes": 15,
+            "prewarm_recommended": false
+          },
+          "env": {
+            "ASK_AGENT_MAX_ITERATIONS": 12,
+            "CONTEXT_TRIM_ENABLED": true,
+            "COPILOT_KEEP_ALIVE": true
+          },
+          "communication": [
+            "Route multi-turn work through http://127.0.0.1:5000/ollama (proxy injects num_ctx and sampling).",
+            "Keep context_trim_enabled so long agent transcripts are trimmed instead of hard-failing.",
+            "Use /ollama/v1/chat/completions with tool messages for agent loops (not one-shot /api/generate).",
+            "Raise ASK_AGENT_MAX_ITERATIONS (default 8) for multi-step tool chains.",
+            "For IDE short Q&A set client copilot_think=off; enable think for long reasoning sessions only.",
+            "Benchmark uses think:false for scoring — agent mode can enable thinking when depth matters.",
+            "Never point clients at raw :11434 for this model (benchmark lift +26 via dashboard)."
+          ],
+          "session_notes": "For hour-long agent work: stable num_ctx, trim old tool output, keep model loaded, use chat (not generate) so message history is preserved across turns."
+        }
+      }
+    ],
+    "fleet_actions": [
+      "Review settings for: gemma4:latest, qwen3.6:27B, Qwen3-Coder-Next:latest, llama3.1:8b-instruct-q4_K_M, llama4:latest, qwen3-vl:8b, lfm2.5:latest",
+      "Enforce /ollama proxy URL in all IDE configs for: lfm2.5:latest",
+      "Agent-capable (tools): gemma4:latest, qwen3.6:27B, Qwen3-Coder-Next:latest, llama3.1:8b-instruct-q4_K_M, llama4:latest, qwen3-vl:8b, lfm2.5:latest — use chat + MCP, context_trim on, num_ctx >= 16k",
+      "Three-tier routing: fast=gemma4:latest, reasoning=qwen3.6:27B, coding=Qwen3-Coder-Next:latest"
+    ],
+    "routing_plan": {
+      "routing_enabled": true,
+      "routing_fast_model": "gemma4:latest",
+      "routing_reasoning_model": "qwen3.6:27B",
+      "routing_coding_model": "Qwen3-Coder-Next:latest",
+      "source": "benchmark_fleet"
+    }
   },
   "advice": {
-    "summary": "Benchmarked 9 model(s); 9 produced scorable results.",
+    "summary": "Benchmarked 7 model(s); 7 produced scorable results.",
     "recommendations": [
-      "Best all-round: Qwen3-Coder-Next:latest (96/100, 10/11 passed)",
-      "Fastest generation: lfm2.5:latest (334.4 tok/s avg)",
-      "Best reasoning: llama4:latest (100/100 in reasoning)",
-      "Best coding: Qwen3-Coder-Next:latest (88/100 in coding)",
-      "Best knowledge: llama4:latest (100/100 in knowledge)",
-      "Best instruction: Qwen3-Coder-Next:latest (100/100 in instruction)",
-      "Best creativity: Qwen3-Coder-Next:latest (100/100 in creativity)"
+      "Best all-round: gemma4:latest (96/100, 10/11 passed)",
+      "Fastest generation: lfm2.5:latest (264.4 tok/s avg)",
+      "Best reasoning: gemma4:latest (100/100 in reasoning)",
+      "Best coding: gemma4:latest (88/100 in coding)",
+      "Best knowledge: gemma4:latest (100/100 in knowledge)",
+      "Best instruction: gemma4:latest (100/100 in instruction)",
+      "Best creativity: gemma4:latest (100/100 in creativity)",
+      "Consider retiring or rarely using: qwen3-vl:8b — scored below 45/100 overall"
     ],
     "specialist_hints": [
-      "llama4:latest reasons well but struggles on code tasks",
-      "Qwen3-Coder-Next:latest is a strong coding pick",
-      "qwen3.6:27B is a strong coding pick",
-      "gemma4:12b is a strong coding pick",
-      "qwen3.6:35b-fast is a strong coding pick",
-      "qwen3-vl:8b is a strong coding pick",
       "gemma4:latest is a strong coding pick",
-      "lfm2.5:latest is a strong coding pick",
-      "qwen3.6:35b is a strong coding pick"
+      "qwen3.6:27B is a strong coding pick",
+      "Qwen3-Coder-Next:latest is a strong coding pick",
+      "llama3.1:8b-instruct-q4_K_M is a strong coding pick",
+      "lfm2.5:latest is a strong coding pick"
     ],
     "rankings": {
       "overall": [
         {
-          "model": "Qwen3-Coder-Next:latest",
+          "model": "gemma4:latest",
           "score": 96.2
         },
         {
@@ -196,95 +1238,79 @@
           "score": 96.2
         },
         {
-          "model": "gemma4:12b",
+          "model": "Qwen3-Coder-Next:latest",
           "score": 96.2
         },
         {
-          "model": "gemma4:latest",
-          "score": 96.2
-        },
-        {
-          "model": "qwen3.6:35b",
-          "score": 96.2
+          "model": "llama4:latest",
+          "score": 92.7
         },
         {
           "model": "lfm2.5:latest",
           "score": 89.2
         },
         {
-          "model": "qwen3.6:35b-fast",
-          "score": 87.2
+          "model": "llama3.1:8b-instruct-q4_K_M",
+          "score": 75.9
         },
         {
           "model": "qwen3-vl:8b",
-          "score": 87.2
-        },
-        {
-          "model": "llama4:latest",
-          "score": 64.8
+          "score": 42.3
         }
       ],
       "speed": [
         {
           "model": "lfm2.5:latest",
-          "tokens_per_second": 334.4
+          "tokens_per_second": 264.43
         },
         {
-          "model": "qwen3.6:35b-fast",
-          "tokens_per_second": 136.64
+          "model": "llama3.1:8b-instruct-q4_K_M",
+          "tokens_per_second": 108.84
         },
         {
           "model": "gemma4:latest",
-          "tokens_per_second": 116.61
+          "tokens_per_second": 101.12
         },
         {
           "model": "qwen3-vl:8b",
-          "tokens_per_second": 95.99
-        },
-        {
-          "model": "gemma4:12b",
-          "tokens_per_second": 58.99
+          "tokens_per_second": 79.63
         },
         {
           "model": "Qwen3-Coder-Next:latest",
-          "tokens_per_second": 39.99
-        },
-        {
-          "model": "qwen3.6:35b",
-          "tokens_per_second": 26.41
+          "tokens_per_second": 35.12
         },
         {
           "model": "llama4:latest",
-          "tokens_per_second": 17.42
+          "tokens_per_second": 15.33
         },
         {
           "model": "qwen3.6:27B",
-          "tokens_per_second": 10.23
+          "tokens_per_second": 7.75
         }
       ],
       "by_category": {
         "reasoning": {
-          "model": "llama4:latest",
+          "model": "gemma4:latest",
           "score": 100.0
         },
         "coding": {
-          "model": "Qwen3-Coder-Next:latest",
+          "model": "gemma4:latest",
           "score": 88.3
         },
         "knowledge": {
-          "model": "llama4:latest",
+          "model": "gemma4:latest",
           "score": 100.0
         },
         "instruction": {
-          "model": "Qwen3-Coder-Next:latest",
+          "model": "gemma4:latest",
           "score": 100.0
         },
         "creativity": {
-          "model": "Qwen3-Coder-Next:latest",
+          "model": "gemma4:latest",
           "score": 100.0
         },
         "speed": {
-          "model": "llama4:latest",
+          "model": "gemma4:latest",
           "score": 100.0
         }
       }

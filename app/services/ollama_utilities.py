@@ -514,7 +514,8 @@ class OllamaServiceUtilities:
 
         if not compare_baseline:
             dashboard_results = []
-            for name in names:
+            for idx, name in enumerate(names, start=1):
+                print(f'  Benchmark [{idx}/{len(names)}] {name}…', flush=True)
                 dashboard_results.append(run_benchmark_for_model(
                     self._session, host, port, name,
                     cases=BENCHMARK_CASES,
@@ -535,7 +536,8 @@ class OllamaServiceUtilities:
 
         dashboard_results = []
         baseline_results = []
-        for name in names:
+        for idx, name in enumerate(names, start=1):
+            print(f'  Benchmark [{idx}/{len(names)}] {name}…', flush=True)
             timeout = resolve_benchmark_timeout(name)
             dashboard_results.append(run_benchmark_for_model(
                 self._session, host, port, name,

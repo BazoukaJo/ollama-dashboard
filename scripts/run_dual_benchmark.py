@@ -65,6 +65,15 @@ def _print_improvements(report: dict) -> None:
 
 
 def main() -> int:
+    import argparse
+    import os
+
+    parser = argparse.ArgumentParser(description='Dual benchmark dashboard vs baseline')
+    parser.add_argument('--models', nargs='*', help='Optional model tags (default: all installed)')
+    parser.add_argument('--out', type=Path, default=OUT_PATH)
+    args = parser.parse_args()
+
+    os.environ.setdefault('RESIDENCY_ON_START', 'false')
     from app import create_app
     from app.services.ollama import OllamaService
 
@@ -77,11 +86,14 @@ def main() -> int:
         return 2
 
     with app.app_context():
-        payload = svc.run_all_model_benchmarks(compare_baseline=True)
+        payload = svc.run_all_model_benchmarks(
+            model_names=args.models or None,
+            compare_baseline=True,
+        )
 
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUT_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding='utf-8')
-    print(f'Wrote {OUT_PATH}', flush=True)
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding='utf-8')
+    print(f'Wrote {args.out}', flush=True)
 
     _print_proxy_advantage(payload.get('proxy_advantage') or {})
     _print_improvements(payload.get('improvements') or {})
