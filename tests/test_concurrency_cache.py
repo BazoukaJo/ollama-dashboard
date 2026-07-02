@@ -119,3 +119,34 @@ def test_history_worker_signature(tmp_path):
     svc._history_lock = None  # simulate older instance without the lock attribute
     svc.update_history([{'name': 'x'}])
     assert json.loads((tmp_path / 'h.json').read_text(encoding='utf-8'))
+
+
+def test_chat_history_concurrent_saves_no_lost_writes(tmp_path):
+    """Concurrent save_chat_session calls must not lose entries — chat_history.json writes
+    are now atomic (temp file + fsync + os.replace) and guarded by ``_chat_history_lock``,
+    matching the pattern already used for model_settings.json."""
+    hist_file = tmp_path / 'history.json'
+    svc = OllamaService()
+    svc.app = _StubApp(str(hist_file))
+    errors: list[str] = []
+    n_threads = 8
+    saves_per_thread = 5
+
+    def worker(n):
+        try:
+            for i in range(saves_per_thread):
+                svc.save_chat_session({
+                    'model': 'concurrency-test',
+                    'prompt': f'prompt-{n}-{i}',
+                    'response': f'response-{n}-{i}',
+                })
+        except Exception as exc:  # pragma: no cover - failure path
+            errors.append(repr(exc))
+
+    _join_all([threading.Thread(target=worker, args=(n,)) for n in range(n_threads)])
+
+    assert not errors, f"chat history save raced: {errors[:5]}"
+    history = svc.get_chat_history()
+    assert len(history) == n_threads * saves_per_thread
+    prompts = {h['prompt'] for h in history}
+    assert len(prompts) == n_threads * saves_per_thread  # every save preserved, none clobbered

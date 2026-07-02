@@ -934,6 +934,7 @@ def benchmark_all_models():
         async_mode = bool(body.get('async') or body.get('background'))
         if async_mode:
             import concurrent.futures
+
             from app.services.task_tracker import complete_task, create_task, fail_task, update_task
 
             models = names
@@ -1000,8 +1001,9 @@ def benchmark_tune_loop_route():
     try:
         import concurrent.futures
 
-        from app.services.task_tracker import create_task, fail_task
         from scripts.benchmark_tune_loop import run_tune_loop
+
+        from app.services.task_tracker import create_task, fail_task
 
         body = request.get_json(silent=True) or {}
         max_rounds = max(1, min(int(body.get('max_rounds') or 3), 5))

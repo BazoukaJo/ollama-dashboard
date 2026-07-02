@@ -1,5 +1,9 @@
 """Tests for context budget estimation."""
-from app.services.context_budget import estimate_messages_tokens, trim_messages_to_budget
+from app.services.context_budget import (
+    _truncate_string_to_tokens,
+    estimate_messages_tokens,
+    trim_messages_to_budget,
+)
 
 
 def test_image_messages_cost_more_tokens_than_text_only():
@@ -101,3 +105,29 @@ def test_trim_tool_calls_message_survives_budget():
     assert trimmed[-1]['content'] == 'continue'
     assert meta['messages_removed'] >= 1 or meta['content_truncated'] >= 1
     assert meta['trimmed'] is True
+
+
+def test_truncate_snaps_to_word_boundary_not_mid_word():
+    """Truncation must not split a word/identifier in half at the head or tail cut point."""
+    from app.services.context_budget import _TRUNCATION_MARKER
+
+    head_word = 'supercalifragilisticexpialidocious'
+    tail_word = 'antidisestablishmentarianism'
+    text = f'{head_word} ' + ('middle filler content ' * 200) + f' {tail_word}'
+    result = _truncate_string_to_tokens(text, max_tokens=100)
+    assert _TRUNCATION_MARKER in result
+    head_kept, tail_kept = result.split(_TRUNCATION_MARKER, 1)
+    # The kept head must end at a word boundary (empty, or right after a space/newline).
+    assert head_kept == '' or head_kept[-1] in (' ', '\n')
+    # The kept tail must start at a word boundary (empty, or right after a space/newline
+    # relative to the source text — i.e. it isn't a partial-word fragment).
+    if tail_kept:
+        assert text[text.index(tail_kept) - 1] in (' ', '\n')
+
+
+def test_truncate_falls_back_to_hard_cut_when_no_whitespace_nearby():
+    """A long unbroken string (no spaces) still truncates safely without erroring."""
+    text = 'x' * 5000
+    result = _truncate_string_to_tokens(text, max_tokens=100)
+    assert 'trimmed by ollama-dashboard proxy' in result
+    assert len(result) <= 100 * 4

@@ -29,7 +29,7 @@
 - Add new periodic data in `_background_updates_worker`; keep per-cycle additions <100ms. Expose cache age via `get_component_health()` if critical.
 
 ## Capability Flags
-- Only set/extend `has_vision`, `has_tools`, `has_reasoning` in `_detect_model_capabilities` (`app/services/ollama.py`).
+- Only set/extend `has_vision`, `has_tools`, `has_reasoning` in `detect_capabilities` (`app/services/capabilities.py`).
 - Do not mutate flags in routes or JS; UI reads backend booleans passively.
 
 ## Per-Model Settings
@@ -68,7 +68,7 @@ All live under `data/` by default (see `HISTORY_FILE` / `MODEL_SETTINGS_FILE` in
 - Backoff escalates to ~32s on repeated `/api/ps` failures; do not remove without replacement.
 
 ## Extension & Integration Guidelines
-- New capability: extend `_detect_model_capabilities` + add UI icon logic (JS).
+- New capability: extend `detect_capabilities` (`app/services/capabilities.py`) + add UI icon logic (JS).
 - New periodic data: background worker + health exposure.
 - New model default heuristic: adjust `_recommend_settings_for_model` (retain normalization + locking).
 - External client / Copilot behavior: change `copilot_pipeline.py`, `client_payload_compat.py`, or `context_budget.py`; route wiring lives in `app/routes/proxy.py`.

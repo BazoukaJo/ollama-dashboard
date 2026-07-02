@@ -44,6 +44,7 @@ from app.services.error_messages import (
     GENERIC_UPSTREAM,
     log_upstream_error,
 )
+from app.services.model_residency import pin_keep_alive_for
 from app.services.model_settings_helpers import (
     compute_fresh_recommended_settings_entry,
     get_default_settings_template,
@@ -51,7 +52,6 @@ from app.services.model_settings_helpers import (
     merge_options_for_external_proxy,
 )
 from app.services.settings_cache import load_settings_file
-from app.services.model_residency import pin_keep_alive_for
 from app.services.v1_model_resolve import resolve_v1_model_name
 from app.services.v1_native_bridge import (
     STREAM_HEARTBEAT,
@@ -815,7 +815,12 @@ def _forward_v1_chat_via_native(native_payload, openai_payload):
             'Upstream /api/chat returned non-JSON body (status=%s, model=%s): %s',
             response_data.status_code, model_name, err,
         )
-        return _proxy_upstream_response(response_data)
+        # Never hand a non-JSON body to an OpenAI client expecting {choices:[...]} — an IDE's
+        # strict parser would fail ungracefully. Shape it as a normal OpenAI error instead.
+        return _openai_error_json(
+            'Ollama returned an unexpected (non-JSON) response. Check server logs for details.',
+            model_name=model_name,
+        )
     openai_body = native_chat_response_to_openai(
         native_body,
         copilot_safe=not bool(native_payload.get('tools')),
@@ -900,7 +905,11 @@ def _forward_v1_via_native_api(native_payload, native_endpoint, _openai_payload)
             'Upstream %s returned non-JSON body (status=%s, model=%s): %s',
             native_endpoint, response_data.status_code, model_name, err,
         )
-        return _proxy_upstream_response(response_data)
+        # Same reasoning as the /api/chat bridge above: keep the error OpenAI-shaped.
+        return _openai_error_json(
+            'Ollama returned an unexpected (non-JSON) response. Check server logs for details.',
+            model_name=model_name,
+        )
     openai_body = native_generate_response_to_openai(native_body)
     response = Response(
         json.dumps(openai_body),

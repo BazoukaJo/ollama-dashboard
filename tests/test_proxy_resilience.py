@@ -8,8 +8,9 @@ end-to-end through ``/ollama/v1/chat/completions``.
 import time
 from unittest.mock import patch
 
-import app.routes.proxy as proxy
 import requests
+
+import app.routes.proxy as proxy
 from app import create_app
 from app.services.v1_native_bridge import STREAM_HEARTBEAT
 
@@ -136,3 +137,37 @@ def test_v1_chat_self_heals_connection_error(tmp_path, monkeypatch):
     assert resp.status_code == 200
     assert calls['n'] == 2  # retried once, then succeeded
     assert 'hello' in body
+
+
+def test_v1_chat_non_streaming_malformed_json_returns_openai_error(tmp_path, monkeypatch):
+    """A 200 OK with a non-JSON body from Ollama must still produce an OpenAI-shaped error
+    (``{"error": {...}}``), never the raw/opaque upstream body — strict OpenAI clients would
+    fail to parse anything else."""
+    monkeypatch.setenv('MODEL_SETTINGS_FILE', str(tmp_path / 'model_settings.json'))
+    monkeypatch.setenv('OLLAMA_HOST', 'localhost')
+    monkeypatch.delenv('OLLAMA_PORT', raising=False)
+    monkeypatch.setenv('AUTO_START_OLLAMA', 'false')
+
+    app = create_app()
+    client = app.test_client()
+
+    class BadJsonResponse:
+        status_code = 200
+        text = 'not json at all'
+
+        def json(self):
+            raise ValueError('not JSON')
+
+    fake_models = type('R', (), {'json': lambda s: {'models': []}, 'raise_for_status': lambda s: None})()
+    with patch('app.services.upstream_http.post', return_value=BadJsonResponse()), \
+            patch('requests.get', return_value=fake_models):
+        resp = client.post('/ollama/v1/chat/completions', json={
+            'model': 'healme',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            'stream': False,
+        })
+        body = resp.get_json()
+
+    assert isinstance(body, dict)
+    assert 'error' in body
+    assert 'message' in body['error']

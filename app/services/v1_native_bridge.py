@@ -11,6 +11,7 @@ traffic uses ``openai_chat_to_native()`` + ``/api/chat``.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 import uuid
@@ -23,6 +24,14 @@ from app.services.client_payload_compat import (
     truncate_tool_calls,
 )
 from app.services.model_settings_helpers import merge_options_for_external_proxy
+
+logger = logging.getLogger(__name__)
+
+
+def _truncate_for_log(raw: Any, limit: int = 200) -> str:
+    """Shorten a raw stream line for debug logs so a huge/garbled chunk doesn't flood logs."""
+    text = raw.decode('utf-8', errors='replace') if isinstance(raw, (bytes, bytearray)) else str(raw)
+    return text if len(text) <= limit else text[:limit] + '...'
 
 _OPENAI_OPTION_KEYS = frozenset({
     'temperature', 'top_p', 'top_k', 'seed', 'num_predict', 'num_ctx',
@@ -537,7 +546,11 @@ def stream_native_chat_lines_to_openai_sse(
             continue
         try:
             native = json.loads(raw)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as err:
+            logger.debug(
+                'Skipped malformed /api/chat stream line (%s): %s',
+                err, _truncate_for_log(raw),
+            )
             continue
         if not isinstance(native, dict):
             continue
@@ -712,7 +725,11 @@ def stream_native_generate_lines_to_openai_sse(
             continue
         try:
             native = json.loads(raw)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as err:
+            logger.debug(
+                'Skipped malformed /api/generate stream line (%s): %s',
+                err, _truncate_for_log(raw),
+            )
             continue
         if not isinstance(native, dict):
             continue

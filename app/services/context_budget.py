@@ -89,6 +89,35 @@ def _chars_for_tokens(tokens: int) -> int:
     return max(0, int(tokens) * _CHARS_PER_TOKEN)
 
 
+def _snap_head_boundary(text: str, head: int, *, window: int = 40) -> int:
+    """Nudge a head cut point back to the nearest whitespace within ``window`` chars so a
+    word/identifier/JSON token isn't split in half. Falls back to the exact cut if no
+    whitespace is nearby (e.g. a long unbroken string). Only ever shrinks ``head``, so the
+    result always stays within the original token budget."""
+    if head <= 0 or head >= len(text):
+        return head
+    lo = max(0, head - window)
+    segment = text[lo:head]
+    idx = max(segment.rfind(' '), segment.rfind('\n'))
+    if idx == -1:
+        return head
+    return lo + idx + 1  # cut just after the whitespace
+
+
+def _snap_tail_boundary(text: str, tail_start: int, *, window: int = 40) -> int:
+    """Nudge a tail start point forward to the nearest whitespace within ``window`` chars so
+    the kept tail starts on a word boundary. Only ever grows ``tail_start`` (shrinks the kept
+    tail), so the result always stays within the original token budget."""
+    if tail_start <= 0 or tail_start >= len(text):
+        return tail_start
+    hi = min(len(text), tail_start + window)
+    segment = text[tail_start:hi]
+    candidates = [i for i in (segment.find(' '), segment.find('\n')) if i != -1]
+    if not candidates:
+        return tail_start
+    return tail_start + min(candidates) + 1  # start just after the whitespace
+
+
 def _truncate_string_to_tokens(text: str, max_tokens: int) -> str:
     """Shrink text to an estimated token budget, keeping head and tail when possible."""
     if not text or max_tokens <= 0:
@@ -103,7 +132,9 @@ def _truncate_string_to_tokens(text: str, max_tokens: int) -> str:
     tail = max(budget - head, 64)
     if head + tail > len(text):
         return text[:max_chars]
-    return text[:head] + _TRUNCATION_MARKER + text[-tail:]
+    head = _snap_head_boundary(text, head)
+    tail_start = _snap_tail_boundary(text, len(text) - tail)
+    return text[:head] + _TRUNCATION_MARKER + text[tail_start:]
 
 
 def _truncate_tool_calls(message: dict[str, Any], token_budget: int) -> None:

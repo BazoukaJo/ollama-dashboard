@@ -117,7 +117,7 @@ def test_speed_ready_exact():
 
 
 def test_benchmark_suite_has_eight_cases():
-    assert len(BENCHMARK_CASES) == 8
+    assert len(BENCHMARK_CASES) == 11
     ids = {c.id for c in BENCHMARK_CASES}
     assert 'sheep_riddle' in ids
     assert 'python_palindrome' in ids

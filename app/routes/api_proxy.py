@@ -9,7 +9,12 @@ from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 
 from app.services import mcp_tools
-from app.services.copilot_analytics import client_proxy_analytics, client_proxy_status, read_log_records
+from app.services.copilot_analytics import (
+    client_proxy_analytics,
+    client_proxy_status,
+    diagnose_recent_activity,
+    read_log_records,
+)
 from app.services.copilot_prewarm import schedule_context_preload
 from app.services.mcp_server import mcp_health_check
 from app.services.model_advisor import advise_from_hardware
@@ -220,6 +225,17 @@ def api_mcp_status():
 @bp.route('/api/copilot/analytics')  # legacy
 def api_proxy_analytics():
     return jsonify(client_proxy_analytics(_data_dir()))
+
+
+@bp.route('/api/proxy/diagnosis')
+def api_proxy_diagnosis():
+    """'Connection Doctor': plain-language diagnosis of the last external-client request,
+    built on top of the existing copilot_proxy.log analytics (no new logging system)."""
+    try:
+        return jsonify(diagnose_recent_activity(_data_dir()))
+    except (RuntimeError, OSError, ValueError, TypeError, KeyError) as err:
+        logger.exception('Proxy diagnosis endpoint failed')
+        return jsonify({'category': 'error', 'message': str(err), 'detail': {}}), 500
 
 
 @bp.route('/api/proxy/debug-requests')

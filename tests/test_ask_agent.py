@@ -3,7 +3,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from app.services.ask_agent import stream_ask_agent
+from app.services.ask_agent import _AGENT_MAX_TEMPERATURE, _build_native_payload, stream_ask_agent
 
 
 def _chat_response_lines(content='', tool_calls=None, done=True):
@@ -20,6 +20,10 @@ class _FakeStreamResponse:
 
     def iter_lines(self):
         yield from self._lines
+
+    def close(self):
+        """No-op, matching requests.Response's interface (ask_agent always closes the
+        upstream connection when done streaming a turn)."""
 
 
 @pytest.fixture
@@ -135,3 +139,60 @@ def test_agent_breaks_on_consecutive_tool_errors(mock_session):
     events = [json.loads(line) for line in lines if line.strip()]
     assert events[-1]['type'] == 'error'
     assert 'turns in a row' in events[-1]['message']
+
+
+def test_agent_stream_closes_upstream_response_after_turn(mock_session):
+    """The upstream /api/chat response must always be closed after a turn — this is what
+    lets a client-side Stop (abort) actually cancel in-flight Ollama generation instead of
+    letting it keep running server-side."""
+    response = _FakeStreamResponse([_chat_response_lines('done talking')])
+    close_calls = []
+    response.close = lambda: close_calls.append(True)
+    mock_session.post.return_value = response
+
+    list(stream_ask_agent(
+        session=mock_session,
+        chat_url='http://localhost:11434/api/chat',
+        model_name='qwen3:4b',
+        messages=[{'role': 'user', 'content': 'Hi'}],
+        options={},
+        allow_write=False,
+    ))
+
+    assert close_calls == [True]
+
+
+def test_agent_stream_unexpected_error_yields_clean_error_event(mock_session):
+    """An unexpected exception mid-loop must surface as a normal NDJSON error event, not a
+    silently truncated/hung stream."""
+    mock_session.post.side_effect = ValueError('boom: unexpected failure')
+
+    lines = list(stream_ask_agent(
+        session=mock_session,
+        chat_url='http://localhost:11434/api/chat',
+        model_name='qwen3:4b',
+        messages=[{'role': 'user', 'content': 'Hi'}],
+        options={},
+        allow_write=False,
+    ))
+
+    events = [json.loads(line) for line in lines if line.strip()]
+    assert events[-1]['type'] == 'error'
+    assert 'Unexpected error' in events[-1]['message']
+
+
+def test_build_native_payload_caps_high_temperature_for_tool_reliability():
+    """A saved per-model temperature tuned for creative chat must not carry over unbounded
+    into agent/tool-calling turns, where it makes malformed tool-call JSON more likely."""
+    native = _build_native_payload('qwen3:4b', [{'role': 'user', 'content': 'hi'}], {'temperature': 0.9}, allow_write=False)
+    assert native['options']['temperature'] == _AGENT_MAX_TEMPERATURE
+
+
+def test_build_native_payload_keeps_low_temperature_as_is():
+    native = _build_native_payload('qwen3:4b', [{'role': 'user', 'content': 'hi'}], {'temperature': 0.1}, allow_write=False)
+    assert native['options']['temperature'] == 0.1
+
+
+def test_build_native_payload_defaults_missing_temperature():
+    native = _build_native_payload('qwen3:4b', [{'role': 'user', 'content': 'hi'}], {}, allow_write=False)
+    assert native['options']['temperature'] == _AGENT_MAX_TEMPERATURE

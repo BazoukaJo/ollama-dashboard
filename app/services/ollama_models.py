@@ -358,6 +358,16 @@ class OllamaServiceModels:
             # Never trust a cached empty list: a model may have loaded since the last poll.
             if cached is not None and len(cached) > 0:
                 return cached
+            backoff_remaining = self._ps_backoff_remaining()
+            if backoff_remaining > 0:
+                # Ollama has failed repeatedly; fail fast instead of waiting out a full
+                # connect/read timeout on every ~10s poll from every open browser tab.
+                # An explicit force_refresh (manual Refresh click) always bypasses this.
+                raise OllamaConnectionError(
+                    "Cannot connect to Ollama. Check that the service is running and that "
+                    "OLLAMA_HOST/OLLAMA_PORT (if set) are correct. "
+                    f"(retrying in {backoff_remaining:.0f}s after repeated failures)"
+                )
         try:
             url = self.get_api_url()
             current_models = []
@@ -448,16 +458,20 @@ class OllamaServiceModels:
                 self._set_cached('running_models', current_models)
             else:
                 self.clear_cache('running_models')
+            self._record_ps_success()
             return current_models
         except requests.exceptions.ConnectionError as exc:
+            self._record_ps_failure()
             raise OllamaConnectionError(
                 "Cannot connect to Ollama. Check that the service is running and that OLLAMA_HOST/OLLAMA_PORT (if set) are correct."
             ) from exc
         except requests.exceptions.Timeout as exc:
+            self._record_ps_failure()
             raise OllamaConnectionError(
                 "Connection to Ollama server timed out. Please check your network connection."
             ) from exc
         except HTTP_SERVICE_ERRORS as exc:
+            self._record_ps_failure()
             raise OllamaConnectionError(f"Error fetching models: {exc}") from exc
 
     def get_model_info_cached(self, model_name):

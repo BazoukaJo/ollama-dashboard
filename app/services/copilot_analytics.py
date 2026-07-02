@@ -177,3 +177,123 @@ def client_proxy_analytics(data_dir: str | Path) -> dict[str, Any]:
 # Legacy aliases
 copilot_status = client_proxy_status
 copilot_analytics = client_proxy_analytics
+
+
+def diagnose_recent_activity(data_dir: str | Path, *, limit: int = 300) -> dict[str, Any]:
+    """Classify the most recent external-client (VS Code/Cursor/etc.) proxy activity into a
+    plain-language diagnosis: connection error, timeout, context truncation, agent tool-turn
+    degeneracy, output cap, empty reply, or a normal completion.
+
+    Built entirely on the existing structured ``copilot_proxy.log`` records (``kind``:
+    hit/chat/response) already written by ``log_copilot_request``/``log_copilot_response`` —
+    this is a read-only classifier, not a new logging system.
+    """
+    records = read_log_records(data_dir, limit=limit)
+    chats = [r for r in records if r.get('kind') == 'chat']
+    responses = [r for r in records if r.get('kind') == 'response']
+
+    if not chats and not responses:
+        return {
+            'category': 'no_activity',
+            'message': 'No external client (VS Code, Cursor, etc.) requests logged yet.',
+            'detail': {},
+        }
+
+    # Pair each response with the chat request that most recently preceded it in log order,
+    # so the diagnosis reflects the actual last turn rather than an unrelated earlier one.
+    last_chat: dict[str, Any] | None = None
+    last_pair: tuple[dict[str, Any] | None, dict[str, Any]] | None = None
+    for rec in records:
+        if rec.get('kind') == 'chat':
+            last_chat = rec
+        elif rec.get('kind') == 'response':
+            last_pair = (last_chat, rec)
+
+    if last_pair is None:
+        model_name = (chats[-1] if chats else {}).get('model_resolved') or (chats[-1] if chats else {}).get('model_in')
+        return {
+            'category': 'request_only',
+            'message': (
+                f'A request for {model_name or "a model"} was logged, but no response summary '
+                'was recorded yet (still in flight, or the dashboard was restarted mid-request).'
+            ),
+            'detail': {'model': model_name},
+        }
+
+    chat_rec, response_rec = last_pair
+    trim_meta = ((chat_rec or {}).get('pipeline') or {}).get('context_trim') or {}
+    model_name = (
+        (chat_rec or {}).get('model_resolved') or (chat_rec or {}).get('model_in')
+        or response_rec.get('model')
+    )
+
+    error = response_rec.get('error')
+    content_chars = response_rec.get('content_chars', 0)
+    tool_calls = response_rec.get('tool_calls', 0)
+    agent = response_rec.get('agent')
+    finish_reason = response_rec.get('finish_reason')
+
+    if error and 'upstream_status_504' in str(error):
+        category = 'first_token_timeout'
+        message = (
+            f'The last request to {model_name or "the model"} timed out waiting for the first '
+            'token — the model is likely still loading or too large/slow for available VRAM. '
+            'Try pre-loading the model with Start, or use a smaller/faster model.'
+        )
+    elif error and any(word in str(error).lower() for word in ('connection', 'refused', 'unreachable')):
+        category = 'connection_error'
+        message = (
+            'Could not reach Ollama for the last request. Check that the Ollama service is '
+            'running and that OLLAMA_HOST/OLLAMA_PORT are correct.'
+        )
+    elif error:
+        category = 'upstream_error'
+        message = f'The last request to {model_name or "the model"} failed mid-stream: {error}.'
+    elif content_chars == 0 and tool_calls == 0:
+        category = 'empty_reply'
+        message = (
+            f'The last response from {model_name or "the model"} was empty (no text, no tool '
+            'call). The proxy relayed exactly what Ollama produced — check the model is '
+            'healthy and try again.'
+        )
+    elif agent and content_chars <= 1 and tool_calls == 0:
+        category = 'agent_degeneracy'
+        message = (
+            f'{model_name or "The model"} returned only a token or two on an Agent/tool-result '
+            'turn. This is a known behavior of large, CPU-offloaded reasoning models on agent '
+            'turns — try Ask mode instead, or a model that fits fully in VRAM.'
+        )
+    elif trim_meta.get('trimmed'):
+        category = 'context_trimmed'
+        before = trim_meta.get('tokens_before')
+        after = trim_meta.get('tokens_after')
+        message = (
+            f'Your last prompt to {model_name or "the model"} was trimmed to fit its context '
+            f'window (roughly {before} → {after} estimated tokens), which may have removed '
+            'earlier instructions or history. Increase Context (num_ctx) in Settings if this '
+            'is unexpected.'
+        )
+    elif finish_reason == 'length':
+        category = 'output_capped'
+        message = (
+            f'The last response from {model_name or "the model"} was cut off at the output '
+            'token limit (num_predict). Increase it in Settings if you need longer replies.'
+        )
+    else:
+        category = 'ok'
+        message = f'The last request to {model_name or "the model"} completed normally.'
+
+    return {
+        'category': category,
+        'message': message,
+        'detail': {
+            'model': model_name,
+            'error': error,
+            'content_chars': content_chars,
+            'tool_calls': tool_calls,
+            'agent': agent,
+            'finish_reason': finish_reason,
+            'context_trim': trim_meta,
+            'ts': response_rec.get('ts'),
+        },
+    }

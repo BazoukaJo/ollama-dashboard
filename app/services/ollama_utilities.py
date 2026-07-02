@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import tempfile
 import threading
 import time
 import uuid
@@ -235,10 +236,29 @@ class OllamaServiceUtilities:
         )
 
     def _write_chat_history(self, history):
+        """Atomically replace chat_history.json (temp file in same dir, fsync, os.replace).
+
+        Matches the pattern used for model_settings.json so a crash or concurrent write can
+        never leave a partially-written/corrupt file. Callers must hold ``_chat_history_lock``
+        when this is part of a read-modify-write sequence.
+        """
         chat_history_file = self._chat_history_file_path()
-        os.makedirs(os.path.dirname(chat_history_file) or '.', exist_ok=True)
-        with open(chat_history_file, 'w', encoding='utf-8') as f:
-            json.dump(history, f, indent=2)
+        dirpath = os.path.dirname(chat_history_file) or '.'
+        os.makedirs(dirpath, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(prefix='chat_history_', suffix='.tmp', dir=dirpath)
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(history, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, chat_history_file)
+            tmp_path = None
+        finally:
+            if tmp_path and os.path.isfile(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
     def _normalize_chat_history(self, history):
         """Ensure every entry has an id; persist if any were missing."""
@@ -299,16 +319,17 @@ class OllamaServiceUtilities:
             raise ValueError("At least prompt or response is required")
 
         try:
-            history = self.get_chat_history()
+            with self._chat_history_lock:
+                history = self.get_chat_history()
 
-            if not session_data.get('id'):
-                session_data['id'] = str(uuid.uuid4())
-            if 'timestamp' not in session_data:
-                session_data['timestamp'] = datetime.now().isoformat()
+                if not session_data.get('id'):
+                    session_data['id'] = str(uuid.uuid4())
+                if 'timestamp' not in session_data:
+                    session_data['timestamp'] = datetime.now().isoformat()
 
-            history.insert(0, session_data)
-            history = history[:100]
-            self._write_chat_history(history)
+                history.insert(0, session_data)
+                history = history[:100]
+                self._write_chat_history(history)
             return session_data['id']
         except HTTP_SERVICE_ERRORS as e:
             self.logger.exception("Error saving chat session: %s", e)
@@ -322,11 +343,12 @@ class OllamaServiceUtilities:
             session_id = str(session_id or '').strip()
             if not session_id:
                 return False
-            history = self.get_chat_history()
-            new_history = [h for h in history if h.get('id') != session_id]
-            if len(new_history) == len(history):
-                return False
-            self._write_chat_history(new_history)
+            with self._chat_history_lock:
+                history = self.get_chat_history()
+                new_history = [h for h in history if h.get('id') != session_id]
+                if len(new_history) == len(history):
+                    return False
+                self._write_chat_history(new_history)
             return True
         except HTTP_SERVICE_ERRORS as e:
             self.logger.exception("Error deleting chat session: %s", e)
@@ -337,7 +359,8 @@ class OllamaServiceUtilities:
         try:
             if not self.app or not hasattr(self.app, "config"):
                 return
-            self._write_chat_history([])
+            with self._chat_history_lock:
+                self._write_chat_history([])
         except HTTP_SERVICE_ERRORS as e:
             self.logger.exception("Error clearing chat history: %s", e)
             raise

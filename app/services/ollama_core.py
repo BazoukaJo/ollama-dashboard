@@ -120,8 +120,16 @@ class OllamaServiceCore:
         self.logger = logging.getLogger(__name__)
         self._model_settings_lock = threading.Lock()
         self._model_settings = {}
+        # Guards chat_history.json read-modify-write (save/delete). Waitress's thread pool
+        # can run concurrent /api/chat/history requests; without this, two saves racing the
+        # read-modify-write could silently drop one entry even though the write itself is atomic.
+        self._chat_history_lock = threading.Lock()
         self._stop_background = threading.Event()
         self._consecutive_ps_failures = 0
+        # Guards _consecutive_ps_failures + _ps_backoff_until. get_running_models() can be
+        # called concurrently by multiple polling browser tabs / MCP clients.
+        self._ps_failure_lock = threading.Lock()
+        self._ps_backoff_until = 0.0
         self._last_background_error = None
         # Track last activity per model so we can distinguish
         # between actively used models ("running") and models
@@ -303,6 +311,34 @@ class OllamaServiceCore:
         with self._cache_lock:
             self._cache[key] = value
             self._cache_timestamps[key] = datetime.now()
+
+    _PS_BACKOFF_BASE_SECONDS = 2.0
+    _PS_BACKOFF_MAX_SECONDS = 32.0
+
+    def _record_ps_failure(self):
+        """Increment the consecutive /api/ps failure counter and extend the retry backoff
+        window with exponential growth capped at ~32s, so a downed Ollama is not hammered
+        with a full-timeout request on every poll (docs previously promised this; it was
+        never wired up)."""
+        with self._ps_failure_lock:
+            self._consecutive_ps_failures += 1
+            delay = min(
+                self._PS_BACKOFF_BASE_SECONDS * (2 ** (self._consecutive_ps_failures - 1)),
+                self._PS_BACKOFF_MAX_SECONDS,
+            )
+            self._ps_backoff_until = time.monotonic() + delay
+
+    def _record_ps_success(self):
+        """Reset the /api/ps failure counter and clear any active backoff window."""
+        with self._ps_failure_lock:
+            self._consecutive_ps_failures = 0
+            self._ps_backoff_until = 0.0
+
+    def _ps_backoff_remaining(self):
+        """Seconds remaining in the current /api/ps backoff window (0 if not backing off)."""
+        with self._ps_failure_lock:
+            remaining = self._ps_backoff_until - time.monotonic()
+        return max(0.0, remaining)
 
     def _building_models_depth(self):
         """Current thread's get_available_models re-entrancy depth (thread-local)."""
@@ -537,6 +573,7 @@ class OllamaServiceCore:
             'ollama_running': ollama_running,
             'background_thread_alive': thread_alive,
             'consecutive_ps_failures': self._consecutive_ps_failures,
+            'ps_backoff_remaining_seconds': round(self._ps_backoff_remaining(), 1),
             'last_background_error': self._last_background_error,  # Keep raw for debugging
             'retry_metrics': {
                 'total_attempts': self._total_retry_attempts,
@@ -560,7 +597,7 @@ class OllamaServiceCore:
             self._cache_timestamps.clear()
         # Also reset error states
         self._last_background_error = None
-        self._consecutive_ps_failures = 0
+        self._record_ps_success()
 
     def clear_cache(self, key):
         """Clear a specific cache entry and its timestamp (lock prevents TOCTOU del KeyError)."""

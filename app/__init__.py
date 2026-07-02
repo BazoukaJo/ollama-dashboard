@@ -49,7 +49,8 @@ def _schedule_startup_prewarm(app, ollama_service) -> None:
     if not model_name:
         return
     try:
-        from app.services.model_residency import parse_residency_env, _env_bool as residency_env_bool
+        from app.services.model_residency import _env_bool as residency_env_bool
+        from app.services.model_residency import parse_residency_env
 
         if residency_env_bool('RESIDENCY_ON_START', True):
             residency_models = {s.model for s in parse_residency_env()}

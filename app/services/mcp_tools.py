@@ -318,6 +318,31 @@ _TOOL_SPECS: list[dict[str, Any]] = [
 ]
 
 _HANDLERS: dict[str, ToolHandler] = {spec['name']: spec['handler'] for spec in _TOOL_SPECS}
+_SPECS_BY_NAME: dict[str, dict[str, Any]] = {spec['name']: spec for spec in _TOOL_SPECS}
+
+
+def _validate_tool_arguments(spec: dict[str, Any], args: dict[str, Any]) -> str | None:
+    """Return an error message if required arguments are missing or an obviously wrong
+    type (e.g. a list/dict where a string was expected) — common failure modes when a small
+    local model hallucinates a tool call. Returns None when arguments look usable; handlers
+    still do their own deeper checks (e.g. "model not found").
+    """
+    params = ((spec.get('schema') or {}).get('function') or {}).get('parameters') or {}
+    properties = params.get('properties') or {}
+    required = params.get('required') or []
+    missing = [name for name in required if args.get(name) in (None, '')]
+    if missing:
+        return f"Missing required argument(s): {', '.join(missing)}"
+    for arg_name, value in args.items():
+        prop = properties.get(arg_name)
+        if not isinstance(prop, dict) or value is None:
+            continue
+        expected = prop.get('type')
+        if expected == 'string' and isinstance(value, (list, dict, bool)):
+            return f"Argument '{arg_name}' must be a string, got {type(value).__name__}"
+        if expected == 'integer' and isinstance(value, (list, dict, bool, str)):
+            return f"Argument '{arg_name}' must be a number, got {type(value).__name__}"
+    return None
 
 
 def list_tools_metadata(
@@ -382,6 +407,11 @@ def execute_tool(
         if not web_ok:
             return _json_result({'error': 'Web tools disabled (set MCP_ALLOW_WEB=true)'})
     args = arguments if isinstance(arguments, dict) else {}
+    spec = _SPECS_BY_NAME.get(tool_name)
+    if spec is not None:
+        validation_error = _validate_tool_arguments(spec, args)
+        if validation_error:
+            return _json_result({'error': validation_error})
     try:
         result = handler(args)
         return _json_result(result)

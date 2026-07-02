@@ -5,6 +5,7 @@
 Ollama Dashboard is a Flask-based web interface for monitoring and controlling Ollama models. It's designed with clean separation of concerns and fail-safe operation.
 
 ### Design Principles
+
 - **Single Responsibility**: Each service has one clear purpose
 - **Dependency Injection**: Services receive dependencies; no global state
 - **Fail-Safe**: Graceful degradation when Ollama is unavailable
@@ -103,6 +104,7 @@ class OllamaService(
 ```
 
 ### Method Resolution Order (MRO)
+
 ```python
 OllamaService.__mro__ = (
     OllamaService,
@@ -117,6 +119,7 @@ OllamaService.__mro__ = (
 ### Each Mixin's Responsibility
 
 #### OllamaServiceCore
+
 - Service initialization with Flask app
 - TTL-based caching (`_get_cached`, `_set_cached`)
 - Background thread: system stats every 1s, health ping every ~15s
@@ -124,6 +127,7 @@ OllamaService.__mro__ = (
 - History/settings loading
 
 #### OllamaServiceModels
+
 - Model listing (running, available, downloadable)
 - Model info retrieval with capability detection
 - System stats collection (CPU, RAM, VRAM, disk)
@@ -131,12 +135,14 @@ OllamaService.__mro__ = (
 - Model capabilities (vision, tools, reasoning)
 
 #### OllamaServiceControl
+
 - Service status checking (multi-platform: Windows, Linux, Mac)
 - Service startup (multi-strategy: systemd, launchd, service.exe)
 - Service stop/restart
 - API verification
 
 #### OllamaServiceUtilities
+
 - History management (load/save)
 - Model settings persistence (atomic JSON writes)
 - Default settings generation (based on model size/capabilities)
@@ -148,6 +154,7 @@ OllamaService.__mro__ = (
 ## Data Flow Examples
 
 ### Example 1: Start Model
+
 ```
 POST /api/models/start/llama3.1:8b
     ↓
@@ -162,6 +169,7 @@ service: check if already running → POST /api/generate (keep_alive=24h)
 ```
 
 ### Example 2: Get System Stats
+
 ```
 GET /api/system/stats
     ↓
@@ -176,6 +184,7 @@ service: ollama_service.get_system_stats()
 ```
 
 ### Example 3: Save Model Settings
+
 ```
 POST /api/models/settings/llama3.1:8b
     ↓
@@ -189,6 +198,7 @@ service: ollama_service.save_model_settings(model_name, settings)
 
 > **Application scope:** saving writes to `model_settings.json`. Settings are merged into
 > outgoing request `options` by:
+>
 > - The dashboard itself — `app/routes/main.py` (`api_start_model`, `restart_model`,
 >   `bulk_start_models`, `api_chat`, etc.).
 > - External clients via the built-in proxy — `app/routes/proxy.py` (`/ollama/api/chat`,
@@ -206,6 +216,7 @@ service: ollama_service.save_model_settings(model_name, settings)
 >
 > Three mechanisms for external clients (README
 > [Per-Model Settings: scope and limitations](GUIDE.md#per-model-settings-scope-and-limitations)):
+>
 > 1. **Built-in proxy at `/ollama/...`** (`app/routes/proxy.py`) — merge via
 >    `copilot_pipeline.py` + `client_payload_compat.py`; saved values win.
 >    Native API; OpenAI `/v1/chat/completions` bridged to `/api/chat` (Copilot);
@@ -277,17 +288,21 @@ CPython's GIL makes a *single* dict/deque operation atomic, but **compound** seq
 (check-then-act, value+timestamp pairs, `in` → `del`) are not — those need explicit locks.
 
 ### Background Thread
+
 - **Runs in daemon mode** (exits when main thread exits)
 - **Updates cycle**: System stats every 1s; Ollama health ping every ~15s
 - **Model lists**: Browser polls `/api/models/*` every ~10s; manual Refresh also available
 
 ### Locks & guards
+
 | Primitive | Protects | Why |
 |-----------|----------|-----|
 | `_cache_lock` (`Lock`) | every read/write/clear of `_cache` + `_cache_timestamps` | keeps the value and its timestamp consistent; prevents TOCTOU `del` → `KeyError` and `dict changed size during iteration` |
 | `_model_settings_lock` (`Lock`) | `_model_settings` writes + disk persistence | settings save is read-modify-write to a file |
 | `_model_token_usage_lock` (`Lock`) | `_model_last_generate_tokens` | per-model token counters |
 | `_history_lock` (`Lock`) | history deque snapshot/append | `list(self.history)` must not race `appendleft` |
+| `_chat_history_lock` (`Lock`) | `chat_history.json` read-modify-write (save/delete/clear) | same read-modify-write hazard as model settings; write itself is atomic (temp file + fsync + `os.replace`) but the surrounding read-modify-write still needs serializing |
+| `_ps_failure_lock` (`Lock`) | `_consecutive_ps_failures` + `_ps_backoff_until` | guards the `/api/ps` failure counter and backoff window so concurrent `get_running_models()` callers see a consistent pair |
 | `_build_tls` (`threading.local`) | `get_available_models` re-entrancy depth | per-thread, so concurrent requests don't skip enrichment |
 | `_stop_background` (`Event`) | background-thread shutdown signal | |
 
@@ -319,12 +334,16 @@ def clear_cache(self, key):                   # pop, not "if in: del" (TOCTOU-sa
 
 History writes use an atomic temp-then-rename with a **per-process/thread** temp filename
 (`history.json.<pid>.<tid>.tmp`) so concurrent saves never clobber a single shared temp file.
+`chat_history.json` uses the same atomic temp-then-rename approach (via `tempfile.mkstemp` in
+the same directory, `fsync`, then `os.replace`), guarded by `_chat_history_lock` for the
+surrounding read-modify-write — matching the pattern already used for `model_settings.json`.
 
 ---
 
 ## Error Handling Strategy
 
 ### Transient Errors (Retry)
+
 **Patterns**: Connection reset, timeout, forcibly closed, ECONNREFUSED, WSARECV, etc.
 
 ```python
@@ -341,6 +360,7 @@ for attempt in range(max_retries):
 ```
 
 ### Permanent Errors (Fail Fast)
+
 **Patterns**: Not found, invalid, unauthorized, forbidden, no such file
 
 ---
@@ -348,22 +368,27 @@ for attempt in range(max_retries):
 ## Health & Monitoring
 
 ### Component Health Checks
+
 ```python
 health = ollama_service.get_component_health()
 # Returns:
 {
+    "status": "healthy",
     "background_thread_alive": true,
-    "cache_ages": {
-        "running_models": 2.5,
+    "consecutive_ps_failures": 0,
+    "ps_backoff_remaining_seconds": 0.0,
+    "cache_age_seconds": {
+        "system_stats": 0.4,
         "available_models": 8.1
     },
-    "failure_counters": {
-        "consecutive_ps_failures": 0
+    "stale_flags": {
+        "system_stats": false
     }
 }
 ```
 
 ### Health Endpoints
+
 - `GET /ping` — Lightweight health for orchestrators (Docker, K8s)
 - `GET /health` — Simple health check
 - `GET /api/health` — Detailed component health
@@ -375,18 +400,21 @@ health = ollama_service.get_component_health()
 ### Starting the App
 
 **Windows (production):**
+
 ```bash
 start.bat
 # Waitress on port 5000 — background process, no staying console
 ```
 
 **Windows (development):**
+
 ```bash
 start_dev.bat
 # Flask debug reloader on port 5000
 ```
 
 **Windows (stop / restart):**
+
 ```bash
 stop_app.bat
 restart_app.bat          # same mode as running instance
@@ -394,6 +422,7 @@ restart_app.bat dev      # force dev mode
 ```
 
 **Development (Linux/macOS or pip install):**
+
 ```bash
 pip install -r requirements.txt
 python OllamaDashboard.py
@@ -401,11 +430,13 @@ python OllamaDashboard.py
 ```
 
 **Docker (Linux, uses Gunicorn):**
+
 ```bash
 docker-compose up -d
 ```
 
 ### Environment Configuration
+
 ```bash
 export OLLAMA_HOST=localhost
 export OLLAMA_PORT=11434
@@ -419,6 +450,7 @@ export OLLAMA_HOST=127.0.0.1:11436
 ```
 
 ### Checking Health
+
 ```bash
 curl http://localhost:5000/api/health
 ```
@@ -441,16 +473,19 @@ A: Model info is cached in memory with short TTLs. Restart the app to clear cach
 ## Architecture Decision Records (ADRs)
 
 ### ADR-001: Mixin Composition over Inheritance
+
 **Decision**: Use multiple inheritance (mixins) instead of deep inheritance chain.
 **Rationale**: Flexibility, cleaner separation of concerns, easier testing.
 **Trade-off**: MRO complexity, requires type checking blocks.
 
 ### ADR-002: In-Memory Cache over Database
+
 **Decision**: Use Python dict with TTL instead of external database.
 **Rationale**: Simplicity, no additional dependencies, sufficient for single-user / small team use.
 **Trade-off**: Not distributed; lost on restart.
 
 ### ADR-003: Atomic File Writes for Settings
+
 **Decision**: Write to `.tmp` file then `os.replace()` instead of direct write.
 **Rationale**: Prevent corruption if process crashes mid-write.
 **Trade-off**: Slightly slower; requires filesystem that supports atomic rename.

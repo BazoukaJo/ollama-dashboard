@@ -304,6 +304,44 @@
     }
   }
 
+  function diagnosisIcon(category) {
+    switch (category) {
+      case "ok":
+        return "fa-check-circle text-success";
+      case "no_activity":
+      case "request_only":
+        return "fa-circle-info text-secondary";
+      case "context_trimmed":
+      case "output_capped":
+        return "fa-triangle-exclamation text-warning";
+      default:
+        return "fa-times-circle text-danger";
+    }
+  }
+
+  async function runDiagnosis(container) {
+    if (!container) return;
+    container.innerHTML =
+      '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i> Checking the last request…</div>';
+    try {
+      var resp = await fetchWithTimeout("/api/proxy/diagnosis", {}, FETCH_TIMEOUT_MS);
+      var jr = await readApiJson(resp);
+      if (!jr.responseOk || !jr.data) {
+        container.innerHTML =
+          '<div class="text-danger small">' + escapeHtml(jr.message || "Diagnosis failed") + "</div>";
+        return;
+      }
+      var data = jr.data;
+      var icon = diagnosisIcon(data.category);
+      container.innerHTML =
+        '<div class="d-flex gap-2 align-items-start small">' +
+        '<i class="fas ' + icon + ' mt-1"></i>' +
+        "<div>" + escapeHtml(data.message || "No details available.") + "</div></div>";
+    } catch (err) {
+      container.innerHTML = '<div class="text-danger small">' + escapeHtml(err.message) + "</div>";
+    }
+  }
+
   function openProxyWizard(scrollToMcp) {
     var existing = document.getElementById("apiProxyWizardModal");
     if (existing) existing.remove();
@@ -315,7 +353,15 @@
       '<button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>' +
       '<div class="modal-body"><p class="text-muted small">Any app that accepts an <strong>Ollama server address</strong> or an <strong>OpenAI-compatible API base URL</strong> can use the dashboard proxy instead of <code>localhost:11434</code>. Saved per-model settings (temperature, <code>num_ctx</code>, prompts) are applied automatically.</p>' +
       '<p class="text-muted small mb-2">Works with VS Code chat extensions, Claude Code with Ollama, Continue, Cursor BYOK, LangChain, OpenAI SDKs pointed at a local base URL, and other compatible tools. Use the <strong>MCP tools server</strong> below so agents can call dashboard tools from Cursor or VS Code.</p>' +
-      '<div id="apiProxyWizardChecks"></div></div>' +
+      '<div id="apiProxyWizardChecks"></div>' +
+      '<div class="mt-3 p-2 rounded border border-secondary">' +
+      '<div class="d-flex justify-content-between align-items-center mb-2">' +
+      '<div class="small fw-semibold"><i class="fas fa-stethoscope me-1"></i>Connection Doctor</div>' +
+      '<button type="button" class="btn btn-sm btn-outline-info" id="apiProxyDiagnoseBtn">Check last request</button>' +
+      "</div>" +
+      '<div class="text-muted small mb-2">Explains in plain language what happened on the last VS Code/Cursor/Continue request — timeout, truncated context, empty reply, or a normal completion.</div>' +
+      '<div id="apiProxyDiagnosis"></div>' +
+      "</div></div>" +
       '<div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>' +
       '<button type="button" class="btn btn-primary" id="apiProxyWizardRerun">Re-run checks</button></div>' +
       "</div></div></div>";
@@ -328,6 +374,13 @@
     document.getElementById("apiProxyWizardRerun").onclick = function () {
       runWizardChecks(checksEl, false);
     };
+    var diagnosisEl = document.getElementById("apiProxyDiagnosis");
+    var diagnoseBtn = document.getElementById("apiProxyDiagnoseBtn");
+    if (diagnoseBtn) {
+      diagnoseBtn.onclick = function () {
+        runDiagnosis(diagnosisEl);
+      };
+    }
     modalEl.addEventListener("hidden.bs.modal", function () {
       modalEl.remove();
     });

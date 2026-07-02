@@ -15,6 +15,10 @@ from app.services.v1_native_bridge import _assistant_reasoning_piece, apply_copi
 
 logger = logging.getLogger(__name__)
 
+# Tool-calling JSON correctness degrades at higher temperatures; cap agent turns here
+# regardless of a saved per-model default (see _build_native_payload).
+_AGENT_MAX_TEMPERATURE = 0.4
+
 
 def _model_supports_tools(model_info: dict[str, Any]) -> bool:
     if not isinstance(model_info, dict):
@@ -35,6 +39,8 @@ def _ensure_agent_system_message(messages: list[dict[str, Any]]) -> list[dict[st
         return messages
     lines = [
         'You are a helpful assistant with access to dashboard tools.',
+        'If you do not know something and no available tool can help, say so plainly instead '
+        'of guessing or inventing an answer.',
         'When the user asks about current events, live data, prices, weather, or anything that '
         'requires up-to-date information, use web_search first, then fetch_url on the best result.',
     ]
@@ -167,28 +173,35 @@ def _iter_chat_turn_events(
 
     content_parts: list[str] = []
     tool_calls: list[dict[str, Any]] = []
-    for raw in response.iter_lines():
-        if not raw:
-            continue
-        try:
-            native = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(native, dict):
-            continue
-        msg = native.get('message') if isinstance(native.get('message'), dict) else {}
-        piece = msg.get('content')
-        if piece:
-            text = str(piece)
-            content_parts.append(text)
-            yield {'type': 'content', 'text': text}
-        reasoning = _assistant_reasoning_piece(msg)
-        if reasoning:
-            yield {'type': 'thinking', 'text': reasoning}
-        if msg.get('tool_calls'):
-            tool_calls = _normalize_tool_calls(msg.get('tool_calls'))
-        if native.get('done') and msg.get('tool_calls'):
-            tool_calls = _normalize_tool_calls(msg.get('tool_calls'))
+    try:
+        for raw in response.iter_lines():
+            if not raw:
+                continue
+            try:
+                native = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(native, dict):
+                continue
+            msg = native.get('message') if isinstance(native.get('message'), dict) else {}
+            piece = msg.get('content')
+            if piece:
+                text = str(piece)
+                content_parts.append(text)
+                yield {'type': 'content', 'text': text}
+            reasoning = _assistant_reasoning_piece(msg)
+            if reasoning:
+                yield {'type': 'thinking', 'text': reasoning}
+            if msg.get('tool_calls'):
+                tool_calls = _normalize_tool_calls(msg.get('tool_calls'))
+            if native.get('done') and msg.get('tool_calls'):
+                tool_calls = _normalize_tool_calls(msg.get('tool_calls'))
+    finally:
+        # Always release the upstream connection — including when the client disconnects
+        # (Flask/Waitress tear down this generator with GeneratorExit at the yield above) so
+        # Ollama actually stops generating instead of running to completion server-side while
+        # nobody is listening anymore.
+        response.close()
     yield {
         'type': 'turn_end',
         'content': ''.join(content_parts),
@@ -203,12 +216,19 @@ def _build_native_payload(
     *,
     allow_write: bool,
 ) -> dict[str, Any]:
+    # Tool-calling reliability degrades at higher temperatures (more malformed JSON /
+    # hallucinated arguments from small local models). Cap it for agent turns regardless of a
+    # saved per-model default that may be tuned for creative chat rather than tool use.
+    agent_options = dict(options or {})
+    current_temp = agent_options.get('temperature')
+    if not isinstance(current_temp, (int, float)) or current_temp > _AGENT_MAX_TEMPERATURE:
+        agent_options['temperature'] = _AGENT_MAX_TEMPERATURE
     native: dict[str, Any] = {
         'model': model_name,
         'messages': normalize_messages_for_ollama(messages),
         'stream': True,
         'tools': get_tool_definitions(include_write=allow_write),
-        'options': options,
+        'options': agent_options,
     }
     apply_copilot_native_defaults(native, {'tools': native['tools']})
     return native
@@ -352,3 +372,15 @@ def stream_ask_agent(
         ) + '\n'
     except RuntimeError as err:
         yield json.dumps({'type': 'error', 'message': str(err)}, ensure_ascii=False) + '\n'
+    except Exception as err:  # noqa: BLE001 — surface any unexpected failure as a clean
+        # NDJSON event instead of silently cutting off the stream (matches the safety net
+        # already used by the proxy's stream_body()). GeneratorExit (client disconnect) is a
+        # BaseException, not Exception, so it is not swallowed here and cleanup still runs.
+        logger.exception('Unexpected error in ask agent loop: %s', err)
+        yield json.dumps(
+            {
+                'type': 'error',
+                'message': 'Unexpected error during agent turn. Check server logs for details.',
+            },
+            ensure_ascii=False,
+        ) + '\n'

@@ -75,8 +75,8 @@ _REASONING_PATTERNS = [
     r'deepseek.*r1', r'deepseek.*reasoning',
     r'qwq', r'qwen.*qwq', r'qwen.*reasoning',
     r'o1', r'o2', r'o3',
-    r'marco.*o1', r'k0.*math', r'.*reasoning', r'.*think',
-    r'.*cot', r'.*chain.*thought'
+    r'marco.*o1', r'k0.*math', r'\breasoning\b', r'\bthink(?:ing)?\b',
+    r'\bcot\b', r'.*chain.*thought'
 ]
 
 _REASONING_INDICATORS = ['math', 'reasoning', 'thinking', 'think', 'cognitive']
@@ -173,7 +173,10 @@ def detect_capabilities(model_name: str, families) -> dict:
         if any(base in name_lower for base in reasoning_bases):
             capabilities['has_reasoning'] = True
 
-    if any(ind in name_lower for ind in _REASONING_INDICATORS):
+    # Token-boundary match only (not a raw substring check) — a plain "in" check here used to
+    # flag any model with e.g. "think" or "math" ANYWHERE in its name ("overthink-7b",
+    # "mathilda") as a reasoning model. Matching against the pre-split token set avoids that.
+    if token_set & set(_REASONING_INDICATORS):
         capabilities['has_reasoning'] = True
 
     # Mixture-of-Experts detection (display flag).
