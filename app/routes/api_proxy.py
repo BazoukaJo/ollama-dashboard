@@ -8,6 +8,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, jsonify, request
 
+from app.routes.legacy_deprecation import maybe_deprecate_copilot_api
 from app.services import mcp_tools
 from app.services.copilot_analytics import (
     client_proxy_analytics,
@@ -25,6 +26,12 @@ from app.services.settings_cache import load_settings_file
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('api_proxy_api', __name__)
+
+
+@bp.after_request
+def _deprecate_legacy_copilot_api_routes(response):
+    """Attach Deprecation headers when serving /api/copilot/* aliases."""
+    return maybe_deprecate_copilot_api(response)
 
 
 def _svc():

@@ -16,7 +16,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ../history.json:/app/history.json
+      - ../data:/app/data
       - ../app/static:/app/app/static:ro
       - ../app/templates:/app/app/templates:ro
 

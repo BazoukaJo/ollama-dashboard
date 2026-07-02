@@ -18,6 +18,7 @@ import requests
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
 from app.routes import proxy_upstream as _upstream
+from app.routes.legacy_deprecation import apply_legacy_deprecation
 from app.services.client_payload_compat import (
     _CORS_ALLOW_HEADERS,
     cap_num_predict,
@@ -73,6 +74,14 @@ from app.wsgi_safe import strip_hop_by_hop_headers
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('proxy', __name__)
+
+
+@bp.after_request
+def _deprecate_legacy_copilot_debug(response):
+    """Attach Deprecation headers when serving /ollama/copilot-debug."""
+    if request.path.endswith('/copilot-debug'):
+        return apply_legacy_deprecation(response, '/ollama/proxy-debug')
+    return response
 
 
 @bp.before_request

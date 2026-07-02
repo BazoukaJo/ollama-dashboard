@@ -31,7 +31,7 @@ if result.returncode == 0:
     print("\n" + "=" * 70)
     print("✅ DEPENDENCIES INSTALLED")
     print("=" * 70)
-    print("\nNow run: python start.py\n")
+    print("\nNow run: start.bat  (Windows)  or  python ollama_dashboard_cli.py\n")
 else:
     print("\n❌ Installation failed\n")
     sys.exit(1)

@@ -108,14 +108,15 @@ docker run -p 5000:5000 \
   ollama-dashboard:latest
 ```
 
-### Docker Compose (with Ollama)
+### Docker Compose
 
 ```bash
+cd docker
 docker-compose up -d
 # Access at http://localhost:5000
 ```
 
-The included `docker-compose.yml` starts both Ollama and the Dashboard.
+The compose file mounts host `data/` into `/app/data` so settings, history, and proxy logs persist across container restarts. Ollama is expected on the host at `host.docker.internal:11434` (default).
 
 ---
 
@@ -187,12 +188,12 @@ server {
 
 ### Backup
 ```bash
-# Backup settings and history (paths relative to repo root / working directory)
+# Backup settings and history (default paths under data/)
 tar czf ollama-dashboard-backup-$(date +%Y%m%d).tar.gz \
-  model_settings.json \
-  history.json \
-  chat_history.json \
-  system_stats_history.json
+  data/model_settings.json \
+  data/history.json \
+  data/chat_history.json \
+  data/system_stats_history.json
 ```
 
 ### Restore

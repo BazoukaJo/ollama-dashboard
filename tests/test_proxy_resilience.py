@@ -8,9 +8,8 @@ end-to-end through ``/ollama/v1/chat/completions``.
 import time
 from unittest.mock import patch
 
-import requests
-
 import app.routes.proxy as proxy
+import requests
 from app import create_app
 from app.services.v1_native_bridge import STREAM_HEARTBEAT
 

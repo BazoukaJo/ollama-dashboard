@@ -9,7 +9,7 @@ Consolidated HTTP surface for the dashboard web UI, REST API, Ollama proxy, and 
 - Many model endpoints accept the model name in the **path** (`/api/models/start/<model_name>`) or as a **query param** (`?model=` or `?name=`).
 - List endpoints honor **`?refresh=1`** (or `true` / `yes`) to bypass cached Ollama catalog reads.
 - JSON bodies are expected for `POST` / `DELETE` unless noted.
-- Legacy `/api/copilot/*` routes mirror `/api/proxy/*` where listed.
+- Legacy `/api/copilot/*` routes mirror `/api/proxy/*` where listed. They respond with `Deprecation: true` and a `Link` header pointing at the `/api/proxy/*` successor. Same for `/ollama/copilot-debug` → `/ollama/proxy-debug`.
 
 ---
 

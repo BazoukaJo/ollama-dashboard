@@ -26,8 +26,24 @@ def test_proxy_wizard_checks():
 def test_legacy_copilot_routes_still_work():
     app = create_app()
     client = app.test_client()
-    assert client.get('/api/copilot/status').status_code == 200
-    assert client.get('/api/copilot/wizard-checks').status_code == 200
+    status = client.get('/api/copilot/status')
+    assert status.status_code == 200
+    assert status.headers.get('Deprecation') == 'true'
+    assert '/api/proxy/status' in (status.headers.get('Link') or '')
+
+    wizard = client.get('/api/copilot/wizard-checks')
+    assert wizard.status_code == 200
+    assert wizard.headers.get('Deprecation') == 'true'
+    assert '/api/proxy/wizard-checks' in (wizard.headers.get('Link') or '')
+
+
+def test_legacy_copilot_debug_route_deprecation():
+    app = create_app()
+    client = app.test_client()
+    resp = client.get('/ollama/copilot-debug')
+    assert resp.status_code == 200
+    assert resp.headers.get('Deprecation') == 'true'
+    assert '/ollama/proxy-debug' in (resp.headers.get('Link') or '')
 
 
 def test_advisor_recommend():
