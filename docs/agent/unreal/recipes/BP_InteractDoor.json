@@ -1,0 +1,32 @@
+﻿{
+    "schema_version":  1,
+    "status":  "schematic",
+    "apply_mode":  "human",
+    "id":  "BP_InteractDoor",
+    "type":  "blueprint_graph",
+    "editable":  true,
+    "asset_path":  "/Game/Interactables/BP_Door",
+    "parent_class":  "AActor",
+    "variables":  [
+                      {
+                          "name":  "bIsOpen",
+                          "type":  "bool",
+                          "replicated":  true
+                      },
+                      {
+                          "name":  "OpenAngle",
+                          "type":  "float",
+                          "default":  90
+                      }
+                  ],
+    "graphs":  {
+                   "EventGraph":  [
+                                      "Event BeginPlay",
+                                      "Custom Event Interact",
+                                      "Branch bIsOpen",
+                                      "Timeline OpenDoor",
+                                      "Set Actor Rotation"
+                                  ]
+               },
+    "export_hint":  "unreal.blueprint.import_graph + compile + pie debug"
+}

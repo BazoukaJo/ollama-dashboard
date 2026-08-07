@@ -1,0 +1,81 @@
+﻿{
+    "schema_version":  1,
+    "status":  "schematic",
+    "apply_mode":  "human",
+    "id":  "M_Master_Lit",
+    "type":  "material_shader_graph",
+    "editable":  true,
+    "asset_path":  "/Game/Mats/M_Master_Lit",
+    "domain":  "Surface",
+    "blend_mode":  "Opaque",
+    "parameters":  [
+                       {
+                           "name":  "BaseColor",
+                           "type":  "Texture"
+                       },
+                       {
+                           "name":  "Normal",
+                           "type":  "Texture"
+                       },
+                       {
+                           "name":  "Roughness",
+                           "type":  "Scalar",
+                           "default":  0.5
+                       },
+                       {
+                           "name":  "Tint",
+                           "type":  "Vector",
+                           "default":  [
+                                           1,
+                                           1,
+                                           1,
+                                           1
+                                       ]
+                       }
+                   ],
+    "nodes":  [
+                  {
+                      "id":  "tex_base",
+                      "class":  "TextureSample",
+                      "param":  "BaseColor"
+                  },
+                  {
+                      "id":  "tex_norm",
+                      "class":  "TextureSample",
+                      "param":  "Normal"
+                  },
+                  {
+                      "id":  "rough",
+                      "class":  "ScalarParameter",
+                      "param":  "Roughness"
+                  },
+                  {
+                      "id":  "tint",
+                      "class":  "VectorParameter",
+                      "param":  "Tint"
+                  },
+                  {
+                      "id":  "mul",
+                      "class":  "Multiply",
+                      "inputs":  [
+                                     "tex_base",
+                                     "tint"
+                                 ]
+                  }
+              ],
+    "wires":  [
+                  [
+                      "mul",
+                      "BaseColor"
+                  ],
+                  [
+                      "tex_norm",
+                      "Normal"
+                  ],
+                  [
+                      "rough",
+                      "Roughness"
+                  ]
+              ],
+    "export_hint":  "unreal.material.import_graph + compile; keep editable"
+}

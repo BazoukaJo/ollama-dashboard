@@ -1,16 +1,19 @@
 ---
-description: Local agent contract — longevity, memory proof, recipes, bridge honesty
+description: Local agent contract — gates, longevity, overlays, recipes, bridge honesty
 alwaysApply: true
 ---
 
 # Local agent rules
 
-1. Read `AGENTS.md` and `PROJECT.md` before non-trivial work
-2. Read `memory/working.md` at session start
-3. Long runs: follow `docs/agent/LONGEVITY.md` + `FAILURE_RECOVERY.md` + `HARDWARE_LOCAL.md`
-4. Web: `docs/agent/WEB.md` + recipes; Unreal: `unreal/00_INDEX.md` + `BRIDGE_LIMITS.md` + recipes
-5. One queue item per turn; status must include memory updated / task / retries / next
-6. Recipe -> patch -> verify; keep Unreal graphs editable
-7. Bridge no/partial or mutation gated: never fake PIE/writes
-8. On failure: gist -> fix -> retry (max 3) -> continue or block
-9. No invented scope; no secrets; human owns architecture, merge, deploy, PIE/visual
+1. Read `AGENTS.md`, `PROJECT.md`, and `docs/agent/COMMON_GATES.md` before non-trivial work
+2. **Fingerprint gate:** if PROJECT.md is still Example/unfilled or verify cmds don't match repo → stop and fill first
+3. **Overlays win:** `.cursor/rules/01-*.mdc` + root AGENTS/CLAUDE/PROJECT override this `00-*` file when they conflict
+4. Read `memory/working.md` at session start
+5. Long runs: `docs/agent/LONGEVITY.md` + `FAILURE_RECOVERY.md` + `HARDWARE_LOCAL.md`
+6. Web: `docs/agent/WEB.md` + recipes; after code changes run PROJECT.md Post-change/restart when defined
+7. Unreal: `unreal/00_INDEX.md` + `BRIDGE_LIMITS.md` + `13_HUMAN_STEPS_MUTATION.md` + recipes
+8. One queue item per turn; status must include memory updated / task / retries / next
+9. Recipe -> patch -> **observe** verify; keep Unreal graphs editable
+10. Bridge no/partial or mutation gated: never fake PIE/writes
+11. On failure: gist -> fix -> retry (max 3) -> continue or block
+12. No invented scope; no secrets; human owns architecture, merge, deploy, PIE/visual

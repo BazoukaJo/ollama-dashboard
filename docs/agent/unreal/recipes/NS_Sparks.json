@@ -1,0 +1,30 @@
+﻿{
+    "schema_version":  1,
+    "status":  "schematic",
+    "apply_mode":  "human",
+    "id":  "NS_Sparks",
+    "type":  "niagara_stack",
+    "editable":  true,
+    "asset_path":  "/Game/FX/NS_Sparks",
+    "template":  "Fountain",
+    "emitters":  [
+                     {
+                         "name":  "Fountain",
+                         "modules":  [
+                                         "Spawn Rate",
+                                         "Add Velocity",
+                                         "Scale Color",
+                                         "Sprite Renderer"
+                                     ],
+                         "user_params":  {
+                                             "Color":  [
+                                                           1.0,
+                                                           0.6,
+                                                           0.1,
+                                                           1.0
+                                                       ]
+                                         }
+                     }
+                 ],
+    "export_hint":  "unreal.niagara.import_stack + compile + preview"
+}
