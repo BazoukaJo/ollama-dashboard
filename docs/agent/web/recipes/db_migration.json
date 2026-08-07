@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "status": "schematic",
+  "apply_mode": "human",
+  "id": "db_migration",
+  "type": "web_migration",
+  "stack": ["sql", "orm"],
+  "pattern": "Human-approved schema; project migrator; rollback notes in memory",
+  "acceptance": "Migrate up works; rollback notes present; no secrets in migration"
+}

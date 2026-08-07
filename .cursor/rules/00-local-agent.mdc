@@ -1,0 +1,16 @@
+---
+description: Local agent contract — longevity, memory proof, recipes, bridge honesty
+alwaysApply: true
+---
+
+# Local agent rules
+
+1. Read `AGENTS.md` and `PROJECT.md` before non-trivial work
+2. Read `memory/working.md` at session start
+3. Long runs: follow `docs/agent/LONGEVITY.md` + `FAILURE_RECOVERY.md` + `HARDWARE_LOCAL.md`
+4. Web: `docs/agent/WEB.md` + recipes; Unreal: `unreal/00_INDEX.md` + `BRIDGE_LIMITS.md` + recipes
+5. One queue item per turn; status must include memory updated / task / retries / next
+6. Recipe -> patch -> verify; keep Unreal graphs editable
+7. Bridge no/partial or mutation gated: never fake PIE/writes
+8. On failure: gist -> fix -> retry (max 3) -> continue or block
+9. No invented scope; no secrets; human owns architecture, merge, deploy, PIE/visual

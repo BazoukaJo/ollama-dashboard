@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "status": "schematic",
+  "apply_mode": "human",
+  "id": "next_zod_api",
+  "type": "web_scaffold",
+  "stack": ["typescript", "nextjs", "zod", "json"],
+  "files": {
+    "app/api/items/route.ts": "Zod safeParse body; 400 JSON on fail; 200 JSON on ok"
+  },
+  "acceptance": "POST invalid body returns 400 JSON; valid returns 200"
+}

@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "status": "schematic",
+  "apply_mode": "human",
+  "id": "auth_middleware",
+  "type": "web_guard",
+  "stack": ["typescript", "nextjs", "auth"],
+  "pattern": "Reuse existing middleware/guard; reject unauthenticated with project status code",
+  "acceptance": "Unauthorized blocked; authorized succeeds; no new auth framework"
+}

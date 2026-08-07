@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "max_retries_default": 3,
+  "active_id": null,
+  "items": [
+    {
+      "id": "t1",
+      "title": "Replace with real task from TASKS.md",
+      "status": "pending",
+      "retries": 0,
+      "notes": ""
+    }
+  ]
+}
